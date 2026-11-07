@@ -104,16 +104,19 @@ func (s *Store) VerifyTriggers(ctx context.Context) error {
 		statement string
 		fragment  string
 	}{
-		{"entries_no_delete", "DELETE FROM entries", "never deleted"},
-		{"entry_revisions_no_delete", "DELETE FROM entry_revisions", "append-only"},
-		{"entry_revisions_no_update", "UPDATE entry_revisions SET snapshot_json = '{}'", "append-only"},
-		{"work_sources_no_delete", "DELETE FROM work_sources", "audit trail"},
-		{"answers_no_delete", "DELETE FROM answers", "never deleted"},
-		{"session_events_no_update", "UPDATE session_events SET kind = 'tampered'", "append-only log"},
-		{"entries_status_forward_only", "UPDATE entries SET status = 'draft'", "never becomes a draft"},
-		{"work_sources_only_accept", "UPDATE work_sources SET trust = 'verified'", "only be accepted"},
-		{"interactions_no_delete", "DELETE FROM interactions", "never deleted"},
-		{"interactions_no_reopen", "UPDATE interactions SET resolved_seq = 2", "already resolved"},
+		// Every statement names the probe row. An unscoped UPDATE or DELETE runs over whatever she has saved,
+		// and a CHECK constraint on a real row can fire before the trigger this doctor is asking about, which
+		// makes a healthy database look broken at startup.
+		{"entries_no_delete", "DELETE FROM entries WHERE id = 'probe-entry'", "never deleted"},
+		{"entry_revisions_no_delete", "DELETE FROM entry_revisions WHERE id = 'probe-revision'", "append-only"},
+		{"entry_revisions_no_update", "UPDATE entry_revisions SET snapshot_json = '{}' WHERE id = 'probe-revision'", "append-only"},
+		{"work_sources_no_delete", "DELETE FROM work_sources WHERE id = 'probe-source'", "audit trail"},
+		{"answers_no_delete", "DELETE FROM answers WHERE id = 'probe-answer'", "never deleted"},
+		{"session_events_no_update", "UPDATE session_events SET kind = 'tampered' WHERE id = 'probe-event'", "append-only log"},
+		{"entries_status_forward_only", "UPDATE entries SET status = 'draft' WHERE id = 'probe-entry'", "never becomes a draft"},
+		{"work_sources_only_accept", "UPDATE work_sources SET trust = 'verified' WHERE id = 'probe-source'", "only be accepted"},
+		{"interactions_no_delete", "DELETE FROM interactions WHERE id = 'probe-interaction'", "never deleted"},
+		{"interactions_no_reopen", "UPDATE interactions SET resolved_seq = 2 WHERE id = 'probe-interaction'", "already resolved"},
 	}
 
 	err := s.write(ctx, func(tx *sql.Tx) error {
