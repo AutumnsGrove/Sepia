@@ -607,3 +607,39 @@ happy route from a sentence to a saved entry over a real socket is still green, 
 **Next.** S10, the frontend foundation, is unblocked: it needs only S00 and S02, and the dev stack it runs against is
 complete. The live checks remain the operator's: S01's provider keys and the real odds table, then G5 and G6 at
 S13/S14.
+
+## 2026-11-08, S10.1, S10.4 and S10.5, the frontend's foundation
+
+**Built.** The app shell: `@lucide/svelte` (the one dependency this slice adds), a PWA manifest, `viewport-fit=cover`
+and the two Apple meta tags, the screen-reader utility and the 44 px touch rule in `app.css`. The typed REST client
+(`web/src/lib/api/client.ts`) with every route the screens need, an `ApiError` that carries the contract's code and
+its plain copy, and one timeout in one place. The session socket as a state machine (`web/src/lib/socket/machine.ts`)
+with a fake socket in Vitest: hello, replay, a 45 second silence, 0.5 to 15 second backoff with jitter, the offline
+outbox keyed by `client_msg_id`, a wake on `visibilitychange`, and a reload on a changed `server_version`. The session
+reducer (`web/src/lib/state/session.ts`), fed every server event and every `api/examples/` fixture, and the list
+reducers for drafts and the library. 47 frontend tests, up from 9.
+
+**Learned, for the next agent.**
+
+- **`cost_update` does not carry `estimated`.** `costSummary` does, and the why sheet reads it from there. The live
+  event has the two dollar figures only. Writing `data.estimated` compiled against nothing and failed
+  `svelte-check`, which is the contract doing its job.
+- **The generated unions no longer narrow with `switch`.** Every event's `type` is optional in `typescript`, so a
+  `default` branch is `never` to the compiler even though a newer server can send one. The branch casts the event to
+  `{type?: string}` and says why. `Extract<ServerEvent, {type?: 'x'}>` is the way to name one variant's data.
+- **The tokens test was reading one `:root` block.** The mockups declare `--imageread-soft` in a second block beside
+  the card states, so the test passed while the app lacked the token. It now reads every block, and the app defines
+  the token; the test failed for the right reason before the fix.
+- **A backoff test that only counts sockets proves nothing.** The first draft of the wake test allowed three sockets
+  and passed with the stale timer still running. It now delivers hello and advances 40 seconds, which is under the
+  silence limit, so a third socket can only be the timer it was supposed to cancel.
+- **The machine drops an event whose `seq` is not past its resume point.** A resume is allowed to be generous, and
+  showing the same sentence twice is worse than ignoring a repeat. The replay test sends seq 3 again and asserts it
+  arrives once.
+
+**Mutants seen red.** Removing the replay check, sending before hello, dropping the version check and stretching the
+silence limit to ten minutes each turned exactly one named test red.
+
+**Left in S10.** S10.2 the base components, S10.3 the gallery, and S10.6 the Playwright baselines and axe, which
+depend on the components. The reactive `$state` wrappers land with the screens that use them (S11, S12); the
+reducers and the machine are pure and tested now, which is what those screens need from this half of the slice.
