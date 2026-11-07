@@ -575,6 +575,40 @@ func TestDoctorReportsAMissingTrigger(t *testing.T) {
 	}
 }
 
+// VerifyTriggers proves the protections by probing them, and every probe must be scoped to its own row. An
+// unscoped UPDATE or DELETE runs over whatever she has saved: an unresolved interaction makes
+// "UPDATE interactions SET resolved_seq = 2" fail its CHECK before the trigger can answer, so a healthy
+// database looks broken at startup and the service refuses to run (found by the S10 end-to-end run, which
+// reuses the dev stack's database).
+func TestVerifyTriggersOnAStoreThatAlreadyHasRows(t *testing.T) {
+	s := openTest(t)
+	seed(t, s)
+	// An interaction still waiting for her answer: the row an unscoped probe would trip over.
+	if err := raw(t, s, `INSERT INTO interactions (id, session_id, kind, payload_json, opened_seq, opened_at)
+		VALUES ('i1', 'sess1', 'describe', '{}', 2, '2026-10-31T00:00:00Z')`); err != nil {
+		t.Fatalf("seed interaction: %v", err)
+	}
+	if err := s.VerifyTriggers(context.Background()); err != nil {
+		t.Fatalf("VerifyTriggers on a store with rows: %v", err)
+	}
+	// The probe transaction rolled back: her rows and her open question are untouched.
+	var open int
+	if err := s.readers.QueryRowContext(context.Background(),
+		`SELECT count(*) FROM interactions WHERE id = 'i1' AND resolved_seq IS NULL`).Scan(&open); err != nil {
+		t.Fatal(err)
+	}
+	if open != 1 {
+		t.Fatalf("the open interaction is %d, want it untouched", open)
+	}
+	var entries int
+	if err := s.readers.QueryRowContext(context.Background(), `SELECT count(*) FROM entries`).Scan(&entries); err != nil {
+		t.Fatal(err)
+	}
+	if entries != 1 {
+		t.Fatalf("%d entries after the probe, want the one she saved", entries)
+	}
+}
+
 // The database holds her own reviews, so group or other access is a bug.
 func TestDoctorReportsLoosePermissions(t *testing.T) {
 	s := openTest(t)
