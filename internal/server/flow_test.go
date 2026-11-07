@@ -26,7 +26,12 @@ import (
 // The happy route from the slice plan, end to end: a scripted model, the real pipeline, a real socket, and her
 // confirm. Nothing here is mocked except the model and the providers, which is exactly what the world is for.
 
-func newFlowRig(t *testing.T) *socketRig {
+func newFlowRig(t *testing.T) *socketRig { return newFlowRigGated(t, nil, world.SampleChatScript()...) }
+
+// newFlowRigGated is the same rig with a wrapper around the model's HTTP handler, so a lifecycle test can hold a
+// turn open at the exact moment the service is asked to stop, and with its own script, so a turn can finish without
+// a person tapping anything. A nil wrapper and no script are the plain flow rig.
+func newFlowRigGated(t *testing.T, wrap func(http.Handler) http.Handler, script ...world.ChatTurn) *socketRig {
 	t.Helper()
 	ctx := context.Background()
 	clock := world.NewFixedClock(time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC))
@@ -41,9 +46,14 @@ func newFlowRig(t *testing.T) *socketRig {
 	}
 	engine := session.New(session.Config{Store: db, Now: clock.Now, ServerVersion: "test"})
 
-	chat := world.StartChat("openrouter", clock)
-	t.Cleanup(chat.Close)
-	chat.Script(world.SampleChatScript()...)
+	chat := world.NewChat("openrouter", clock)
+	chat.Script(script...)
+	var chatHandler http.Handler = chat
+	if wrap != nil {
+		chatHandler = wrap(chat)
+	}
+	chatSrv := httptest.NewServer(chatHandler)
+	t.Cleanup(chatSrv.Close)
 	tmdb := world.Start("tmdb", clock)
 	t.Cleanup(tmdb.Close)
 	tmdb.LoadBodies(world.SampleTMDB())
@@ -73,7 +83,7 @@ func newFlowRig(t *testing.T) *socketRig {
 	model, err := agent.New(agent.Config{
 		Store: db, Session: engine, Finder: finder, Banks: banksSet,
 		Decisions: decisions.New(decisions.Config{Registry: registry, Decider: reading}),
-		Model:     agent.PinnedModel, BaseURL: chat.URL(), APIKey: "test-key",
+		Model:     agent.PinnedModel, BaseURL: chatSrv.URL + "/v1", APIKey: "test-key",
 		Responder: responder, Live: live.Publish, Logger: slog.New(slog.DiscardHandler),
 		Now: clock.Now,
 	})
@@ -88,14 +98,15 @@ func newFlowRig(t *testing.T) *socketRig {
 	}
 	host := ln.Addr().String()
 	cfg := config.Config{AllowedHosts: []string{host, "localhost:8893"}, Addr: host, DataDir: t.TempDir()}
+	inner := newServer(cfg, Deps{
+		Engine: engine, Agent: model, Responder: responder, Live: live, Now: clock.Now,
+	}, slog.New(slog.DiscardHandler), nil)
 	srv := &httptest.Server{
 		Listener: ln,
-		Config: &http.Server{Handler: New(cfg, Deps{
-			Engine: engine, Agent: model, Responder: responder, Live: live, Now: clock.Now,
-		}, slog.New(slog.DiscardHandler), nil)},
+		Config:   &http.Server{Handler: inner.routes()},
 	}
 	srv.Start()
-	return &socketRig{t: t, server: srv, db: db, engine: engine, host: host}
+	return &socketRig{t: t, server: srv, inner: inner, db: db, engine: engine, host: host}
 }
 
 func TestScriptedSessionFromMessageToSaved(t *testing.T) {

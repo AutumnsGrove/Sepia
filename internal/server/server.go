@@ -160,9 +160,10 @@ func (s *Server) modeless(next http.Handler) http.Handler {
 }
 
 // teardown closes every socket and waits for a running turn, bounded by the grace period. A hijacked connection is
-// not tracked by http.Server, so the hub owns it.
-func (s *Server) teardown(grace time.Duration, why string) {
-	s.hub.closeAll(closeGoingAway, why)
+// not tracked by http.Server, so the hub owns it. The close reason is fixed: from the client's side every stop is a
+// restart, which is the one thing it can act on.
+func (s *Server) teardown(grace time.Duration) {
+	s.hub.closeAll(closeGoingAway, "the service is restarting")
 	done := make(chan struct{})
 	go func() {
 		s.hub.turnsWG.Wait()
@@ -205,7 +206,7 @@ func Run(ctx context.Context, cfg config.Config, deps Deps, log *slog.Logger, as
 
 	select {
 	case err := <-served:
-		s.teardown(shutdownGrace, "the service is restarting")
+		s.teardown(shutdownGrace)
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
@@ -218,7 +219,7 @@ func Run(ctx context.Context, cfg config.Config, deps Deps, log *slog.Logger, as
 		log.Info("sepia draining", "grace", shutdownGrace.String())
 		// Sockets first: a client that is waiting on a turn is told the service is going away, and a turn that
 		// is already running is given the grace period to finish (docs/PROTOCOL.md 1).
-		s.teardown(shutdownGrace, "the service is restarting")
+		s.teardown(shutdownGrace)
 		if err := srv.Shutdown(shutCtx); err != nil {
 			return fmt.Errorf("drain: %w", err)
 		}

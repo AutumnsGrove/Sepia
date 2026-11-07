@@ -159,6 +159,9 @@ func TestAcceptKeyMatchesRFC6455(t *testing.T) {
 type socketRig struct {
 	t      *testing.T
 	server *httptest.Server
+	// inner is the same service the listener serves, kept so a lifecycle test can reach the hub and the drain
+	// without going through the network.
+	inner  *Server
 	db     *store.Store
 	engine *session.Engine
 	host   string
@@ -195,13 +198,14 @@ func newSocketRig(t *testing.T) *socketRig {
 	}
 	host := ln.Addr().String()
 	cfg := config.Config{AllowedHosts: []string{host, "localhost:8893"}, Addr: host, DataDir: t.TempDir()}
+	inner := newServer(cfg, Deps{Engine: engine, Agent: model, Live: live, Now: clock},
+		slog.New(slog.DiscardHandler), nil)
 	srv := &httptest.Server{
 		Listener: ln,
-		Config: &http.Server{Handler: New(cfg, Deps{Engine: engine, Agent: model, Live: live, Now: clock},
-			slog.New(slog.DiscardHandler), nil)},
+		Config:   &http.Server{Handler: inner.routes()},
 	}
 	srv.Start()
-	return &socketRig{t: t, server: srv, db: db, engine: engine, host: host}
+	return &socketRig{t: t, server: srv, inner: inner, db: db, engine: engine, host: host}
 }
 
 func (r *socketRig) close() { r.server.Close() }
