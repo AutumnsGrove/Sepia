@@ -643,3 +643,45 @@ silence limit to ten minutes each turned exactly one named test red.
 **Left in S10.** S10.2 the base components, S10.3 the gallery, and S10.6 the Playwright baselines and axe, which
 depend on the components. The reactive `$state` wrappers land with the screens that use them (S11, S12); the
 reducers and the machine are pure and tested now, which is what those screens need from this half of the slice.
+
+## 2026-11-08, S10.2, S10.3 and S10.6, the components and their baselines
+
+**Built.** Thirteen base components — Button, Pill, Chip, Switch, Tabs, Statusbar, Banner, Errbox, InteractionCard
+(all seven kinds), Cover, Cloud, ListRow and Rating — ported from the mockups with the tokens only. The gallery at
+`/gallery` with nineteen states, addressable one at a time with `?state=name`. One Playwright baseline per state on
+Chromium and WebKit at a phone viewport, each state also scanned by axe. A live socket harness on the gallery used
+by the end-to-end suite to prove the machine against a real WebSocket and the real service. `e2e/budget.spec.ts`
+asserts the initial bundle: about 37 kB of JS and under 1 kB of CSS gzipped against limits of 80 kB and 12 kB.
+
+**A bug in S09 surfaced on the first end-to-end run, and it was not cosmetic.** `VerifyTriggers` probes the
+database's protections with raw SQL, and the probes had no `WHERE` clause. On an empty database that reads as
+harmless. On a database with an unanswered interaction, `UPDATE interactions SET resolved_seq = 2` hit an
+unresolved row, the table's `CHECK (resolved_seq > opened_seq)` fired before the trigger the doctor was asking
+about, and the service refused to start with "trigger fired with an unexpected error". The dev stack's database
+persisted between runs, which is how it appeared. Every probe now names its own probe row, and
+`TestVerifyTriggersOnAStoreThatAlreadyHasRows` was seen failing on the old code first. The e2e stack now removes
+its scratch data directory before it starts, so a suite never inherits the last run's rows.
+
+**Learned, for the next agent.**
+
+- **SvelteKit 3 removed `$lib`.** The build error names the two replacements: a deprecated `alias` config option,
+  or Node subpath imports. Subpath imports did not resolve in svelte-check's TypeScript, and the alias warns on
+  every sync, so routes import `../../lib/...` directly. Do not add a `$lib` import expecting it to work.
+- **Axe found two real things.** A link inside a sentence was distinguished by colour alone (now underlined), and
+  `aria-controls` pointed at a panel that did not exist in the gallery (the relationship is now expressed the other
+  way, from the panel's `aria-labelledby`). Both are the kind of violation a screenshot never shows.
+- **`prefer-svelte-reactivity` rejects a mutable `Set` in `$state`.** The chip selection is arrays copied on every
+  change, which is also what makes the component re-render.
+- **Look at the render, not only the diff.** The screenshot of the rating control showed `4.50` where the mockup
+  shows `4.5`; that was fixed before the baseline was kept. The describe card's primary button said "Skip" when
+  nothing was chosen, which made doing nothing the loudest action; it now says "Done" and offers Clear only when
+  there is something to clear.
+- **The first gallery run used `--update-snapshots`, which is how a baseline is created and never how a diff is
+  accepted.** Everything after that ran against the baselines with no flag.
+
+**Live checks left for Autumn.** The Linux baselines for the nineteen gallery states need one run of the
+`baselines` workflow and the artifact committed, as S00's did. Everything else in S10 is green on this machine:
+54 Playwright tests, 47 Vitest tests, svelte-check, ESLint and Prettier clean.
+
+**Next.** S11, the logging UI: the session screen, the interaction cards driven by a live `interaction_request`,
+and the entry card in its draft, saved and edit states, built from the mockups and the golden examples.
