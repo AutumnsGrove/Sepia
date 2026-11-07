@@ -99,7 +99,7 @@ None. The rate limit was answered by Autumn on 2026-11-04 and is recorded below.
    from `turn_calls`, tool summaries and sources from the `tool_end` events, tags from `entry_tags`. No text is
    added to a ledger to make the sheet possible.
 
-## What is built, and what is left
+## What is built
 
 Built: the HTTP chain with request ids; the socket with hello, replay from zero or from `last_seq`, full-state
 fallback, heartbeat, framing, rate limit, duplicate detection, every client message and its ack, stop and the
@@ -108,11 +108,14 @@ with search, upload, export and update as stable `not_implemented` stubs; the wi
 `sepia serve` and the offline `sepia-dev` stack with one scripted review; graceful drain that closes sockets and
 waits for a turn.
 
-Left before the slice is done: the slow-client shed and reconnect-storm tests, a restart in the middle of a turn, a
-database failure mid-request, and the bounded soak. The happy, bad and sad routes that are written are green,
-including a real-socket session from message to `saved`.
+The lifecycle routes closed in S09.6: a persisted event is never shed, so a client too slow to drain its queue is
+closed with 4008 and resumes from its own `last_seq`, while a live-only event is shed oldest-first; a storm of
+reconnects replays the log contiguously and leaves nothing in the hub; a restart closes the socket with 1001, lets a
+running turn finish and write its ledger row, or abandons it past the grace with her message already stored; a
+database failure mid-request answers `internal` and never a driver string; and a bounded soak of eight sessions and
+sixty-four reconnects leaves the hub, the turn map and the rate limiter bounded.
 
 ## Done when
 
 A frontend agent can open the dev stack and drive the whole logging flow through a real socket, every
-contract example validates against live output, and the hostile-request table is green.
+contract example validates against live output, and the hostile-request table is green. All three hold.

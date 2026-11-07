@@ -56,6 +56,10 @@ type socket struct {
 	persisted chan []byte
 	live      chan []byte
 	closed    chan struct{}
+	// flushWait is how long a persisted event may wait for a slow client. It is a field rather than the constant
+	// only so a test can reach the shed without sleeping for persistedWait; everything in production gets the
+	// constant from the constructor.
+	flushWait time.Duration
 	closeOnce sync.Once
 	closeCode int
 	closeWhy  string
@@ -113,7 +117,7 @@ func (s *Server) socket(w http.ResponseWriter, r *http.Request) {
 	sock := &socket{
 		server: s, hub: s.hub, ws: ws, sessionID: sessionID, lastSeq: hello.HeadSeq,
 		persisted: make(chan []byte, outboundDepth), live: make(chan []byte, outboundDepth),
-		closed: make(chan struct{}), ctx: ctx, cancel: cancel,
+		closed: make(chan struct{}), flushWait: persistedWait, ctx: ctx, cancel: cancel,
 	}
 	s.hub.register(sock)
 	sock.start(first, hello)
@@ -301,7 +305,11 @@ func (sock *socket) writeControl(opcode byte, payload []byte) {
 // sendPersisted queues a replayable event and waits for room. A client that cannot keep up is closed so it can
 // reconnect and resume from its own last_seq, rather than the service dropping part of the log for it.
 func (sock *socket) sendPersisted(data []byte) bool {
-	timer := time.NewTimer(persistedWait)
+	wait := sock.flushWait
+	if wait <= 0 {
+		wait = persistedWait
+	}
+	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case sock.persisted <- data:

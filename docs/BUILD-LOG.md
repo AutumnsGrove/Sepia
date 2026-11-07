@@ -572,3 +572,38 @@ money with nothing covered, which is what they were), and on a session whose onl
 domain's summary arithmetic; the wire's two numbers and the estimated flag; and an agent turn through a
 plan-shaped fake provider, which is the only way to drive an allowance: OpenRouter reports real money and has no
 allowance concept, so the world's chat fake cannot honestly pretend to be one.
+
+## 2026-11-08, S09.6, the lifecycle routes
+
+**Built.** The five tests the slice was still owed, in `internal/server/lifecycle_test.go`: a slow client is closed
+with 4008 rather than having a persisted event shed, while a live-only event is shed oldest-first; a storm of twenty
+sockets on one session gets the same hello and a contiguous replay, and the hub forgets every one; a restart closes
+the socket with 1001 and waits for a running turn to write its ledger row, or abandons it past the grace with her
+message already stored; a dead database answers `internal` on reads, writes and the upgrade, never a driver string;
+and a bounded soak of eight sessions and sixty-four reconnects leaves the hub, the turn map and the limiter bounded.
+S09 is done; the slice table says so.
+
+**Two of the failures were the tests, not the code.** The first draft of the soak sent `ping` without `data`, which
+the contract requires on every client message, so the ack was `rejected` and the test was right to say so. And the
+storm test asserted an empty hub while its own resumed socket was still open: a test that has to close the thing it
+just opened before it counts.
+
+**Three habits worth keeping for the next agent.**
+
+- **A test that passes immediately is a claim, not evidence.** Three mutants were run against the new tests: shedding
+  a persisted event, returning from the drain without waiting for the turn, and putting the driver error in the
+  error envelope. Each one turned its test red for the stated reason, and each fix was reverted afterwards.
+- **A blocked model is a channel, not a sleep.** `gate` wraps the world's chat handler so a turn is provably still
+  running when the drain starts, and `newFlowRigGated` scripts a prose reply so the turn can finish without a tap a
+  restarting service could never receive. The first draft used the full flow script and spent five seconds waiting
+  the grace out on an unanswered interaction: it passed for the wrong reason and only the timing gave it away.
+- **The drain needs one reason, not a parameter.** `teardown` took `why` and was only ever given "the service is
+  restarting", so `unparam` was right to object. The reason is now fixed at the one call site inside it.
+
+**What is true now.** Every route in the slice plan's hostile and sad tables has a test. `internal/server` is 83.1%
+of statements, up from 71.6% when the floors were last raised, and above its 80% floor without moving the floor. The
+happy route from a sentence to a saved entry over a real socket is still green, and the dev stack still runs offline.
+
+**Next.** S10, the frontend foundation, is unblocked: it needs only S00 and S02, and the dev stack it runs against is
+complete. The live checks remain the operator's: S01's provider keys and the real odds table, then G5 and G6 at
+S13/S14.
