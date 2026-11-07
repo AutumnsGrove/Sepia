@@ -6,6 +6,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig(async () => ({
   plugins: [
     await sveltekit({
+      // SvelteKit 3 removed the built-in `$lib`. The replacements are a deprecated `alias` option or Node
+      // subpath imports that svelte-check's TypeScript does not resolve here, so the app imports from
+      // `src/lib` by relative path and this config stays free of a warning on every sync.
       adapter: adapter({
         pages: 'build',
         assets: 'build',

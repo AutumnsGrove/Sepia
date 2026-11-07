@@ -32,7 +32,7 @@ Added, with the slice that added it:
 | Package | Slice | Licence | Why | Cost |
 |---|---|---|---|---|
 | `svelte`, `@sveltejs/kit`, `@sveltejs/adapter-static`, `vite`, `typescript` | S00 | MIT | The app shell, statically built and embedded. Svelte 5 runes | Build-time only; the output is a handful of small files |
-| `@lucide/svelte` | S10 | ISC | Icons as components, so only the ones used are bundled and nothing loads from a CDN | Tree-shaken to the icons imported |
+| `@lucide/svelte` | S10 | ISC | Icons as components, so only the ones used are bundled and nothing loads from a CDN. Installed at 1.70.0 | Tree-shaken to the icons imported: the gallery, which imports every icon the components use, adds about 14 kB gzipped; a screen that uses none adds nothing |
 | `vitest`, `@testing-library/svelte`, `@playwright/test`, `@axe-core/playwright` | S00 | MIT / MPL-2.0 (axe-core) | Unit, end-to-end and accessibility checks | Dev dependencies, never shipped |
 | `ajv`, `ajv-formats` | S02 | MIT | The TypeScript side of the contract validator, so a fixture that validates in Go validates in a browser test too | Dev dependencies, never shipped |
 | `json-schema-to-typescript`, `openapi-typescript` | S02 | MIT | Generate the frontend's types from `api/`, so a component can never hand-copy a shape | Dev dependencies; run by `make gen`, and CI fails on a diff |

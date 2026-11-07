@@ -69,6 +69,18 @@ None.
 The gallery is complete and baselined, the socket machine's transitions are all tested, and a screen can be
 built from a golden example alone.
 
+## What is built (2026-11-08)
+
+The gallery has 19 states, each a Playwright baseline on Chromium and WebKit at a phone viewport and each
+scanned by axe: buttons, pills, chips, switch, tabs, status, banner, errbox, covers, cloud, list rows, the
+rating control, and all seven interaction kinds. The socket machine is tested with a fake socket in Vitest
+and with a real one in Playwright (`e2e/socket.spec.ts`, through the gallery's live harness). The initial
+bundle is asserted at under 80 kB of JS and 12 kB of CSS gzipped. Every screen in S11 and S12 can be built
+from a golden example: `session.test.ts` folds all 34 server examples through the reducer.
+
+The Linux baselines still need the `baselines` workflow run once, as S00's did; the macOS ones are committed
+from this machine.
+
 ## Decisions (recorded 2026-11-08, while building)
 
 1. **The gallery is built into the app, unlinked.** The plan says dev-only, but the visual baselines run against
@@ -85,3 +97,17 @@ built from a golden example alone.
    exist.
 5. **The reactive stores are `$state` wrappers added with the screens.** S10 ships the pure reducers and the
    machine, tested; S11 and S12 own the wrappers, so no screen is written against an untested one.
+6. **SvelteKit 3 removed `$lib`, and the app uses relative imports.** The two replacements are a deprecated
+   `alias` option (a warning on every sync) or Node subpath imports, which svelte-check's TypeScript did not
+   resolve here. A project this small gains nothing from an alias, so routes import `../../lib/...` directly
+   and `vite.config.ts` carries no deprecated option.
+7. **The cover palette is mixed from the tokens, not copied from the mockups.** The mockups draw each cover
+   stand-in with its own raw `oklch` value; `STANDARDS.md` 5 forbids raw colour outside the token file and the
+   tokens are the mockups' own, so `Cover.svelte` derives its eight variants with `color-mix` from the accent,
+   the line and the panel. The layout and the size are the mockup's; the exact hue of a placeholder a real
+   cover will replace is not.
+8. **A budget is asserted on the built app.** `e2e/budget.spec.ts` reads the transfer sizes the browser
+   recorded and fails over 80 kB of JS or 12 kB of CSS, against about 37 kB and under 1 kB measured today.
+9. **The e2e stack starts on a fresh data directory.** It removes `/tmp/sepia-e2e-data` first; a leftover
+   database is how the unscoped trigger probe was found, and a suite should not inherit state from the last
+   run.

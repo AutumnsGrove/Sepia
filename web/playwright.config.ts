@@ -55,7 +55,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'go build -o /tmp/sepia-e2e ./cmd/sepia-dev && exec /tmp/sepia-e2e',
+    // A scratch data directory, removed first: the end-to-end suite must not start on last run's database,
+    // and an earlier run's rows are what surfaced the unscoped trigger probe (docs/BUILD-LOG.md).
+    command:
+      'rm -rf /tmp/sepia-e2e-data && go build -o /tmp/sepia-e2e ./cmd/sepia-dev && exec /tmp/sepia-e2e',
     cwd: repoRoot,
     url: `${BASE_URL}/healthz`,
     reuseExistingServer: !process.env.CI,
@@ -63,6 +66,7 @@ export default defineConfig({
     env: {
       SEPIA_ADDR: `127.0.0.1:${PORT}`,
       SEPIA_ALLOWED_HOSTS: `localhost:${PORT},127.0.0.1:${PORT}`,
+      SEPIA_DATA_DIR: '/tmp/sepia-e2e-data',
       SEPIA_DEV: '1',
     },
   },
