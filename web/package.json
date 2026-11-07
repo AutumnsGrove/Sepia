@@ -39,5 +39,8 @@
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",
     "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@lucide/svelte": "^1.70.0"
   }
 }

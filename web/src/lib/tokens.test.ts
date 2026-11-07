@@ -11,10 +11,16 @@ const mockupCSS = fileURLToPath(new URL('mockups/sepia.css', repoRoot));
 const appCSS = fileURLToPath(new URL('../app.css', import.meta.url));
 
 function rootTokens(css: string): Set<string> {
-  const block = /:root\s*\{([\s\S]*?)\n\}/.exec(css);
-  if (!block) throw new Error('no :root block');
-  const names = [...block[1].matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]);
-  return new Set(names);
+  // The mockups declare tokens in more than one :root block (the card states add theirs beside the component),
+  // so every block is read. Reading only the first would let a token drift as soon as it is declared later.
+  const names = new Set<string>();
+  for (const block of css.matchAll(/:root\s*\{([^}]*)\}/g)) {
+    for (const token of block[1].matchAll(/(--[a-z0-9-]+)\s*:/g)) {
+      names.add(token[1]);
+    }
+  }
+  if (names.size === 0) throw new Error('no :root block');
+  return names;
 }
 
 describe('design tokens', () => {

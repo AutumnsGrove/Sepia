@@ -35,6 +35,7 @@
   --unverified: oklch(0.79 0.1 82);
   --unverified-soft: oklch(0.29 0.045 82);
   --imageread: oklch(0.76 0.06 235);
+  --imageread-soft: oklch(0.28 0.03 235);
   --danger: oklch(0.7 0.12 30);
 
   --r-sm: 8px;
@@ -69,6 +70,29 @@ textarea {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Read by a screen reader, invisible on screen. Used for the label on an icon-only control. */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+a {
+  color: inherit;
+}
+
+/* Every interactive control is at least 44px in its smallest dimension, which is what a thumb needs. */
+button,
+input,
+textarea,
+select,
+[role='button'] {
+  touch-action: manipulation;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -68,3 +68,20 @@ None.
 
 The gallery is complete and baselined, the socket machine's transitions are all tested, and a screen can be
 built from a golden example alone.
+
+## Decisions (recorded 2026-11-08, while building)
+
+1. **The gallery is built into the app, unlinked.** The plan says dev-only, but the visual baselines run against
+   `cmd/sepia-dev` and the binary it embeds, so a route that only exists in `vite dev` could never be baselined.
+   It is a lazy route, linked from nowhere, and costs one chunk in the bundle.
+2. **The tokens test reads every `:root` block in the mockups.** Reading only the first block let a token the app
+   did not define pass, because the mockups declare `--imageread-soft` beside the card states rather than at the
+   top. The app now defines it and the test would fail if either side drifted.
+3. **The socket machine owns no DOM.** A `connect` function is injected and defaults to `new WebSocket(url)`, so
+   the whole transition table is tested in Node with fake timers. The page binds `visibilitychange` to `wake()`
+   and `beforeunload` to `stop()` in S11.
+4. **The resume point is the highest `seq` seen, and a lower one is dropped.** A hello with `full_state: true`
+   moves it to `head_seq`, because the snapshot in the hello is the state and the compacted events no longer
+   exist.
+5. **The reactive stores are `$state` wrappers added with the screens.** S10 ships the pure reducers and the
+   machine, tested; S11 and S12 own the wrappers, so no screen is written against an untested one.
