@@ -305,3 +305,35 @@ func TestWireCardLeavesOutTheFraming(t *testing.T) {
 		t.Errorf("left out = %+v", wire.LeftOut)
 	}
 }
+
+// A skipped question has no values. The contract says values is an array, so nil has to become [] on the wire:
+// null made the whole draft_snapshot invalid, which the browser would have refused to read (S11 found it when the
+// split scenario asked the question form).
+func TestASkippedAnswerIsAnEmptyListOnTheWire(t *testing.T) {
+	s, _, _, _ := newSessionRig(t)
+	card := session.Card{
+		Draft: session.Draft{Entry: domain.Entry{
+			ID: "e1", WorkID: "w1", Rating: 18, RatingScale: "quarter_stars_20",
+			Body: "the ending landed but it was too long", BodyOrigin: domain.BodyTyped,
+		}},
+		Answers: []domain.Answer{{
+			QuestionID: "book_ending", Prompt: "How did the ending land?",
+			Type: domain.AnswerChoice, Skipped: true,
+		}},
+	}
+	wire := s.wireCardOf(card)
+	raw, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(raw, []byte(`"values":null`)) {
+		t.Fatalf("a skipped answer went out as null:\n%s", raw)
+	}
+	envelope, err := encodeEnvelope(nil, "draft_snapshot", "s1", s.now(), map[string]any{
+		"version": wire.Version, "draft": wire,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validateEvent(t, envelope)
+}
