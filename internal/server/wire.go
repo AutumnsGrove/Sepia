@@ -167,6 +167,15 @@ type wireCard struct {
 	Missing    []string         `json:"missing"`
 }
 
+// valuesOf keeps a skipped answer's values an array. The contract says array and requires it, so nil would go out as
+// null and make the whole card invalid; a skipped answer is an empty list, not a missing one.
+func valuesOf(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
+}
+
 // wireCardOf turns the engine's card into the contract's card. Everything the client can see is decided here, so
 // a change to what a card means is one function and its contract test.
 func (s *Server) wireCardOf(card session.Card) wireCard {
@@ -193,7 +202,7 @@ func (s *Server) wireCardOf(card session.Card) wireCard {
 	for _, answer := range card.Answers {
 		out.Answers = append(out.Answers, wireAnswer{
 			QuestionID: answer.QuestionID, Category: answer.Category, Prompt: answer.Prompt,
-			AnswerType: string(answer.Type), Values: answer.Values, Skipped: answer.Skipped,
+			AnswerType: string(answer.Type), Values: valuesOf(answer.Values), Skipped: answer.Skipped,
 		})
 	}
 	for _, tag := range card.Tags {
@@ -547,7 +556,7 @@ func wireEntryOf(view session.EntryView) wireEntry {
 	for _, answer := range view.Answers {
 		out.Answers = append(out.Answers, wireAnswer{
 			QuestionID: answer.QuestionID, Category: answer.Category, Prompt: answer.Prompt,
-			AnswerType: string(answer.Type), Values: answer.Values, Skipped: answer.Skipped,
+			AnswerType: string(answer.Type), Values: valuesOf(answer.Values), Skipped: answer.Skipped,
 		})
 	}
 	for _, tag := range view.Tags {
