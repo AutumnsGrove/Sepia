@@ -100,3 +100,40 @@ func (s *Server) LoadBodies(bodies map[string][]byte) {
 		s.SetBody(path, body)
 	}
 }
+
+// SampleSplitChatScript is the same invented review as SampleChatScript, but the pre-read cannot tell the book from
+// the film, so the flow asks one card after another: which medium, which candidate, Describe, the questions, the
+// card. It is what the end-to-end suite drives when it wants the whole logging screen, offline and without a key.
+func SampleSplitChatScript() []ChatTurn {
+	return []ChatTurn{
+		{ToolCalls: []ChatToolCall{{
+			ID: "c1", Name: "media_lookup",
+			Arguments: `{"title":"The Lantern Keeper"}`,
+		}}},
+		{ToolCalls: []ChatToolCall{{
+			ID: "c2", Name: "merge_candidates",
+			Arguments: `{"candidate_id":"openlibrary|OL1W"}`,
+		}}},
+		{ToolCalls: []ChatToolCall{{
+			ID: "c3", Name: "ask_reviewer",
+			Arguments: `{"hints":{"setting":["lived-in"],"plot":["drags in the middle"]}}`,
+		}}},
+		{ToolCalls: []ChatToolCall{{
+			ID: "c4", Name: "save_entry",
+			Arguments: `{"body_quotes":["the ending landed but it was too long"],"verdict_quote":"the ending landed"}`,
+		}}},
+		{Text: "Ready."},
+	}
+}
+
+// ScriptSplitDecisions reads the sample message as two real media, which is the split rule: the runner-up is not
+// negligible and the leader is not clearly ahead, so she is asked rather than guessed at (PLAN.md 5, mockups 01).
+func ScriptSplitDecisions(d *Decisions) {
+	d.Set("intent", map[string]float64{"log_review": 0.94, "chitchat": 0.03})
+	d.Set("medium", map[string]float64{"book": 0.55, "film": 0.40, "unknown": 0.02})
+	d.Set("format", map[string]float64{"print": 0.10, "not_stated": 0.80})
+	d.Set("revisit", map[string]float64{"no": 0.94, "yes": 0.03})
+	d.Set("mentions_story", map[string]float64{"yes": 0.91, "no": 0.09})
+	d.Set("mentions_pacing", map[string]float64{"yes": 0.87, "no": 0.13})
+	d.Set("extract_fidelity", map[string]float64{"faithful": 0.94, "drops_opinion": 0.04})
+}
