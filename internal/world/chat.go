@@ -92,8 +92,8 @@ func (c *Chat) Bodies() [][]byte {
 func (c *Chat) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fault := c.Fault(r.URL.Path)
 	c.record(r)
+	body := readBounded(r, 64<<10)
 	if c.keepRaw {
-		body := readBounded(r, 64<<10)
 		c.mu.Lock()
 		c.bodies = append(c.bodies, body)
 		c.mu.Unlock()
@@ -145,7 +145,7 @@ func (c *Chat) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case FaultNone:
 	}
 
-	turn := c.take()
+	turn := c.takeAt(turnIndex(body))
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
@@ -212,16 +212,41 @@ func (c *Chat) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	write("data: [DONE]\n\n")
 }
 
-// take returns the next scripted turn, or a clean final line when the script is exhausted.
-func (c *Chat) take() ChatTurn {
+// takeAt returns the scripted turn for a conversation that has already had index assistant messages, or a clean
+// final line when the script is exhausted.
+//
+// The index is read from the request rather than kept on the fake, so the script is per conversation and not per
+// process. That is what lets one dev stack serve several sessions: the end-to-end suite opens a new one for each
+// test, and each has to start at the first turn rather than wherever the last one stopped.
+func (c *Chat) takeAt(index int) ChatTurn {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.next >= len(c.turns) {
+	if index < 0 || index >= len(c.turns) {
 		return ChatTurn{Text: "Done."}
 	}
-	turn := c.turns[c.next]
-	c.next++
-	return turn
+	c.next = index + 1
+	return c.turns[index]
+}
+
+// turnIndex counts the assistant messages a request already carries, which is the number of replies the
+// conversation has had. A request that cannot be read is -1, and gets the same clean final line as an exhausted
+// script.
+func turnIndex(body []byte) int {
+	var request struct {
+		Messages []struct {
+			Role string `json:"role"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &request); err != nil {
+		return -1
+	}
+	count := 0
+	for _, message := range request.Messages {
+		if message.Role == "assistant" {
+			count++
+		}
+	}
+	return count
 }
 
 // readBounded reads at most limit bytes, so a hostile test body cannot make the fake allocate without bound.
