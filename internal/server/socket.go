@@ -438,6 +438,8 @@ func (sock *socket) handleMessage(payload []byte) {
 		sock.handleInclude(ctx, msg)
 	case "confirm":
 		sock.handleConfirm(ctx, msg)
+	case "reopen":
+		sock.handleReopen(ctx, msg)
 	case "discard":
 		sock.handleDiscard(ctx, msg)
 	case "stop":
@@ -636,6 +638,27 @@ func (sock *socket) handleConfirm(ctx context.Context, msg clientMessage) {
 	sock.ack(msg.ClientMsgID, "accepted", "")
 }
 
+// handleReopen opens a draft revision of a saved entry. The revision target is kept on the hub for the session's
+// life, not the turn's, because she confirms long after the turn that opened the card has finished.
+func (sock *socket) handleReopen(ctx context.Context, msg clientMessage) {
+	if sock.alreadyApplied(ctx, msg.ClientMsgID) {
+		return
+	}
+	var data struct {
+		EntryID string `json:"entry_id"`
+	}
+	if err := json.Unmarshal(msg.Data, &data); err != nil {
+		sock.ack(msg.ClientMsgID, "rejected", string(codeMalformed))
+		return
+	}
+	if _, err := sock.server.engine.Reopen(ctx, sock.sessionID, data.EntryID, msg.ClientMsgID); err != nil {
+		sock.ackDraftRejection(msg.ClientMsgID, err)
+		return
+	}
+	sock.hub.setRevises(sock.sessionID, data.EntryID)
+	sock.ack(msg.ClientMsgID, "accepted", "")
+}
+
 func (sock *socket) handleDiscard(ctx context.Context, msg clientMessage) {
 	if sock.alreadyApplied(ctx, msg.ClientMsgID) {
 		return
@@ -708,6 +731,10 @@ func (sock *socket) ackRejection(clientMsgID string, err error) {
 	}
 	if errors.Is(err, session.ErrNoDraft) {
 		sock.ack(clientMsgID, "rejected", "not_a_draft")
+		return
+	}
+	if session.IsNotFound(err) {
+		sock.ack(clientMsgID, "rejected", "not_found")
 		return
 	}
 	if code, _, ok := refusalOf(err); ok {

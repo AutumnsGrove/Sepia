@@ -960,6 +960,41 @@ func (e *Engine) StartRevision(ctx context.Context, sessionID string, saved doma
 	return e.Draft(ctx, sessionID)
 }
 
+// Reopen opens a draft revision of a saved entry: the path Edit on a saved card takes, with no new lookup. It is
+// the same working copy the revisit choice makes, so confirming keeps the previous version in the revisions table
+// (docs/PROTOCOL.md 5).
+func (e *Engine) Reopen(ctx context.Context, sessionID, entryID, clientMsgID string) (Draft, error) {
+	if entryID == "" {
+		return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "That is not an entry Sepia knows."}
+	}
+	// A retry after a lost ack is a duplicate, not a second card.
+	if clientMsgID != "" {
+		if _, err := e.store.ClientMessage(ctx, sessionID, clientMsgID); err == nil {
+			return Draft{}, store.ErrDuplicateClientMessage
+		}
+	}
+	saved, err := e.store.Entry(ctx, entryID)
+	if err != nil {
+		// A missing entry is store.ErrNotFound, which the socket answers as not_found rather than as a failure.
+		return Draft{}, err
+	}
+	if saved.Status != domain.StatusSaved || saved.Deleted {
+		return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "That is not a saved entry."}
+	}
+	draft, err := e.StartRevision(ctx, sessionID, saved)
+	if err != nil {
+		return Draft{}, err
+	}
+	if clientMsgID != "" {
+		if err := e.store.RememberClient(ctx, domain.ClientMessage{
+			SessionID: sessionID, ClientMsgID: clientMsgID, Status: "accepted",
+		}); err != nil && !IsDuplicate(err) {
+			return Draft{}, err
+		}
+	}
+	return draft, nil
+}
+
 // Rounds returns how many question rounds a session has already asked, so the agent can stop at the cap.
 func (e *Engine) Rounds(ctx context.Context, sessionID string) (int, error) {
 	events, err := e.store.EventsSince(ctx, sessionID, 0)

@@ -110,6 +110,7 @@ something new.
 | `accept_unverified` | `base_version`, `fields[]` or `all` | Accept web-derived or manual fields into the canonical work |
 | `include_left_out` | `base_version`, `segment_id` | Move a left-out segment into the body |
 | `confirm` | `base_version` | The one commit. Rejected if the version is stale or the card does not satisfy section 2 of `ENTRY_CARD.md` |
+| `reopen` | `entry_id` | Opens a draft revision of a saved entry, so Edit on a saved card needs no new lookup. The session must be active and have no card yet, and the entry must be saved and not deleted. Confirming keeps the previous version in the revisions table |
 | `discard` | none | Throw the draft away; the session closes |
 | `stop` | none | Cancel the turn in flight |
 | `ping` | none | Optional keepalive from the client |

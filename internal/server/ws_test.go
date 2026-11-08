@@ -224,6 +224,32 @@ func (r *socketRig) newDraft() domain.Session {
 	return sess
 }
 
+// newSavedEntry makes a confirmed entry on this rig, so a reopen has something to revise.
+func (r *socketRig) newSavedEntry() domain.Entry {
+	r.t.Helper()
+	ctx := context.Background()
+	sess := r.newDraft()
+	draft, err := r.engine.Draft(ctx, sess.ID)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	edited, err := r.engine.EditDraft(ctx, sess.ID, session.Edit{
+		BaseVersion: draft.Version,
+		Set: map[string]json.RawMessage{
+			"rating": json.RawMessage("18"),
+			"body":   json.RawMessage(`"the ending landed but it was too long"`),
+		},
+	})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	saved, _, _, err := r.engine.Confirm(ctx, sess.ID, session.ConfirmRequest{BaseVersion: edited.Version})
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return saved
+}
+
 type wsClient struct {
 	t    *testing.T
 	conn net.Conn
