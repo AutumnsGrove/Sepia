@@ -224,3 +224,132 @@ func itoa(n int) string {
 	}
 	return string(digits)
 }
+
+// --- reopen: Edit on a saved card -----------------------------------------------------------------------
+
+// saveOne makes a saved entry out of a fresh draft session on this engine and returns it.
+func saveOne(t *testing.T, e *Engine, db *store.Store) domain.Entry {
+	t.Helper()
+	ctx := context.Background()
+	sess := draftFor(t, e, db, "w1")
+	draft, err := e.EditDraft(ctx, sess.ID, Edit{BaseVersion: 0, Set: patch(map[string]any{
+		"rating": 15, "body": "First thoughts, which I want to change.",
+	})})
+	if err != nil {
+		t.Fatalf("EditDraft: %v", err)
+	}
+	saved, _, _, err := e.Confirm(ctx, sess.ID, ConfirmRequest{BaseVersion: draft.Version})
+	if err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	return saved
+}
+
+func TestReopenOpensARevisionOfASavedEntry(t *testing.T) {
+	e, db := newEngine(t)
+	ctx := context.Background()
+	if err := db.SaveWork(ctx, domain.Work{ID: "w1", Medium: "book", Title: "The Lantern Keeper"}); err != nil {
+		t.Fatal(err)
+	}
+	saved := saveOne(t, e, db)
+
+	next, err := e.CreateEntry(ctx)
+	if err != nil {
+		t.Fatalf("CreateEntry: %v", err)
+	}
+	revision, err := e.Reopen(ctx, next.ID, saved.ID, "r1")
+	if err != nil {
+		t.Fatalf("Reopen: %v", err)
+	}
+	if revision.Entry.ID == saved.ID || revision.Entry.Status != domain.StatusDraft {
+		t.Fatalf("working copy = %+v, want a draft with its own id", revision.Entry)
+	}
+	if revision.Entry.Rating != saved.Rating || revision.Entry.Body != saved.Body || revision.Entry.WorkID != saved.WorkID {
+		t.Errorf("working copy = %+v, want the saved fields", revision.Entry)
+	}
+
+	// The same client message again is a duplicate, not a second card.
+	if _, duplicate := e.Reopen(ctx, next.ID, saved.ID, "r1"); !IsDuplicate(duplicate) {
+		t.Errorf("retry = %v, want a duplicate", duplicate)
+	}
+
+	edited, err := e.EditDraft(ctx, next.ID, Edit{BaseVersion: revision.Version, Set: patch(map[string]any{
+		"rating": 17,
+	})})
+	if err != nil {
+		t.Fatalf("EditDraft: %v", err)
+	}
+	entry, _, _, err := e.Confirm(ctx, next.ID, ConfirmRequest{BaseVersion: edited.Version, Revises: saved.ID})
+	if err != nil {
+		t.Fatalf("Confirm revision: %v", err)
+	}
+	if entry.ID != saved.ID || entry.Rating != 17 {
+		t.Errorf("entry = %+v, want the saved row with the new rating", entry)
+	}
+	revisions, err := db.Revisions(ctx, saved.ID)
+	if err != nil {
+		t.Fatalf("Revisions: %v", err)
+	}
+	if len(revisions) != 1 || revisions[0].Snapshot.Rating != 15 {
+		t.Errorf("revisions = %+v, want the first version kept", revisions)
+	}
+}
+
+func TestReopenRefusesWhatItCannotOpen(t *testing.T) {
+	e, db, sess := draftSession(t)
+	ctx := context.Background()
+	if _, err := e.Reopen(ctx, sess.ID, "e-missing", "r1"); err == nil {
+		t.Fatal("an unknown entry was opened")
+	} else if !IsNotFound(err) {
+		t.Errorf("unknown entry = %v, want not_found", err)
+	}
+
+	// The card in this session is a draft, not a saved entry: there is nothing to revise.
+	draftID, err := db.Session(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := e.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Reopen(ctx, next.ID, draftID.EntryID, "r1"); err == nil {
+		t.Fatal("a draft was reopened as a saved entry")
+	} else {
+		var refusal *Refusal
+		if !errors.As(err, &refusal) || refusal.Code != CodeInvalidValue {
+			t.Errorf("draft entry = %v, want invalid_value", err)
+		}
+	}
+}
+
+func TestReopenRefusesAClosedSessionAndADeletedEntry(t *testing.T) {
+	e, db := newEngine(t)
+	ctx := context.Background()
+	if err := db.SaveWork(ctx, domain.Work{ID: "w1", Medium: "book", Title: "The Lantern Keeper"}); err != nil {
+		t.Fatal(err)
+	}
+	saved := saveOne(t, e, db)
+
+	closed, err := e.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if closeErr := e.Close(ctx, closed.ID, domain.SessionDiscarded); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	if _, reopenErr := e.Reopen(ctx, closed.ID, saved.ID, "r1"); !errors.Is(reopenErr, ErrClosed) {
+		t.Errorf("closed session = %v, want ErrClosed", reopenErr)
+	}
+
+	if deleteErr := db.SoftDeleteEntry(ctx, saved.ID); deleteErr != nil {
+		t.Fatal(deleteErr)
+	}
+	open, err := e.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = e.Reopen(ctx, open.ID, saved.ID, "r1"); err == nil {
+		t.Fatal("a deleted entry was reopened")
+	}
+}

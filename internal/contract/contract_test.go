@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,13 +150,61 @@ func TestKnownVocabularies(t *testing.T) {
 			t.Errorf("%q should be a known server event", t2)
 		}
 	}
-	for _, t2 := range []string{"message", "confirm", "interaction_response", "ping"} {
+	for _, t2 := range []string{"message", "confirm", "interaction_response", "reopen", "ping"} {
 		if !KnownClientMessageType(t2) {
 			t.Errorf("%q should be a known client message", t2)
 		}
 	}
 	if KnownServerEventType("message") {
 		t.Error("a client message was reported as a server event")
+	}
+}
+
+// The two closed vocabularies above are hand-written, while the schema is generated. This walks the schema so a
+// new message type cannot be added to the contract and silently refused by the socket that reads the map.
+func TestTheVocabularyMatchesTheSchema(t *testing.T) {
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(eventsSchema), &doc); err != nil {
+		t.Fatalf("the embedded schema is not JSON: %v", err)
+	}
+	consts := func(def string) map[string]bool {
+		out := map[string]bool{}
+		defs, _ := doc["$defs"].(map[string]any)
+		entry, _ := defs[def].(map[string]any)
+		variants, _ := entry["oneOf"].([]any)
+		for _, variant := range variants {
+			parts, _ := variant.(map[string]any)["allOf"].([]any)
+			for _, part := range parts {
+				props, _ := part.(map[string]any)["properties"].(map[string]any)
+				typ, _ := props["type"].(map[string]any)
+				if name, ok := typ["const"].(string); ok && name != "" {
+					out[name] = true
+				}
+			}
+		}
+		return out
+	}
+	server := consts("serverEvent")
+	for name := range server {
+		if !KnownServerEventType(name) {
+			t.Errorf("the schema has a server event %q that the vocabulary does not", name)
+		}
+	}
+	for name := range serverEventTypes {
+		if !server[name] {
+			t.Errorf("the vocabulary has a server event %q that the schema does not", name)
+		}
+	}
+	client := consts("clientMessage")
+	for name := range client {
+		if !KnownClientMessageType(name) {
+			t.Errorf("the schema has a client message %q that the vocabulary does not", name)
+		}
+	}
+	for name := range clientMessageTypes {
+		if !client[name] {
+			t.Errorf("the vocabulary has a client message %q that the schema does not", name)
+		}
 	}
 }
 
