@@ -28,10 +28,22 @@ import (
 
 func newFlowRig(t *testing.T) *socketRig { return newFlowRigGated(t, nil, world.SampleChatScript()...) }
 
+// newFlowRigSplit is the same rig with the split scenario: two real media, so the flow asks the medium first.
+func newFlowRigSplit(t *testing.T) *socketRig {
+	return newFlowRigDecided(t, nil, world.ScriptSplitDecisions, world.SampleSplitChatScript()...)
+}
+
 // newFlowRigGated is the same rig with a wrapper around the model's HTTP handler, so a lifecycle test can hold a
 // turn open at the exact moment the service is asked to stop, and with its own script, so a turn can finish without
 // a person tapping anything. A nil wrapper and no script are the plain flow rig.
 func newFlowRigGated(t *testing.T, wrap func(http.Handler) http.Handler, script ...world.ChatTurn) *socketRig {
+	return newFlowRigDecided(t, wrap, world.ScriptSampleDecisions, script...)
+}
+
+// newFlowRigDecided is the rig with a chosen pre-read, so a test can script a split medium or a confident one.
+func newFlowRigDecided(t *testing.T, wrap func(http.Handler) http.Handler, scriptDecisions func(*world.Decisions),
+	script ...world.ChatTurn,
+) *socketRig {
 	t.Helper()
 	ctx := context.Background()
 	clock := world.NewFixedClock(time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC))
@@ -62,7 +74,7 @@ func newFlowRigGated(t *testing.T, wrap func(http.Handler) http.Handler, script 
 	ol.LoadBodies(world.SampleOpenLibrary())
 
 	reading := world.NewDecisions(clock)
-	world.ScriptSampleDecisions(reading)
+	scriptDecisions(reading)
 	registry, err := decisions.Load(filepath.Join("..", "..", "config", "decisions"))
 	if err != nil {
 		t.Fatal(err)
@@ -234,4 +246,94 @@ func TestScriptedSessionFromMessageToSaved(t *testing.T) {
 		!strings.Contains(library[0].FinishedOn, "2026-10-31") {
 		t.Errorf("saved entry = %+v", library[0])
 	}
+}
+
+// The split scenario is the whole logging screen in one turn: the medium card, the candidate card, Describe, the
+// questions, then a card she can confirm. It runs the real pipeline and a real socket, and only the model, the
+// providers and the decisions backend are the world.
+func TestSplitScenarioAsksEveryCardOverTheSocket(t *testing.T) {
+	rig := newFlowRigSplit(t)
+	defer rig.close()
+	ctx := context.Background()
+	sess, err := rig.engine.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client := rig.dial(sess.ID, 0, "http://"+rig.host)
+	client.expect("hello")
+	client.sendJSON(map[string]any{
+		"type": "message", "client_msg_id": "m1",
+		"data": map[string]any{
+			"text": world.SampleMessage, "client_date": "2026-11-01", "tz": "Europe/London",
+		},
+	})
+	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+		t.Fatalf("message ack = %v", got)
+	}
+
+	answers := map[string]any{
+		"choose_medium":    map[string]any{"value": "book"},
+		"choose_candidate": map[string]any{"value": "openlibrary|OL1W"},
+		"describe":         map[string]any{"selected": map[string][]string{"setting": {"lived-in"}}},
+		"question_form":    map[string]any{"skip_all": true},
+	}
+	var asked []string
+	var version int
+	for i := 0; i < 400 && version == 0; i++ {
+		ev, ok := client.next()
+		if !ok {
+			t.Fatalf("socket closed during the flow (code %d), asked %v", ev.closeCode, asked)
+		}
+		switch ev.Type {
+		case "interaction_request":
+			var data struct {
+				InteractionID string `json:"interaction_id"`
+				Kind          string `json:"kind"`
+			}
+			if err = json.Unmarshal(ev.Data, &data); err != nil {
+				t.Fatal(err)
+			}
+			value, known := answers[data.Kind]
+			if !known {
+				t.Fatalf("unexpected interaction %s: %s", data.Kind, ev.Data)
+			}
+			asked = append(asked, data.Kind)
+			client.sendJSON(map[string]any{
+				"type": "interaction_response", "client_msg_id": "i-" + data.Kind,
+				"data": map[string]any{"interaction_id": data.InteractionID, "value": value},
+			})
+			if got := client.expect("ack").field(t, "status"); got != "accepted" {
+				t.Fatalf("%s ack = %v", data.Kind, got)
+			}
+		case "draft_snapshot":
+			var data struct {
+				Version int `json:"version"`
+				Draft   struct {
+					CanConfirm bool `json:"can_confirm"`
+				} `json:"draft"`
+			}
+			if err = json.Unmarshal(ev.Data, &data); err != nil {
+				t.Fatal(err)
+			}
+			if data.Draft.CanConfirm {
+				version = data.Version
+			}
+		}
+	}
+	if version == 0 {
+		t.Fatalf("the card never became confirmable, asked %v", asked)
+	}
+	want := []string{"choose_medium", "choose_candidate", "describe", "question_form"}
+	if strings.Join(asked, ",") != strings.Join(want, ",") {
+		t.Errorf("cards asked = %v, want %v", asked, want)
+	}
+
+	client.sendJSON(map[string]any{
+		"type": "confirm", "client_msg_id": "c1", "data": map[string]any{"base_version": version},
+	})
+	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+		t.Fatalf("confirm ack = %v", got)
+	}
+	client.expect("saved")
 }

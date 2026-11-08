@@ -48,8 +48,12 @@ func TestChatSpeaksTheOpenRouterStream(t *testing.T) {
 		t.Error("the stream produced no events")
 	}
 
+	// The second call carries the first reply, because the script is indexed by how many replies the conversation
+	// has already had: that is what keeps two sessions on one dev stack from stealing each other's turns.
 	if _, err := client.Stream(context.Background(), provider.Request{
-		Model: "vendor/model", Messages: []message.Message{message.User("and?")},
+		Model: "vendor/model", Messages: []message.Message{
+			message.User("I finished Dune."), message.Assistant("Looking that up."), message.User("and?"),
+		},
 	}, nil); err != nil {
 		t.Fatalf("second Stream: %v", err)
 	}
@@ -145,5 +149,33 @@ func TestChatReportsDetailedUsageAndFinish(t *testing.T) {
 	}
 	if resp.FinishReason != "length" {
 		t.Errorf("finish reason = %q, want length", resp.FinishReason)
+	}
+}
+
+// Two sessions on one dev stack each start the script at its first turn. Without this the second session would
+// inherit wherever the first stopped, which is what made the end-to-end screen test see a card built from the wrong
+// turn (S11).
+func TestChatServesTheScriptPerConversation(t *testing.T) {
+	chat := StartChat("test-chat", nil)
+	defer chat.Close()
+	chat.Script(
+		ChatTurn{Text: "first reply"},
+		ChatTurn{Text: "second reply"},
+	)
+	client := openrouter.New(openrouter.Config{APIKey: "test-key", BaseURL: chat.URL()})
+	first := func() string {
+		resp, err := client.Stream(context.Background(), provider.Request{
+			Model: "vendor/model", Messages: []message.Message{message.User("a review")},
+		}, nil)
+		if err != nil {
+			t.Fatalf("Stream: %v", err)
+		}
+		return resp.Message.Content
+	}
+	if got := first(); got != "first reply" {
+		t.Errorf("first conversation = %q", got)
+	}
+	if got := first(); got != "first reply" {
+		t.Errorf("a second conversation = %q, want the script from its start", got)
 	}
 }
