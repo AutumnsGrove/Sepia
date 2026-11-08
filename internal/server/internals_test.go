@@ -321,7 +321,7 @@ func TestHubHoldsOneTurnAndOneQueuedMessage(t *testing.T) {
 	// A session with a turn in flight accepts one message behind it, and refuses the third.
 	turnCtx, cancel := context.WithCancel(ctx)
 	h.mu.Lock()
-	h.turns["s1"] = &turn{cancel: cancel, revises: ""}
+	h.turns["s1"] = &turn{cancel: cancel}
 	h.mu.Unlock()
 	if err := h.startTurn(ctx, "s1", queuedMessage{text: "first in the queue"}); err != nil {
 		t.Fatalf("queue one message: %v", err)
@@ -334,10 +334,19 @@ func TestHubHoldsOneTurnAndOneQueuedMessage(t *testing.T) {
 	if got := h.getRevises("s1"); got != "entry-1" {
 		t.Fatalf("revises = %q, want entry-1", got)
 	}
-	if got := h.getRevises("no-session"); got != "" {
-		t.Errorf("revises for a session with no turn = %q", got)
+	// A turn that ends (runTurn deletes it) must not take the revision target with it: she confirms later.
+	h.mu.Lock()
+	delete(h.turns, "s1")
+	h.mu.Unlock()
+	if got := h.getRevises("s1"); got != "entry-1" {
+		t.Errorf("revises after the turn ended = %q, want entry-1", got)
 	}
-
+	h.mu.Lock()
+	h.turns["s1"] = &turn{cancel: cancel}
+	h.mu.Unlock()
+	if got := h.getRevises("no-session"); got != "" {
+		t.Errorf("revises for a session with no card = %q", got)
+	}
 	// stop cancels the turn, and finishTurn forgets the session and its queue.
 	h.stop("s1")
 	h.stop("no-session")
@@ -352,6 +361,11 @@ func TestHubHoldsOneTurnAndOneQueuedMessage(t *testing.T) {
 	h.mu.Unlock()
 	if still {
 		t.Error("finishTurn left the turn behind")
+	}
+	// The revision target belongs to the session, so it survives the turn that set it ending and is only
+	// forgotten when the session is finished.
+	if got := h.getRevises("s1"); got != "" {
+		t.Errorf("revises after finishTurn = %q, want it forgotten", got)
 	}
 
 	// A per-session event with no socket on it is still written to the bus, and never panics.

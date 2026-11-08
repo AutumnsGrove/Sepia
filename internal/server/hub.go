@@ -31,9 +31,8 @@ type queuedMessage struct {
 
 // turn is the one turn a session may have in flight, and whatever is waiting behind it.
 type turn struct {
-	cancel  context.CancelFunc
-	revises string
-	queued  *queuedMessage
+	cancel context.CancelFunc
+	queued *queuedMessage
 }
 
 // hub is the per-service state the sockets share.
@@ -44,7 +43,10 @@ type hub struct {
 	conns     map[*socket]struct{}
 	bySession map[string]map[*socket]struct{}
 	turns     map[string]*turn
-	closing   bool
+	// revises is the saved entry a session's card is a revision of. It belongs to the session, not the turn: the
+	// card is confirmed long after the turn that opened it has finished.
+	revises map[string]string
+	closing bool
 
 	limiter   *rateLimiter
 	responder *Responder
@@ -59,7 +61,8 @@ func newHub(s *Server) *hub {
 	}
 	return &hub{
 		server: s, conns: map[*socket]struct{}{}, bySession: map[string]map[*socket]struct{}{},
-		turns: map[string]*turn{}, limiter: newRateLimiter(s.now), responder: responder,
+		turns: map[string]*turn{}, revises: map[string]string{},
+		limiter: newRateLimiter(s.now), responder: responder,
 	}
 }
 
@@ -228,6 +231,7 @@ func (h *hub) finishTurn(sessionID string) {
 	h.mu.Lock()
 	state := h.turns[sessionID]
 	delete(h.turns, sessionID)
+	delete(h.revises, sessionID)
 	h.mu.Unlock()
 	if state != nil {
 		state.cancel()
@@ -238,18 +242,17 @@ func (h *hub) finishTurn(sessionID string) {
 func (h *hub) setRevises(sessionID, entryID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if state := h.turns[sessionID]; state != nil {
-		state.revises = entryID
+	if entryID == "" {
+		delete(h.revises, sessionID)
+		return
 	}
+	h.revises[sessionID] = entryID
 }
 
 func (h *hub) getRevises(sessionID string) string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if state := h.turns[sessionID]; state != nil {
-		return state.revises
-	}
-	return ""
+	return h.revises[sessionID]
 }
 
 func (h *hub) publishQueueState(sessionID string, queued int) {

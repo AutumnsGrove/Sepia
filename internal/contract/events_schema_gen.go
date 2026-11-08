@@ -1739,6 +1739,33 @@ const eventsSchema = `{
           ]
         },
         {
+          "description": "Opens a draft revision of a saved entry: the same card she confirmed, editable again.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/clientEnvelope"
+            },
+            {
+              "properties": {
+                "type": {
+                  "const": "reopen"
+                },
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "entry_id"
+                  ],
+                  "properties": {
+                    "entry_id": {
+                      "$ref": "#/$defs/id"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
+        },
+        {
           "description": "Cancel the turn in flight.",
           "allOf": [
             {
