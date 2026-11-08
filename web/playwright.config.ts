@@ -13,6 +13,9 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
  */
 const PORT = 18893;
 const BASE_URL = `http://localhost:${PORT}`;
+// A second stack on its own port, with the model down: the sad route needs a real failure.
+const FAULT_PORT = 18894;
+const FAULT_URL = `http://localhost:${FAULT_PORT}`;
 
 export default defineConfig({
   testDir: 'e2e',
@@ -54,20 +57,42 @@ export default defineConfig({
       use: { ...devices['iPhone 13'], browserName: 'webkit' },
     },
   ],
-  webServer: {
-    // A scratch data directory, removed first: the end-to-end suite must not start on last run's database,
-    // and an earlier run's rows are what surfaced the unscoped trigger probe (docs/BUILD-LOG.md).
-    command:
-      'rm -rf /tmp/sepia-e2e-data && go build -o /tmp/sepia-e2e ./cmd/sepia-dev && exec /tmp/sepia-e2e',
-    cwd: repoRoot,
-    url: `${BASE_URL}/healthz`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    env: {
-      SEPIA_ADDR: `127.0.0.1:${PORT}`,
-      SEPIA_ALLOWED_HOSTS: `localhost:${PORT},127.0.0.1:${PORT}`,
-      SEPIA_DATA_DIR: '/tmp/sepia-e2e-data',
-      SEPIA_DEV: '1',
+  webServer: [
+    {
+      // A scratch data directory, removed first: the end-to-end suite must not start on last run's database,
+      // and an earlier run's rows are what surfaced the unscoped trigger probe (docs/BUILD-LOG.md).
+      command:
+        'rm -rf /tmp/sepia-e2e-data && go build -o /tmp/sepia-e2e ./cmd/sepia-dev && exec /tmp/sepia-e2e',
+      cwd: repoRoot,
+      url: `${BASE_URL}/healthz`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: {
+        SEPIA_ADDR: `127.0.0.1:${PORT}`,
+        SEPIA_ALLOWED_HOSTS: `localhost:${PORT},127.0.0.1:${PORT}`,
+        SEPIA_DATA_DIR: '/tmp/sepia-e2e-data',
+        SEPIA_DEV: '1',
+        // The whole logging flow, one card at a time: medium, candidate, Describe, questions, card.
+        SEPIA_DEV_SCENARIO: 'split',
+      },
     },
-  },
+    {
+      // The same stack with the model down, so the sad route is a real error and a real Try again rather than a
+      // fixture: a screen that only ever sees a working world is not tested.
+      command:
+        'rm -rf /tmp/sepia-e2e-fault-data && go build -o /tmp/sepia-e2e-fault ./cmd/sepia-dev && exec /tmp/sepia-e2e-fault',
+      cwd: repoRoot,
+      url: `${FAULT_URL}/healthz`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: {
+        SEPIA_ADDR: `127.0.0.1:${FAULT_PORT}`,
+        SEPIA_ALLOWED_HOSTS: `localhost:${FAULT_PORT},127.0.0.1:${FAULT_PORT}`,
+        SEPIA_DATA_DIR: '/tmp/sepia-e2e-fault-data',
+        SEPIA_DEV: '1',
+        SEPIA_DEV_SCENARIO: 'split',
+        SEPIA_DEV_FAULT: 'chat',
+      },
+    },
+  ],
 });
