@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { checkServerEvent } from '../contract/validate';
 import type { ServerEvent } from '../contract/events';
 import { applyAll, applyEvent, applyHello, emptySession } from './session';
+import { timeline } from './timeline';
 
 /**
  * The session reducer, fed the golden examples from api/examples/. Every fixture is first checked against the
@@ -158,5 +159,43 @@ describe('the session reducer', () => {
     const state = applyAll(emptySession(), events);
     expect(state.blocks).toHaveLength(2);
     expect(state.draftVersion).toBe(4);
+  });
+});
+
+describe('the one transcript order', () => {
+  it('interleaves a message, its activity and the card that follows', () => {
+    let state = emptySession();
+    state = applyEvent(state, fixture('server-user-message.json')).state;
+    state = applyEvent(state, fixture('server-tool-start.json')).state;
+    state = applyEvent(state, fixture('server-tool-end.json')).state;
+    state = applyEvent(state, fixture('server-interaction-choose-medium.json')).state;
+
+    const rows = timeline(state);
+    expect(rows.map((row) => row.kind)).toEqual(['block', 'activity', 'interaction']);
+    // The end of a tool lands on the row its start made, not on a second row after it.
+    expect(rows.filter((row) => row.kind === 'activity')).toHaveLength(1);
+    expect(rows[1].kind === 'activity' && rows[1].row.live).toBe(false);
+  });
+
+  it('keeps a notice where it arrived, between the message and the reply', () => {
+    let state = emptySession();
+    state = applyEvent(state, fixture('server-user-message.json')).state;
+    state = applyEvent(state, fixture('server-notice.json')).state;
+    state = applyEvent(state, fixture('server-assistant-start.json')).state;
+    const rows = timeline(state);
+    expect(rows.map((row) => row.kind)).toEqual(['block', 'notice', 'block']);
+    expect(rows[1].kind === 'notice' && rows[1].row.code).toBe('provider_down');
+  });
+
+  it('numbers every row from one counter, so a replay rebuilds the same screen', () => {
+    const events = [
+      fixture('server-user-message.json'),
+      fixture('server-activity.json'),
+      fixture('server-interaction-choose-medium.json'),
+    ];
+    const once = applyAll(emptySession(), events);
+    const twice = applyAll(emptySession(), events);
+    expect(timeline(once)).toEqual(timeline(twice));
+    expect(timeline(once).map((row) => row.order)).toEqual([1, 2, 3]);
   });
 });
