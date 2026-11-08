@@ -3,7 +3,7 @@
 Sepia is built as **vertical slices**, one plan file each, so any agent can pick one up cold, build it test
 first, and leave the app working and releasable. Standing rules, invariants, gates and the definition of done
 are in [`../BUILD.md`](../BUILD.md). **Read it first**, then [`../STANDARDS.md`](../STANDARDS.md). The status column
-is the truth: S00 and S02 to S10 are built, and S11 is next.
+is the truth: S00 and S02 to S11 are built, and S12 is next.
 
 ## How to read a slice plan
 
@@ -66,7 +66,7 @@ S09 needs S02, S07 and S08. S13 needs a working app (S09 and S12).
 | S08 | [Agent pipeline](S08-agent-pipeline.md) | 1 | done |
 | S09 | [Server and protocol](S09-server.md) | 1 | done |
 | S10 | [Frontend foundation](S10-frontend-foundation.md) | 1 | done |
-| S11 | [Logging flow UI](S11-logging-ui.md) | 1 | planned |
+| S11 | [Logging flow UI](S11-logging-ui.md) | 1 | done |
 | S12 | [Reading UI](S12-reading-ui.md) | 1 | planned |
 | S13 | [Deploy and update](S13-deploy-and-update.md) | 1 | planned |
 | S14 | [Backups](S14-backups.md) | 1 | planned |
@@ -97,6 +97,8 @@ WebSocket server that drives the whole logging flow, including its lifecycle: th
 storm, a restart mid-turn, a database failure and the bounded soak. The frontend foundation is built: the design
 tokens, the base components in every mockup state with a Playwright baseline and an axe scan each, the typed REST
 client, the socket state machine tested against a fake and a real socket, and the derived session and list stores.
-S11 is next. Everything from S11 on is still plan, spec and mockup. The decisions backend, the two metadata providers, Polaris and R2 are reachable only through the fakes in
+The logging flow is built too: the session screen, the interactions answered live, the entry card in its draft,
+editing and saved states, the why sheet, the composer with its queue and limit, and every system state on mockup
+pages 01, 02, 06 and 07 (except import), each with a baseline and an axe pass. S12 is next. Everything from S12 on is still plan, spec and mockup. The decisions backend, the two metadata providers, Polaris and R2 are reachable only through the fakes in
 `internal/world`; `sepia-dev` runs the real service against them, offline, with no keys. The live calls against
 the real providers are the operator's.
