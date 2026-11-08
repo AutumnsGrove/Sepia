@@ -6,6 +6,7 @@
   import Cover from './Cover.svelte';
   import Rating from './Rating.svelte';
   import Tabs from './Tabs.svelte';
+  import { lookupSentence } from '../session/copy';
 
   /**
    * Every kind of question the agent can ask is one card, because a person should not have to learn a new
@@ -264,7 +265,7 @@
       </div>
     {/if}
   {:else if kind === 'lookup_failed'}
-    <p class="q"><CircleAlert size={18} aria-hidden="true" /> I could not reach {service}.</p>
+    <p class="q"><CircleAlert size={18} aria-hidden="true" />{lookupSentence(service)}</p>
     <p class="hintline">{reason || 'It did not answer.'}</p>
     <div class="opts">
       <Button {disabled} onclick={() => onanswer({ value: 'retry' })}>

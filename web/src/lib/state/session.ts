@@ -11,8 +11,8 @@ import type { Draft, ServerEvent } from '../contract/events';
 export type SessionStatus = 'active' | 'saved' | 'discarded';
 
 export type TranscriptBlock =
-  | { kind: 'user'; id: string; clientMsgID: string; text: string; at: string }
-  | { kind: 'assistant'; id: string; text: string; streaming: boolean; at: string };
+  | { kind: 'user'; id: string; clientMsgID: string; text: string; at: string; order: number }
+  | { kind: 'assistant'; id: string; text: string; streaming: boolean; at: string; order: number };
 
 /** A quiet line under the transcript: what the agent is doing, not what it said. */
 export interface ActivityRow {
@@ -24,12 +24,15 @@ export interface ActivityRow {
   sources: { url: string; title: string }[];
   live: boolean;
   at: string;
+  /** Where this row sits in the one transcript order, beside blocks, notices and cards. */
+  order: number;
 }
 
 export interface OpenInteraction {
   id: string;
   kind: string;
   payload: Record<string, unknown>;
+  order: number;
 }
 
 export interface NoticeRow {
@@ -37,6 +40,7 @@ export interface NoticeRow {
   code: string;
   text: string;
   at: string;
+  order: number;
 }
 
 export interface SessionCost {
@@ -63,6 +67,8 @@ export interface SessionState {
   status: SessionStatus;
   headSeq: number;
   fullState: boolean;
+  /** The next free place in the transcript order. One counter for every kind of row, so nothing needs a clock. */
+  nextOrder: number;
   blocks: TranscriptBlock[];
   activity: ActivityRow[];
   interactions: OpenInteraction[];
@@ -88,6 +94,7 @@ export function emptySession(sessionID = ''): SessionState {
     status: 'active',
     headSeq: 0,
     fullState: false,
+    nextOrder: 1,
     blocks: [],
     activity: [],
     interactions: [],
@@ -127,17 +134,25 @@ export function applyHello(state: SessionState, event: ServerEvent): SessionStat
     fullState: data.full_state === true,
     draft: (data.draft ?? null) as Draft | null,
     draftVersion: (data.draft as Draft | null)?.version ?? 0,
-    interactions: ((data.open_interactions ?? []) as OpenInteraction[]).map((interaction) => ({
-      id: String((interaction as unknown as { interaction_id?: string }).interaction_id ?? ''),
-      kind: interaction.kind,
-      payload: (interaction.payload ?? {}) as Record<string, unknown>,
-    })),
+    interactions: ((data.open_interactions ?? []) as OpenInteraction[]).map(
+      (interaction, index) => ({
+        id: String((interaction as unknown as { interaction_id?: string }).interaction_id ?? ''),
+        kind: interaction.kind,
+        payload: (interaction.payload ?? {}) as Record<string, unknown>,
+        // A hello's cards are already open when the page arrives; they sit at the end of the transcript it rebuilds.
+        order: (data.full_state === true ? 1 : state.nextOrder) + index,
+      }),
+    ),
     // A hello is a new connection, not a new turn: an old error or queued count does not survive it.
     error: null,
   };
   if (data.full_state === true) {
     next.blocks = [];
     next.activity = [];
+    next.notices = [];
+    next.nextOrder = 1 + next.interactions.length;
+  } else {
+    next.nextOrder = state.nextOrder + next.interactions.length;
   }
   return next;
 }
@@ -172,6 +187,7 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
       return {
         state: {
           ...state,
+          nextOrder: state.nextOrder + 1,
           blocks: [
             ...state.blocks,
             {
@@ -180,6 +196,7 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
               clientMsgID: data.client_msg_id,
               text: data.text,
               at,
+              order: state.nextOrder,
             },
           ],
         },
@@ -192,9 +209,17 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
       return {
         state: {
           ...state,
+          nextOrder: state.nextOrder + 1,
           blocks: [
             ...state.blocks,
-            { kind: 'assistant', id: data.message_id, text: '', streaming: true, at },
+            {
+              kind: 'assistant',
+              id: data.message_id,
+              text: '',
+              streaming: true,
+              at,
+              order: state.nextOrder,
+            },
           ],
         },
       };
@@ -233,6 +258,7 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
       return {
         state: {
           ...state,
+          nextOrder: state.nextOrder + 1,
           activity: [
             ...state.activity,
             {
@@ -241,6 +267,7 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
               sources: [],
               live: event.seq === null,
               at,
+              order: state.nextOrder,
             },
           ],
         },
@@ -252,6 +279,7 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
       return {
         state: {
           ...state,
+          nextOrder: state.nextOrder + 1,
           activity: [
             ...state.activity,
             {
@@ -261,6 +289,7 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
               sources: [],
               live: true,
               at,
+              order: state.nextOrder,
             },
           ],
         },
@@ -281,11 +310,22 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
         })),
         live: false,
         at,
+        order: state.nextOrder,
       };
       const index = openActivityIndex(state.activity, data.tool);
-      if (index === -1) return { state: { ...state, activity: [...state.activity, row] } };
+      if (index === -1) {
+        return {
+          state: { ...state, nextOrder: state.nextOrder + 1, activity: [...state.activity, row] },
+        };
+      }
       const activity = state.activity.slice();
-      activity[index] = { ...activity[index], ...row, id: activity[index].id };
+      // The end of a tool lands where its start did: the row is the same moment in the transcript.
+      activity[index] = {
+        ...activity[index],
+        ...row,
+        id: activity[index].id,
+        order: activity[index].order,
+      };
       return { state: { ...state, activity } };
     }
 
@@ -297,12 +337,14 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
       return {
         state: {
           ...state,
+          nextOrder: state.nextOrder + 1,
           interactions: [
             ...state.interactions,
             {
               id: data.interaction_id,
               kind: data.kind,
               payload: (data.payload ?? {}) as Record<string, unknown>,
+              order: state.nextOrder,
             },
           ],
         },
@@ -379,7 +421,11 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
       return {
         state: {
           ...state,
-          notices: [...state.notices, { level: data.level, code: data.code, text: data.text, at }],
+          nextOrder: state.nextOrder + 1,
+          notices: [
+            ...state.notices,
+            { level: data.level, code: data.code, text: data.text, at, order: state.nextOrder },
+          ],
         },
       };
     }
