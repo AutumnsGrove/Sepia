@@ -13,9 +13,11 @@
   import ListRow from '../../lib/components/ListRow.svelte';
   import Pill from '../../lib/components/Pill.svelte';
   import Rating from '../../lib/components/Rating.svelte';
+  import SessionScreen from '../../lib/components/SessionScreen.svelte';
   import Statusbar from '../../lib/components/Statusbar.svelte';
   import Switch from '../../lib/components/Switch.svelte';
   import Tabs from '../../lib/components/Tabs.svelte';
+  import { fixtureHandlers, screenFixture, screenNames } from '../../lib/session/fixtures';
 
   /**
    * The gallery: every base component in every state the mockups draw, in one column, addressable one state at
@@ -47,6 +49,7 @@
     'ix-gap',
     'ix-lookup',
     'socket',
+    ...screenNames,
   ] as const;
   type State = (typeof states)[number];
 
@@ -541,6 +544,15 @@
       <InteractionCard kind="lookup_failed" payload={lookupPayload} onanswer={answered} />
     </section>
   {/if}
+
+  {#each screenNames as name (name)}
+    {#if shown === name}
+      <section class="screenstate">
+        <h2>{name.replace('screen-', '')}</h2>
+        <SessionScreen {...screenFixture(name)} handlers={fixtureHandlers} />
+      </section>
+    {/if}
+  {/each}
 
   {#if answer}
     <p class="answer" role="status">Answer: {answer}</p>

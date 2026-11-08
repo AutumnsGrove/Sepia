@@ -12,6 +12,15 @@ import type { ClientMessage, ServerEvent } from '../contract/events';
 
 export type ConnectionState = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
+/**
+ * A client message on its way in. The id is optional here because the machine makes one when the caller has not:
+ * a screen should not have to know that every message needs an id to be safe to retry.
+ */
+type WithOptionalID<T> = T extends unknown
+  ? Omit<T, 'client_msg_id'> & { client_msg_id?: string }
+  : never;
+export type OutgoingMessage = WithOptionalID<ClientMessage>;
+
 /** The bit of a WebSocket the machine uses. A fake in a test is three methods and no browser. */
 export interface SocketLike {
   send(data: string): void;
@@ -232,8 +241,10 @@ export class SessionSocket {
    * ack arrives, so a reconnect re-sends it and the server's `client_msg_id` memory turns the retry into a
    * duplicate rather than a second effect.
    */
-  send(message: ClientMessage): string {
-    const withID = message.client_msg_id ? message : { ...message, client_msg_id: this.newID() };
+  send(message: OutgoingMessage): string {
+    const withID = (
+      message.client_msg_id ? message : { ...message, client_msg_id: this.newID() }
+    ) as ClientMessage;
     const id = withID.client_msg_id as string;
     if (this.outbox.has(id)) return id;
     this.outbox.set(id, withID);

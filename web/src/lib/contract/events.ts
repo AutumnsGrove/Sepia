@@ -374,6 +374,12 @@ export type ClientMessage =
       data?: {};
     })
   | (ClientEnvelope & {
+      type?: 'reopen';
+      data?: {
+        entry_id: Id;
+      };
+    })
+  | (ClientEnvelope & {
       type?: 'stop';
       data?: {};
     })
