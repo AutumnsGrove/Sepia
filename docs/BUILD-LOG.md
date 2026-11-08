@@ -685,3 +685,64 @@ its scratch data directory before it starts, so a suite never inherits the last 
 
 **Next.** S11, the logging UI: the session screen, the interaction cards driven by a live `interaction_request`,
 and the entry card in its draft, saved and edit states, built from the mockups and the golden examples.
+
+## 2026-11-09, S11, the logging UI
+
+**Built.** The session screen at `/s/[id]` and `/new`, from the mockups: the transcript as plain blocks, the quiet
+activity rows with their live pulse and a `why` that opens the sheet, the status strips, the composer with Stop, a
+queued message and the 8,000-character refusal, and the entry card in its draft, revision and saved states. Every
+interaction kind is answered live over the socket. The card carries the work marker, the rating with its favourite
+heart, the words with tap-to-edit, the fidelity warning, the left-out segments with Include, the unverified source
+panel with Accept and Accept all, facts, answers, tags and the why sheet with odds, tools and split costs. The
+saved card's Edit opens a revision through a new `reopen` client message (approved by Autumn before the slice),
+and the revision card shows "What will change" against the entry it revises.
+
+**The protocol gained one message.** `reopen {entry_id}` opens a draft revision of a saved entry through the same
+`StartRevision` the revisit choice uses. It is in `api/events.schema.json`, `docs/PROTOCOL.md` 5, a golden example,
+and the socket. `SessionScreen` is pure and state-driven, so the gallery renders the same component with fixtures:
+eighteen new states, one per mockup frame on pages 01, 02, 06 and 07 (except import), each with a baseline and an
+axe pass. Six live end-to-end tests drive the real socket against the dev stack, and a second dev stack with the
+model down proves the sad route.
+
+**Two bugs surfaced and were fixed with the tests that found them.**
+
+- **A skipped answer went out as `null`.** The contract says an answer's `values` is a required array, and the wire
+  turned a skipped answer's nil slice into `null`, which made the whole `draft_snapshot` invalid. The browser would
+  have refused to read it. Found the moment the split scenario asked the question form; fixed in `wire.go` with a
+  regression test seen failing first.
+- **The dev stack's chat script was one global cursor.** Two sessions on one stack stole each other's turns, which
+  made the screen test build a card from the wrong turn. The fake now indexes its script by how many assistant
+  messages the request carries, so the script is per conversation. A world test proves two conversations each start
+  at the first turn.
+
+**Learned, for the next agent.**
+
+- **A local variable named `state` collides with the `$state` rune.** Svelte reads `$state` as a store subscription
+  and the file stops compiling; the screen's prop is `session` for that reason.
+- **`draft.missing` is a tuple union, not `string[]`.** `.includes('rating')` narrows to `never`; cast once at the
+  edge. `cost_update` still carries no `estimated` (S10's lesson), so the why sheet reads the card's own costs.
+- **Axe's `label-content-name-mismatch` rejects an `aria-label` that does not contain the visible text.** The
+  tappable body carries a screen-reader-only "Edit your words" instead of an aria-label.
+- **Playwright strict mode caught the quote twice:** the user message and the card both contain the body. Scope a
+  locator to the card rather than trusting the text.
+- **Open Library's one-call-a-second pacing serialised the parallel end-to-end suite.** The dev stack is offline
+  against a fake, so it turns the provider pacing off, as the Go rigs already did.
+- **The revisit card counts as a question round** (the cap is every interaction, by design), so a second flow on
+  one dev stack can lose the question form. The screen test tolerates that; the Go flow test asserts all four cards
+  in order on a fresh store.
+- **A browser that knows it is offline should say so at once.** The socket's silence watchdog is 45 seconds, far
+  too long for a strip she is waiting on, so the route listens to `online`/`offline` and shows the strip
+  immediately while the machine keeps retrying.
+
+**Deferred, and flagged for Autumn.** Tag editing (the mockup's `+ add`) and Edit on an unverified field are not
+built: `draft_edit` carries entry fields only, and a work's title and year are a different write with its own
+accept rules. Both belong with S12's entry page or a later patch addition. The import frames (02 C, 07 3 and 4)
+stay S18's.
+
+**Live checks left for Autumn.** The Linux baselines for the eighteen new gallery states need one run of the
+`baselines` workflow and the artifact committed, as S00's and S10's did. The copy table in the slice plan's
+Decisions section is hers to approve or edit. Everything else is green on this machine: `make check`, the Go
+suite, 76 Vitest tests and 102 Playwright tests across Chromium and WebKit.
+
+**Next.** S12, the reading UI: home, Drafts, the library, the entry page with its versions, and delete that never
+erases.
