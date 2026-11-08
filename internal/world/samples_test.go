@@ -1,10 +1,14 @@
 package world
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/AutumnsGrove/nova/decide"
 )
 
 // The dev stack types one fixed sentence and expects a card, and the end-to-end suite types the same words. The
@@ -95,5 +99,57 @@ func TestLoadBodiesServesEveryFixture(t *testing.T) {
 		if !strings.Contains(string(body), strings.TrimSpace(string(want))[:20]) {
 			t.Errorf("%s did not serve its fixture: %s", path, body)
 		}
+	}
+}
+
+// The split scenario exists so the end-to-end suite can drive the medium question. If the odds stop splitting, the
+// screen test would quietly skip a whole card, so the numbers are asserted where they are written.
+func TestSplitScenarioReadsTwoRealMedia(t *testing.T) {
+	d := NewDecisions(NewFixedClock(time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)))
+	ScriptSplitDecisions(d)
+	resp, err := d.Decide(context.Background(), decide.Request{
+		Model: "sepia_preread",
+		State: []decide.Source{{Source: "message", Text: SampleMessage}},
+		Questions: map[string]decide.Question{
+			"medium": {Instructions: "What kind of thing?", Criteria: map[string]string{
+				"book": "A book.", "film": "A film.", "unknown": "Not clear.",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	answer := resp.Answers["medium"]
+	if answer.Probabilities["book"] != 0.55 || answer.Probabilities["film"] != 0.40 {
+		t.Errorf("medium odds = %v, want book 0.55 and film 0.40", answer.Probabilities)
+	}
+}
+
+// The split script must quote the same sentence and name the same invented work as the plain one, for the same
+// reason: a card the save guard refuses is not a test of the screen.
+func TestSplitScriptQuotesTheSampleMessage(t *testing.T) {
+	quotes := 0
+	for _, turn := range SampleSplitChatScript() {
+		for _, call := range turn.ToolCalls {
+			var args struct {
+				BodyQuotes []string `json:"body_quotes"`
+				Title      string   `json:"title"`
+			}
+			if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+				t.Fatalf("%s arguments are not JSON: %v", call.Name, err)
+			}
+			for _, quote := range args.BodyQuotes {
+				quotes++
+				if !strings.Contains(SampleMessage, quote) {
+					t.Errorf("the script quotes %q, which is not in the sample message", quote)
+				}
+			}
+			if args.Title != "" && args.Title != "The Lantern Keeper" {
+				t.Errorf("the lookup asks for %q, which the fixtures do not carry", args.Title)
+			}
+		}
+	}
+	if quotes == 0 {
+		t.Fatal("the split script never quotes her")
 	}
 }
