@@ -168,10 +168,20 @@ test.describe('when the model is down', () => {
       ),
     ).toBeVisible({ timeout: 30_000 });
     // Her message is still in the transcript, and the way on is a retry, not a lost review.
-    await expect(page.getByText(SENTENCE)).toBeVisible();
-    await page.getByRole('button', { name: 'Try again' }).click();
-    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible({
-      timeout: 30_000,
-    });
+    const notices = page.getByText(
+      'The model did not finish. Your words are kept; you can try again or fill in the card by hand.',
+    );
+    await expect(notices).toHaveCount(1);
+    await expect(page.getByText(SENTENCE)).toHaveCount(1);
+
+    // The retry runs the turn again for the same message. The pre-read runs again too, so the medium card can come
+    // back before the model is reached; answer it if it does. A second failure is a second notice, and her words
+    // are still in the transcript once.
+    await page.getByRole('button', { name: 'Try again' }).first().click();
+    const book = page.getByRole('button', { name: /The book/ });
+    await expect(book.or(notices.nth(1))).toBeVisible({ timeout: 20_000 });
+    if (await book.isVisible()) await book.click();
+    await expect(notices).toHaveCount(2, { timeout: 30_000 });
+    await expect(page.getByText(SENTENCE)).toHaveCount(1);
   });
 });

@@ -23,7 +23,7 @@
   } from '../session/screen';
   import type { ConnectionState } from '../socket/machine';
   import type { SessionState } from '../state/session';
-  import { liveActivity, timeline } from '../state/timeline';
+  import { isWorking, timeline } from '../state/timeline';
   import Button from './Button.svelte';
   import EntryCard from './EntryCard.svelte';
   import Errbox from './Errbox.svelte';
@@ -46,6 +46,8 @@
     caughtUp?: boolean;
     /** A refusal from the service, in its own words: a stale edit, a refused action, a lost message. */
     problem?: string;
+    /** A message the service refused, put back in the composer so a rejection never loses what she typed. */
+    restore?: { seq: number; text: string };
   }
   let {
     session,
@@ -56,15 +58,23 @@
     versions = 0,
     caughtUp = false,
     problem = '',
+    restore = { seq: 0, text: '' },
   }: Props = $props();
 
   let text = $state('');
   let whyOpen = $state(false);
+  let restored = $state(0);
+  $effect(() => {
+    if (restore.seq !== restored) {
+      restored = restore.seq;
+      text = restore.text;
+    }
+  });
   let composer = $state<HTMLTextAreaElement | null>(null);
 
   const mode = $derived(cardMode(session, savedEntry));
   const closed = $derived(session.status !== 'active');
-  const working = $derived(liveActivity(session) !== null);
+  const working = $derived(isWorking(session));
   const rows = $derived(timeline(session));
   const save = $derived(saveState(session.draft));
   const unverifiedCount = $derived(
