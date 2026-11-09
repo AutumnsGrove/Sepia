@@ -110,15 +110,16 @@ type Mirror struct {
 }
 
 type Session struct {
-	ID           string  `json:"id"`
-	Kind         string  `json:"kind"`
-	Title        string  `json:"title"`
-	EntryID      *string `json:"entry_id"`
-	MessagesJson string  `json:"messages_json"`
-	State        string  `json:"state"`
-	CreatedAt    string  `json:"created_at"`
-	UpdatedAt    string  `json:"updated_at"`
-	DraftVersion int64   `json:"draft_version"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	Title          string         `json:"title"`
+	EntryID        *string        `json:"entry_id"`
+	MessagesJson   string         `json:"messages_json"`
+	State          string         `json:"state"`
+	CreatedAt      string         `json:"created_at"`
+	UpdatedAt      string         `json:"updated_at"`
+	DraftVersion   int64          `json:"draft_version"`
+	RevisesEntryID sql.NullString `json:"revises_entry_id"`
 }
 
 type SessionEvent struct {
