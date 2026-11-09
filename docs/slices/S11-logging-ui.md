@@ -108,6 +108,11 @@ Recorded with Autumn on 2026-11-09, before the slice started.
     work is shown alone, or with a later patch field.
 12. **The dev stack has a fault switch.** `SEPIA_DEV_FAULT=chat|lookup|preread` makes one outside service
     misbehave, so a screen test can see a real error and a real way back rather than a fixture.
+13. **The revision target is stored with the session** (`sessions.revises_entry_id`), not only in the hub's
+    memory, so a restart mid-revision still writes onto the saved entry instead of adding a second one.
+14. **`retry` (approved 2026-11-09).** One new client message runs the failed turn again for the message already
+    stored. Try again sends it, so a retry never appends her words a second time. It is refused while a turn is
+    in flight.
 
 ## Gates
 
