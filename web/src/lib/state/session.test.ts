@@ -187,6 +187,18 @@ describe('whether a turn is in flight', () => {
     expect(isWorking(queued)).toBe(true);
   });
 
+  it('does not latch on when a stream stops without its end', () => {
+    let state = applyEvent(emptySession(), fixture('server-assistant-start.json')).state;
+    expect(isWorking(state)).toBe(true);
+    // A stop or a failed stream ends the turn with a notice and no assistant_end.
+    state = applyEvent(state, fixture('server-notice.json')).state;
+    expect(isWorking(state)).toBe(false);
+
+    let failed = applyEvent(emptySession(), fixture('server-assistant-start.json')).state;
+    failed = applyEvent(failed, fixture('server-error.json')).state;
+    expect(isWorking(failed)).toBe(false);
+  });
+
   it('is false once the session has closed, whatever is left on screen', () => {
     const saved = applyEvent(emptySession(), fixture('server-saved.json')).state;
     expect(isWorking({ ...saved, queue: 1 })).toBe(false);

@@ -760,6 +760,12 @@ reachable, and each one is fixed with the test that would have caught it:
   does not ask for it twice.
 - **Try again re-sent her words as a new message.** A successful retry would have stored and shown them twice.
   With Autumn's yes the protocol gained `retry`, which runs the turn again for the message already stored.
+- **A streaming reply could latch on.** Only nova's `assistant_end` closed a streaming block, and a stop or a
+  mid-stream failure never sends one, so Stop stayed forever. A notice or an error closes every open block.
+- **`retry` was accepted on a saved session**, where the old Try again is still on screen. It is refused with
+  `session_closed` now.
+- **A refreshed revision lost its diff.** The hello already carries the revision draft, so reopen was skipped and
+  the saved entry was never read. It is read on a refresh too, and reopen is only sent when there is no card.
 - **A pre-existing data race in the agent's turn end state** (the detector found it under load) is guarded now.
 - **The socket test helper could lose a frame it read past.** Every action that acks and writes now waits for
   both, in either order, instead of expecting one before the other.
