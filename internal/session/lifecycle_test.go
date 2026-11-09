@@ -450,6 +450,14 @@ func TestARevisionOfAnExtractedBodyCanBeConfirmed(t *testing.T) {
 	if revision.Entry.BodyOrigin != domain.BodyExtracted {
 		t.Fatalf("revision body origin = %s, want extracted", revision.Entry.BodyOrigin)
 	}
+	// The card the screen draws has to agree with the commit: Save is enabled for a card she never touched.
+	card, err := e.Card(ctx, next.ID)
+	if err != nil {
+		t.Fatalf("Card: %v", err)
+	}
+	if !card.Confirmable || len(card.Missing) != 0 {
+		t.Fatalf("card = confirmable %v, missing %v, want a saveable card", card.Confirmable, card.Missing)
+	}
 	entry, _, _, err := e.Confirm(ctx, next.ID, ConfirmRequest{BaseVersion: revision.Version})
 	if err != nil {
 		t.Fatalf("Confirm revision: %v", err)
