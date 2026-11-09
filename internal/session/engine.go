@@ -558,6 +558,16 @@ type ConfirmRequest struct {
 	Revises string
 }
 
+// revisionSource is what an unchanged extracted revision is proved against: her saved body, and her saved verdict
+// beside it. The verdict is a quote from the same message and can sit outside the body, so the proof source has to
+// hold both or a card she never touched would be refused.
+func revisionSource(saved domain.Entry) string {
+	if saved.Verdict == "" {
+		return saved.Body
+	}
+	return saved.Body + "\n" + saved.Verdict
+}
+
 // Confirm is the commit. It runs the domain's save guard and then saves the entry, its revision, the session link,
 // the closed state, the events and the ledger row in one transaction. Two devices confirming at once produce one
 // save: the second finds the session closed or the version stale.
@@ -588,7 +598,7 @@ func (e *Engine) Confirm(ctx context.Context, sessionID string, in ConfirmReques
 		if saved.Body == draft.Entry.Body {
 			proof := draft.Entry
 			proof.BodySpans = []domain.Span{{Start: 0, End: len(saved.Body), Text: saved.Body}}
-			if guardErr := domain.ValidateForSave(proof, saved.Body); guardErr != nil {
+			if guardErr := domain.ValidateForSave(proof, revisionSource(saved)); guardErr != nil {
 				return domain.Entry{}, 0, nil, guardErr
 			}
 			proven = true
