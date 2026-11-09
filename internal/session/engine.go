@@ -309,34 +309,11 @@ func (e *Engine) Drafts(ctx context.Context, limit int) ([]DraftSummary, error) 
 		if sess.Kind != domain.SessionEntry {
 			continue
 		}
-		summary := DraftSummary{Session: sess, Reason: WaitingPickWork}
-		if sess.EntryID == "" {
-			out = append(out, summary)
-			continue
-		}
-		entry, err := e.store.Entry(ctx, sess.EntryID)
+		reason, title, err := e.WaitingAndTitle(ctx, sess.ID)
 		if err != nil {
 			return nil, err
 		}
-		unverified := false
-		if entry.WorkID != "" {
-			sources, err := e.store.Sources(ctx, entry.WorkID)
-			if err != nil {
-				return nil, err
-			}
-			for _, source := range sources {
-				if source.Trust == domain.TrustUnverified {
-					unverified = true
-					break
-				}
-			}
-		}
-		summary.WorkTitle = entry.WorkID
-		if work, err := e.store.Work(ctx, entry.WorkID); err == nil {
-			summary.WorkTitle = work.Title
-		}
-		summary.Reason = waitingReason(entry, unverified)
-		out = append(out, summary)
+		out = append(out, DraftSummary{Session: sess, WorkTitle: title, Reason: reason})
 	}
 	return out, nil
 }
@@ -344,31 +321,42 @@ func (e *Engine) Drafts(ctx context.Context, limit int) ([]DraftSummary, error) 
 // Waiting reports the first thing a session's card is waiting on, using the same order as the Drafts list. It is
 // what GET /api/sessions/{id} shows beside a resumed draft.
 func (e *Engine) Waiting(ctx context.Context, sessionID string) (WaitingReason, error) {
+	reason, _, err := e.WaitingAndTitle(ctx, sessionID)
+	return reason, err
+}
+
+// WaitingAndTitle is the same read as Waiting, plus the work the draft is about, which is the row's title in the
+// Drafts list. They are read together so the two cannot disagree about which draft this is.
+func (e *Engine) WaitingAndTitle(ctx context.Context, sessionID string) (WaitingReason, string, error) {
 	sess, err := e.store.Session(ctx, sessionID)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if sess.Kind != domain.SessionEntry || sess.EntryID == "" {
-		return WaitingPickWork, nil
+		return WaitingPickWork, "", nil
 	}
 	entry, err := e.store.Entry(ctx, sess.EntryID)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	unverified := false
 	if entry.WorkID != "" {
-		sources, err := e.store.Sources(ctx, entry.WorkID)
-		if err != nil {
-			return "", err
-		}
-		for _, source := range sources {
-			if source.Trust == domain.TrustUnverified {
-				unverified = true
-				break
+		// A source that could not be read leaves the field unverified-looking rather than failing the list: a row
+		// that cannot say is better than one that is not there.
+		if sources, sourceErr := e.store.Sources(ctx, entry.WorkID); sourceErr == nil {
+			for _, source := range sources {
+				if source.Trust == domain.TrustUnverified {
+					unverified = true
+					break
+				}
 			}
 		}
 	}
-	return waitingReason(entry, unverified), nil
+	title := ""
+	if work, workErr := e.store.Work(ctx, entry.WorkID); workErr == nil {
+		title = work.Title
+	}
+	return waitingReason(entry, unverified), title, nil
 }
 
 // waitingReason applies the order above. Only a rating and a body block a save (docs/ENTRY_CARD.md 2); the others

@@ -19,14 +19,17 @@ type Ok<T> = T extends { responses: infer R }
   : never;
 
 export type Session = components['schemas']['Session'];
+export type Medium = components['schemas']['Medium'];
 export type Entry = components['schemas']['Entry'];
 export type SessionPage = Ok<Operation<'/api/sessions', 'get'>>;
 export type LibraryPage = Ok<Operation<'/api/entries', 'get'>>;
 export type RevisionPage = Ok<Operation<'/api/entries/{id}/revisions', 'get'>>;
+export type Revision = components['schemas']['Revision'];
 export type WorkDetail = Ok<Operation<'/api/works/{id}', 'get'>>;
 export type SearchResults = Ok<Operation<'/api/search', 'get'>>;
 export type VersionInfo = Ok<Operation<'/api/version', 'get'>>;
 export type ServicesInfo = Ok<Operation<'/api/services', 'get'>>;
+export type Settings = Ok<Operation<'/api/settings', 'get'>>;
 
 /** The error body every failing route answers with. */
 interface ErrorEnvelope {
@@ -70,6 +73,13 @@ export interface SessionQuery {
 
 export interface LibraryQuery {
   medium?: components['schemas']['Medium'];
+  favourite?: boolean;
+  /** One work's entries: the timeline under a saved entry. */
+  work?: string;
+  /** The order: newest finished first, or highest rating first. */
+  sort?: components['schemas']['LibrarySort'];
+  /** True is the Deleted list, which holds only the soft-deleted entries. */
+  deleted?: boolean;
   cursor?: string;
   limit?: number;
   q?: string;
@@ -82,14 +92,19 @@ export interface Client {
   listEntries(query?: LibraryQuery): Promise<LibraryPage>;
   getEntry(id: string): Promise<Entry>;
   listRevisions(id: string, cursor?: string): Promise<RevisionPage>;
-  deleteEntry(id: string, baseVersion: number): Promise<void>;
+  deleteEntry(id: string): Promise<void>;
+  restoreEntry(id: string): Promise<void>;
+  getSettings(): Promise<Settings>;
+  putSettings(settings: Settings): Promise<Settings>;
   getWork(id: string): Promise<WorkDetail>;
   search(q: string): Promise<SearchResults>;
   getVersion(): Promise<VersionInfo>;
   getServices(): Promise<ServicesInfo>;
 }
 
-function queryString(query: Record<string, string | number | undefined>): string {
+type QueryValue = string | number | boolean | undefined;
+
+function queryString(query: Record<string, QueryValue>): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined && value !== '') params.set(key, String(value));
@@ -103,7 +118,11 @@ export function createClient(options: ClientOptions = {}): Client {
   const doFetch = options.fetch ?? globalThis.fetch;
   const timeoutMs = options.timeoutMs ?? 20_000;
 
-  async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  async function request<T>(
+    method: 'GET' | 'POST' | 'PUT',
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
     const signal = AbortSignal.timeout(timeoutMs);
     const response = await doFetch(baseUrl + path, {
       method,
@@ -150,11 +169,14 @@ export function createClient(options: ClientOptions = {}): Client {
     getEntry: (id) => request('GET', `/api/entries/${encodeURIComponent(id)}`),
     listRevisions: (id, cursor) =>
       request('GET', `/api/entries/${encodeURIComponent(id)}/revisions${queryString({ cursor })}`),
-    deleteEntry: async (id, baseVersion) => {
-      await request<unknown>('POST', `/api/entries/${encodeURIComponent(id)}/delete`, {
-        base_version: baseVersion,
-      });
+    deleteEntry: async (id) => {
+      await request<unknown>('POST', `/api/entries/${encodeURIComponent(id)}/delete`);
     },
+    restoreEntry: async (id) => {
+      await request<unknown>('POST', `/api/entries/${encodeURIComponent(id)}/restore`);
+    },
+    getSettings: () => request('GET', '/api/settings'),
+    putSettings: (settings) => request('PUT', '/api/settings', settings),
     getWork: (id) => request('GET', `/api/works/${encodeURIComponent(id)}`),
     search: (q) => request('GET', `/api/search${queryString({ q })}`),
     getVersion: () => request('GET', '/api/version'),

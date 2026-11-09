@@ -622,3 +622,39 @@ func TestSettings(t *testing.T) {
 		t.Errorf("a hostile origin wrote the settings: %d", rec.Code)
 	}
 }
+
+// A draft's row title is the work it is about. It is read with the waiting reason, so the two always describe the
+// same draft rather than one being a turn behind.
+func TestSessionListNamesTheDraftWork(t *testing.T) {
+	h, engine, _ := newREST(t)
+	ctx := context.Background()
+	sess, err := engine.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = engine.StartDraft(ctx, sess.ID, domain.Entry{WorkID: "w1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doJSON(t, h, http.MethodGet, "/api/sessions?state=active&kind=entry", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list = %d: %s", rec.Code, rec.Body)
+	}
+	var page struct {
+		Items []wireSession `json:"items"`
+	}
+	decode(t, rec, &page)
+	if len(page.Items) != 1 || page.Items[0].Title != "The Lantern Keeper" {
+		t.Fatalf("drafts = %+v, want the work as the row title", page.Items)
+	}
+	if page.Items[0].WaitingReason == nil || *page.Items[0].WaitingReason != "needs_rating" {
+		t.Fatalf("waiting = %v", page.Items[0].WaitingReason)
+	}
+
+	one := doJSON(t, h, http.MethodGet, "/api/sessions/"+sess.ID, nil)
+	var read wireSession
+	decode(t, one, &read)
+	if read.Title != "The Lantern Keeper" {
+		t.Errorf("one session's title = %q, want the work", read.Title)
+	}
+}

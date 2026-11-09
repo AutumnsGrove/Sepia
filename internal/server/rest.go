@@ -256,12 +256,16 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	for _, sess := range sessions {
 		waiting := ""
 		if sess.Kind == domain.SessionEntry {
-			reason, waitErr := s.engine.Waiting(ctx, sess.ID)
+			reason, title, waitErr := s.engine.WaitingAndTitle(ctx, sess.ID)
 			if waitErr != nil {
 				s.restError(w, waitErr)
 				return
 			}
 			waiting = string(reason)
+			// The row's title for an entry session is the work it is about, which is what the Drafts list shows.
+			if title != "" {
+				sess.Title = title
+			}
 		}
 		items = append(items, wireSessionOf(sess, waiting))
 	}
@@ -280,12 +284,15 @@ func (s *Server) serveSession(w http.ResponseWriter, r *http.Request) {
 	}
 	waiting := ""
 	if sess.Kind == domain.SessionEntry {
-		reason, waitErr := s.engine.Waiting(r.Context(), sess.ID)
+		reason, title, waitErr := s.engine.WaitingAndTitle(r.Context(), sess.ID)
 		if waitErr != nil {
 			s.restError(w, waitErr)
 			return
 		}
 		waiting = string(reason)
+		if title != "" {
+			sess.Title = title
+		}
 	}
 	writeJSON(w, http.StatusOK, wireSessionOf(sess, waiting))
 }

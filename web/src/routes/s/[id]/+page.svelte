@@ -18,6 +18,7 @@
     emptySession,
     type SessionState,
   } from '../../../lib/state/session';
+  import { takeFirstMessage } from '../../../lib/state/handoff';
   import { isWorking } from '../../../lib/state/timeline';
 
   /**
@@ -47,6 +48,9 @@
   // rather than waiting out the socket's 45 second silence.
   const shownConnection = $derived(online ? connection : 'reconnecting');
   const reopenID = $derived(page.url.searchParams.get('reopen') ?? '');
+  // Log again and Restore as draft are the same message with a different variant; Edit sends neither.
+  const reopenMode = $derived(page.url.searchParams.get('mode') ?? '');
+  const reopenRevision = $derived(Number(page.url.searchParams.get('revision') ?? '') || 0);
 
   function today(): string {
     // en-CA gives YYYY-MM-DD, and the phone's own zone is what "last night" has to resolve against.
@@ -124,13 +128,25 @@
       },
       onHello: (hello) => {
         session = applyHello(session, hello);
+        // The sentence typed on Home arrives here, once: the greeting is the proof the socket is ready for it.
+        const first = takeFirstMessage();
+        if (first !== '' && session.draft === null) {
+          send({ type: 'message', data: { text: first, client_date: today(), tz: zone() } });
+        }
         if (reopen && !reopenSent) {
           reopenSent = true;
           // The saved entry is what the diff is against, so it is read on a refresh too, when the hello already
           // carries the revision draft and there is nothing to reopen.
           void loadSaved(reopen);
           if (session.draft === null) {
-            send({ type: 'reopen', data: { entry_id: reopen } });
+            send({
+              type: 'reopen',
+              data: {
+                entry_id: reopen,
+                ...(reopenMode === 'new' || reopenMode === 'revision' ? { mode: reopenMode } : {}),
+                ...(reopenRevision > 0 ? { revision: reopenRevision } : {}),
+              },
+            });
           }
         }
       },
