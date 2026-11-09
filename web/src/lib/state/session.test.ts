@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { checkServerEvent } from '../contract/validate';
 import type { ServerEvent } from '../contract/events';
 import { applyAll, applyEvent, applyHello, emptySession } from './session';
-import { timeline } from './timeline';
+import { isWorking, timeline } from './timeline';
 
 /**
  * The session reducer, fed the golden examples from api/examples/. Every fixture is first checked against the
@@ -66,6 +66,13 @@ describe('the session reducer', () => {
     expect(state.activity[0].live).toBe(false);
     expect(state.activity[0].ok).toBe(true);
     expect(state.activity[0].sources[0].url).toContain('openlibrary.org');
+  });
+
+  it('answers an interaction a hello carried, because the hello names it', () => {
+    const state = applyHello(emptySession(), fixture('server-hello-open-interaction.json'));
+    expect(state.interactions).toHaveLength(1);
+    expect(state.interactions[0].id).toBe('i_7');
+    expect(state.interactions[0].kind).toBe('choose_medium');
   });
 
   it('opens an interaction and closes it by id', () => {
@@ -159,6 +166,30 @@ describe('the session reducer', () => {
     const state = applyAll(emptySession(), events);
     expect(state.blocks).toHaveLength(2);
     expect(state.draftVersion).toBe(4);
+  });
+});
+
+describe('whether a turn is in flight', () => {
+  it('is true for a live activity row, a streaming reply, and a queued message', () => {
+    const idle = emptySession();
+    expect(isWorking(idle)).toBe(false);
+
+    const live = applyEvent(idle, fixture('server-activity.json')).state;
+    expect(isWorking(live)).toBe(true);
+
+    const streaming = applyEvent(idle, fixture('server-assistant-start.json')).state;
+    expect(isWorking(streaming)).toBe(true);
+
+    const ended = applyEvent(streaming, fixture('server-assistant-end.json')).state;
+    expect(isWorking(ended)).toBe(false);
+
+    const queued = { ...idle, queue: 1 };
+    expect(isWorking(queued)).toBe(true);
+  });
+
+  it('is false once the session has closed, whatever is left on screen', () => {
+    const saved = applyEvent(emptySession(), fixture('server-saved.json')).state;
+    expect(isWorking({ ...saved, queue: 1 })).toBe(false);
   });
 });
 

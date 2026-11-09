@@ -453,8 +453,9 @@ type wireHelloSession struct {
 }
 
 type wireOpenInteraction struct {
-	Kind    string          `json:"kind"`
-	Payload json.RawMessage `json:"payload"`
+	InteractionID string          `json:"interaction_id"`
+	Kind          string          `json:"kind"`
+	Payload       json.RawMessage `json:"payload"`
 }
 
 // hello builds the first event. The engine has already decided whether the replay is a full state; this only
@@ -483,7 +484,9 @@ func (s *Server) hello(ctx context.Context, hello session.Hello) (wireEnvelope, 
 		if len(payload) == 0 {
 			payload = json.RawMessage("{}")
 		}
-		data.OpenInteractions = append(data.OpenInteractions, wireOpenInteraction{Kind: question.Kind, Payload: payload})
+		data.OpenInteractions = append(data.OpenInteractions, wireOpenInteraction{
+			InteractionID: question.ID, Kind: question.Kind, Payload: payload,
+		})
 		if len(data.OpenInteractions) == 8 {
 			break // the contract's cap; the card is complete, the rest stay answerable by id
 		}

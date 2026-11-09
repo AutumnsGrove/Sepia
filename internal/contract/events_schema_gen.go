@@ -625,10 +625,14 @@ const eventsSchema = `{
       "description": "One mechanism for every question the service asks. The payload shape follows the kind.",
       "type": "object",
       "required": [
+        "interaction_id",
         "kind",
         "payload"
       ],
       "properties": {
+        "interaction_id": {
+          "$ref": "#/$defs/id"
+        },
         "kind": {
           "$ref": "#/$defs/interactionKind"
         },
@@ -1713,6 +1717,25 @@ const eventsSchema = `{
                       "$ref": "#/$defs/version"
                     }
                   },
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "description": "Runs the failed turn again for her last message, without storing it a second time.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/clientEnvelope"
+            },
+            {
+              "properties": {
+                "type": {
+                  "const": "retry"
+                },
+                "data": {
+                  "type": "object",
                   "additionalProperties": false
                 }
               }
