@@ -62,10 +62,10 @@ func TestSocketAcceptanceNamesFieldsAndHappensOnce(t *testing.T) {
 		"type": "accept_unverified", "client_msg_id": "a1",
 		"data": map[string]any{"base_version": 0, "fields": []string{"web|https://example.test/dune"}},
 	})
-	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+	both := client.expectBoth("ack", "draft_snapshot")
+	if got := both["ack"].field(t, "status"); got != "accepted" {
 		t.Fatalf("accept ack = %v", got)
 	}
-	client.expectWithin("draft_snapshot", 30*time.Second)
 	if trust := trustOf(t, rig, "https://example.test/dune"); trust != domain.TrustAccepted {
 		t.Fatalf("the tapped field is %s, want accepted", trust)
 	}
@@ -87,10 +87,10 @@ func TestSocketAcceptanceNamesFieldsAndHappensOnce(t *testing.T) {
 		"type": "accept_unverified", "client_msg_id": "a2",
 		"data": map[string]any{"base_version": 1, "all": true},
 	})
-	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+	both = client.expectBoth("ack", "draft_snapshot")
+	if got := both["ack"].field(t, "status"); got != "accepted" {
 		t.Fatalf("accept-all ack = %v", got)
 	}
-	client.expectWithin("draft_snapshot", 30*time.Second)
 	if trust := trustOf(t, rig, "https://example.test/dune-2"); trust != domain.TrustAccepted {
 		t.Errorf("the second field is %s after accept-all, want accepted", trust)
 	}

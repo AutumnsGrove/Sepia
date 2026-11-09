@@ -25,10 +25,11 @@ func TestReopenOverTheSocket(t *testing.T) {
 	client.sendJSON(map[string]any{
 		"type": "reopen", "client_msg_id": "r1", "data": map[string]any{"entry_id": saved.ID},
 	})
-	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+	both := client.expectBoth("ack", "draft_snapshot")
+	if got := both["ack"].field(t, "status"); got != "accepted" {
 		t.Fatalf("reopen ack = %v", got)
 	}
-	snapshot := client.expect("draft_snapshot")
+	snapshot := both["draft_snapshot"]
 	var data struct {
 		Version int `json:"version"`
 		Draft   struct {

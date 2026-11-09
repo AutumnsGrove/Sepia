@@ -255,9 +255,6 @@ type wsClient struct {
 	conn net.Conn
 	br   *bufio.Reader
 	bw   *bufio.Writer
-	// queued holds events an expect() read past. A live ack and a persisted snapshot are two channels, so the
-	// order they reach the socket is not promised; a test looking for one must not lose the other.
-	queued []event
 }
 
 func (r *socketRig) dial(sessionID string, lastSeq int, origin string) *wsClient {
@@ -321,11 +318,6 @@ func (c *wsClient) next() (event, bool) { return c.nextWithin(5 * time.Second) }
 
 func (c *wsClient) nextWithin(wait time.Duration) (event, bool) {
 	c.t.Helper()
-	if len(c.queued) > 0 {
-		ev := c.queued[0]
-		c.queued = c.queued[1:]
-		return ev, true
-	}
 	for {
 		_ = c.conn.SetReadDeadline(time.Now().Add(wait))
 		f, err := readFrameServer(c.br)
@@ -361,12 +353,6 @@ func (c *wsClient) expect(kind string) event {
 // uses a generous wait, because the race build on a loaded machine is slow enough to miss a tight one.
 func (c *wsClient) expectWithin(kind string, wait time.Duration) event {
 	c.t.Helper()
-	for i, ev := range c.queued {
-		if ev.Type == kind {
-			c.queued = append(c.queued[:i], c.queued[i+1:]...)
-			return ev
-		}
-	}
 	for i := 0; i < 200; i++ {
 		ev, ok := c.nextWithin(wait)
 		if !ok {
@@ -375,10 +361,35 @@ func (c *wsClient) expectWithin(kind string, wait time.Duration) event {
 		if ev.Type == kind {
 			return ev
 		}
-		c.queued = append(c.queued, ev)
 	}
 	c.t.Fatalf("%s never arrived", kind)
 	return event{}
+}
+
+// expectBoth reads until it has seen one event of each kind, in whatever order they arrive. A live ack and a
+// persisted snapshot leave on two channels, so their order is not promised, and a test that reads one with expect
+// would throw the other away.
+func (c *wsClient) expectBoth(kinds ...string) map[string]event {
+	c.t.Helper()
+	want := map[string]bool{}
+	for _, kind := range kinds {
+		want[kind] = true
+	}
+	got := map[string]event{}
+	for i := 0; i < 400 && len(got) < len(kinds); i++ {
+		ev, ok := c.next()
+		if !ok {
+			c.t.Fatalf("socket closed while waiting for %v (code %d)", kinds, ev.closeCode)
+		}
+		if want[ev.Type] {
+			got[ev.Type] = ev
+			delete(want, ev.Type)
+		}
+	}
+	if len(got) < len(kinds) {
+		c.t.Fatalf("%v never arrived", kinds)
+	}
+	return got
 }
 
 type event struct {
