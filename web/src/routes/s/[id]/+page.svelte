@@ -124,10 +124,14 @@
       },
       onHello: (hello) => {
         session = applyHello(session, hello);
-        if (reopen && !reopenSent && session.draft === null) {
+        if (reopen && !reopenSent) {
           reopenSent = true;
+          // The saved entry is what the diff is against, so it is read on a refresh too, when the hello already
+          // carries the revision draft and there is nothing to reopen.
           void loadSaved(reopen);
-          send({ type: 'reopen', data: { entry_id: reopen } });
+          if (session.draft === null) {
+            send({ type: 'reopen', data: { entry_id: reopen } });
+          }
         }
       },
       onEvent: (event: ServerEvent) => {

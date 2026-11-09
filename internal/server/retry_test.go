@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/AutumnsGrove/sepia/internal/session"
 	"github.com/AutumnsGrove/sepia/internal/world"
 )
 
@@ -65,5 +67,42 @@ func TestRetryRunsTheTurnWithoutAppendingHerMessage(t *testing.T) {
 	client.sendJSON(map[string]any{"type": "retry", "client_msg_id": "r1", "data": map[string]any{}})
 	if got := client.expect("ack").field(t, "status"); got != "duplicate" {
 		t.Fatalf("repeat retry ack = %v", got)
+	}
+}
+
+// A saved session keeps its transcript on screen, so the old Try again is still tappable. A retry there must be
+// refused, not start another model turn over a finished entry.
+func TestRetryIsRefusedOnASavedSession(t *testing.T) {
+	rig := newSocketRig(t)
+	defer rig.close()
+	ctx := context.Background()
+	sess := rig.newDraft()
+	draft, err := rig.engine.Draft(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited, err := rig.engine.EditDraft(ctx, sess.ID, session.Edit{
+		BaseVersion: draft.Version,
+		Set: map[string]json.RawMessage{
+			"rating": json.RawMessage("18"),
+			"body":   json.RawMessage(`"the ending landed but it was too long"`),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = rig.engine.AppendUserMessage(ctx, sess.ID, world.SampleMessage, "m1"); err != nil {
+		t.Fatalf("AppendUserMessage: %v", err)
+	}
+	if _, _, _, err = rig.engine.Confirm(ctx, sess.ID, session.ConfirmRequest{BaseVersion: edited.Version}); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+
+	client := rig.dial(sess.ID, 0, "http://"+rig.host)
+	client.expect("hello")
+	client.sendJSON(map[string]any{"type": "retry", "client_msg_id": "r1", "data": map[string]any{}})
+	ack := client.expect("ack")
+	if ack.field(t, "status") != "rejected" || ack.field(t, "reason") != "session_closed" {
+		t.Fatalf("retry on a saved session = %+v, want rejected session_closed", ack)
 	}
 }
