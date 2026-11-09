@@ -131,7 +131,7 @@ func (e *Engine) confirmable(ctx context.Context, sessionID string, entry domain
 	}
 	proof := entry
 	proof.BodySpans = []domain.Span{{Start: 0, End: len(saved.Body), Text: saved.Body}}
-	return domain.CanConfirm(proof, saved.Body)
+	return domain.CanConfirm(proof, revisionSource(saved))
 }
 
 // EntryView is a saved entry with the work it is about and the answers she gave.

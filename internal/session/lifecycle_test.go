@@ -412,8 +412,9 @@ func TestARevisionOfAnExtractedBodyCanBeConfirmed(t *testing.T) {
 	if _, err := e.AppendUserMessage(ctx, first.ID, source, "m1"); err != nil {
 		t.Fatal(err)
 	}
+	// The verdict sits outside the body, which is normal: it is a quote from the same message.
 	if _, err := e.SetExtractedBody(ctx, first.ID, 0, source,
-		[]string{"the ending landed but it was too long"}, "the ending landed", "m2"); err != nil {
+		[]string{"but it was too long"}, "the ending landed", "m2"); err != nil {
 		t.Fatalf("SetExtractedBody: %v", err)
 	}
 	draft, err := e.Draft(ctx, first.ID)
