@@ -123,7 +123,10 @@ test('the library groups by month, filters by medium, and sorts', async ({ page 
   await page.getByRole('button', { name: 'Show everything' }).click();
   await expect(page.getByRole('button', { name: /The Lantern Keeper/ }).first()).toBeVisible();
 
-  // The sort is the library's second order, and the best rating comes first.
+  // The sort is the library's second order, and the best rating comes first. A reload puts the chip row back where it
+  // started: choosing Podcast scrolled it, and a scrolled strip in a baseline is a baseline that differs by run.
+  await page.reload();
+  await expect(page.locator('.skel')).toHaveCount(0);
   await page.getByRole('button', { name: 'Sort: Newest first' }).click();
   await expect(page.getByRole('button', { name: 'Sort: Highest rated' })).toBeVisible();
   await expect(page.locator('.list .row').first()).toContainText('The Copper Room');

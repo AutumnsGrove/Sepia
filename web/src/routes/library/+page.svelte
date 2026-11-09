@@ -16,7 +16,7 @@
   import SkeletonRows from '../../lib/components/SkeletonRows.svelte';
   import TopBar from '../../lib/components/TopBar.svelte';
   import { appendList, emptyList, replaceList, type ListState } from '../../lib/state/lists';
-  import { entryMeta, groupByMonth } from '../../lib/state/reading';
+  import { entryMeta, sectionsFor } from '../../lib/state/reading';
 
   /**
    * The Library: one list across every medium, grouped by the month she finished each thing. The medium chips filter
@@ -47,7 +47,7 @@
   let problem = $state('');
   let loaded = $state(false);
 
-  const groups = $derived(groupByMonth(list.items));
+  const groups = $derived(sectionsFor(list.items, sort));
   const sortLabel = $derived(sort === 'newest' ? 'Newest first' : 'Highest rated');
   const countLine = $derived(
     list.items.length === 0
@@ -156,8 +156,10 @@
       </div>
     {:else}
       {#each groups as group (group.key)}
-        <p class="grp" id="grp-{group.key || 'none'}">{group.label}</p>
-        <ul class="list" aria-labelledby="grp-{group.key || 'none'}">
+        {#if group.label}
+          <p class="grp" id="grp-{group.key || 'none'}">{group.label}</p>
+        {/if}
+        <ul class="list" aria-labelledby={group.label ? `grp-${group.key || 'none'}` : undefined}>
           {#each group.items as entry (entry.id)}
             <ListRow
               title={entry.work.title}

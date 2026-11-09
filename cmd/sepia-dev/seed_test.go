@@ -160,3 +160,27 @@ func TestSeedEntryValidation(t *testing.T) {
 		}
 	}
 }
+
+// The step clock is what keeps a seeded screen the same on every run: rows written inside one second still get
+// distinct instants, so an order that breaks ties on time does not fall through to a random id.
+func TestStepClockNeverRepeats(t *testing.T) {
+	clock := &stepClock{}
+	seen := make([]time.Time, 0, 500)
+	for i := 0; i < 500; i++ {
+		seen = append(seen, clock.now())
+	}
+	for i := 1; i < len(seen); i++ {
+		if !seen[i].After(seen[i-1]) {
+			t.Fatalf("instant %d (%s) is not after the one before it (%s)", i, seen[i], seen[i-1])
+		}
+	}
+	// A second apart, because the schema stores whole seconds.
+	if gap := seen[1].Sub(seen[0]); gap != time.Second {
+		t.Fatalf("the gap is %s, want a second: a fraction is rounded away by the column", gap)
+	}
+	// And once the writes catch up with real time, the clock is simply the real clock again.
+	clock = &stepClock{}
+	if now := clock.now(); now.Before(time.Now().Add(-3 * time.Hour)) {
+		t.Fatalf("the first instant is %s, want the last two hours", now)
+	}
+}

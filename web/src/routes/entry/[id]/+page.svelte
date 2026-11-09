@@ -358,7 +358,12 @@
     align-items: center;
     padding: 0.85rem 0 0.4rem;
   }
+  /* A title can be longer than a phone: it wraps inside its column rather than being cut off at the edge. */
+  .work > div {
+    min-width: 0;
+  }
   .work h2 {
+    overflow-wrap: anywhere;
     margin: 0 0 0.2rem;
     font:
       400 1.5rem/1.2 'Fraunces',

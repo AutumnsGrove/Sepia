@@ -24,6 +24,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -83,6 +84,29 @@ func main() {
 		fmt.Fprintf(os.Stderr, "sepia-dev: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// stepClock hands out instants a second apart, starting two hours back, so a seed written in one burst still has
+// distinct seconds: the database keeps whole seconds, and a library sorted by rating must not break its ties on a
+// random id. It catches up with the real clock once enough writes have happened, and it never goes backwards.
+type stepClock struct {
+	mu   sync.Mutex
+	next time.Time
+}
+
+func (c *stepClock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := time.Now()
+	if c.next.IsZero() {
+		c.next = now.Add(-2 * time.Hour)
+	}
+	if !c.next.After(now) {
+		stamp := c.next
+		c.next = c.next.Add(time.Second)
+		return stamp
+	}
+	return now
 }
 
 // seedOf reads the dev stack's seed switch. Anything but "library" seeds nothing, so a typo leaves the stack working
@@ -153,7 +177,11 @@ func run(ctx context.Context, environ []string, stderr io.Writer) error {
 
 	log.Info("world ready", "chat", chat.URL(), "tmdb", tmdb.URL(), "openlibrary", ol.URL())
 
-	db, err := store.Open(ctx, store.Options{Path: filepath.Join(cfg.DataDir, "sepia-dev.db")})
+	// The store's clock gives every write its own second, so a seed written in one burst still has a stable order.
+	// Without it a library sorted by rating breaks its ties on a random id, and a photographed screen is a different
+	// screen on every run.
+	stepping := &stepClock{}
+	db, err := store.Open(ctx, store.Options{Path: filepath.Join(cfg.DataDir, "sepia-dev.db"), Now: stepping.now})
 	if err != nil {
 		return err
 	}

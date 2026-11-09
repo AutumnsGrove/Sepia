@@ -53,6 +53,16 @@ export function groupByMonth(entries: Entry[]): MonthGroup[] {
   return groups;
 }
 
+/**
+ * The library's sections. Month headings belong to the date order, where they are true: under the rating order the
+ * same headings would march backwards and forwards (June 2026 after January 2024) because the list is no longer in
+ * date order. A rating-sorted library is one list, and the tool row says which order it is.
+ */
+export function sectionsFor(entries: Entry[], sort: 'newest' | 'rating'): MonthGroup[] {
+  if (sort === 'newest') return groupByMonth(entries);
+  return entries.length === 0 ? [] : [{ key: '', label: '', items: entries }];
+}
+
 /** "2026-10" as the heading she reads. A month outside the calendar cannot happen, but it does not throw either. */
 export function monthLabel(key: string): string {
   const [year, month] = key.split('-');

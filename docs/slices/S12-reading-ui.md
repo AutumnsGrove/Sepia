@@ -79,8 +79,10 @@ the contract now carry; anything not listed here was settled already.
 5. **The Deleted row shows the date and nothing else.** The mockup's "· a duplicate" is prose the schema has no
    field for and the inline confirm has no box to type it in, so it is dropped rather than invented.
 6. **Two sorts, both total.** `newest` is `finished_on` descending then `id` descending; `rating` is `rating_q`
-   descending, then `finished_on`, then `id`. A saved entry has every one of those keys, so a page can never
-   repeat or skip a row.
+   descending, then `created_at`, then `id`. A saved entry has every one of those keys, so a page can never repeat or
+   skip a row. Month headings belong to the date order only: under the rating order the same headings would march
+   backwards and forwards (June 2026 after January 2024), so a highest-rated library is one list and the tool row
+   says which order it is.
 7. **A cursor belongs to its query.** It carries a short hash of the filters and the sort it was made under, and a
    cursor from another query is refused with `invalid_value`, which is the bad route below.
 8. **A deleted entry read by a stale link answers 200**, with `deleted_at` set, and the page says it was deleted
