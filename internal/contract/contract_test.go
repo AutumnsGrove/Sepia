@@ -150,7 +150,7 @@ func TestKnownVocabularies(t *testing.T) {
 			t.Errorf("%q should be a known server event", t2)
 		}
 	}
-	for _, t2 := range []string{"message", "confirm", "interaction_response", "reopen", "ping"} {
+	for _, t2 := range []string{"message", "confirm", "interaction_response", "reopen", "retry", "ping"} {
 		if !KnownClientMessageType(t2) {
 			t.Errorf("%q should be a known client message", t2)
 		}

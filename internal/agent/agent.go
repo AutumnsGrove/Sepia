@@ -177,6 +177,8 @@ type TurnInput struct {
 	ClientMsgID string
 	ClientDate  string
 	Timezone    string
+	// Retry runs the turn again for a message that is already stored, so nothing is appended twice.
+	Retry bool
 }
 
 // Outcome is what one turn left behind. A non-nil error is a real failure; a degraded turn has Ended set and a
@@ -199,15 +201,17 @@ func (a *Agent) HandleMessage(ctx context.Context, in TurnInput) (Outcome, error
 	if strings.TrimSpace(in.Text) == "" {
 		return Outcome{}, &session.Refusal{Code: session.CodeInvalidValue, Message: "There is nothing in that message."}
 	}
-	if in.ClientMsgID != "" {
-		if _, seen, err := a.session.Seen(ctx, in.SessionID, in.ClientMsgID); err != nil {
-			return Outcome{}, err
-		} else if seen {
-			return Outcome{}, store.ErrDuplicateClientMessage
+	if !in.Retry {
+		if in.ClientMsgID != "" {
+			if _, seen, err := a.session.Seen(ctx, in.SessionID, in.ClientMsgID); err != nil {
+				return Outcome{}, err
+			} else if seen {
+				return Outcome{}, store.ErrDuplicateClientMessage
+			}
 		}
-	}
-	if _, err := a.session.AppendUserMessage(ctx, in.SessionID, in.Text, in.ClientMsgID); err != nil {
-		return Outcome{}, err
+		if _, err := a.session.AppendUserMessage(ctx, in.SessionID, in.Text, in.ClientMsgID); err != nil {
+			return Outcome{}, err
+		}
 	}
 
 	messages, err := a.session.UserMessages(ctx, in.SessionID)
@@ -280,14 +284,14 @@ func (a *Agent) HandleMessage(ctx context.Context, in TurnInput) (Outcome, error
 		}
 		a.log.Warn("agent turn failed", "session", in.SessionID, "reason", runErr.Error())
 	}
-	if state.stopped && runErr == nil {
+	if state.isStopped() && runErr == nil {
 		if err := a.notice(ctx, in.SessionID, "warn", "step_limit",
 			"I stopped after several steps. The card is as far as I got; you can fill in the rest."); err != nil {
 			return Outcome{}, err
 		}
 	}
 
-	return a.finish(ctx, state, state.Ended)
+	return a.finish(ctx, state, state.ended())
 }
 
 // runModel drives nova's loop over the session's transcript and the automatic note.
@@ -337,7 +341,7 @@ func (a *Agent) runModel(ctx context.Context, state *RunState, nudge string) err
 	res, runErr := novaagent.New(cfg).Run(ctx, history, prompt)
 	elapsed := a.now().Sub(start)
 
-	state.Ended = "done"
+	state.setEnded("done")
 	var callUsage provider.Usage
 	if res != nil {
 		callUsage = res.Usage
@@ -345,13 +349,13 @@ func (a *Agent) runModel(ctx context.Context, state *RunState, nudge string) err
 		// dollars are carried rather than dropped. Sepia must not re-implement that sum (docs/STACK.md).
 		state.Usage.Add(res.Usage)
 		if res.Reason != "" {
-			state.Ended = res.Reason
+			state.setEnded(res.Reason)
 		}
 	}
 	if runErr != nil {
-		state.Ended = "error"
+		state.setEnded("error")
 		if errors.Is(runErr, errBudget) {
-			state.Ended = "budget"
+			state.setEnded("budget")
 		}
 	}
 	// The ledger and the transcript are receipts for a turn that already happened, so they get their own short
@@ -367,7 +371,7 @@ func (a *Agent) runModel(ctx context.Context, state *RunState, nudge string) err
 		SessionID: state.SessionID, TurnIndex: state.turnIndex, Model: a.model,
 		PromptTokens: callUsage.PromptTokens, CompletionTokens: callUsage.CompletionTokens,
 		CostUSD: callUsage.CostUSD, CostSource: callUsage.CostSource, AllowanceUSD: callUsage.AllowanceUSD,
-		LatencyMS: int(elapsed.Milliseconds()), Reason: state.Ended,
+		LatencyMS: int(elapsed.Milliseconds()), Reason: state.ended(),
 	}); recordErr != nil {
 		a.log.Error("turn ledger write failed", "session", state.SessionID, "err", recordErr.Error())
 	}

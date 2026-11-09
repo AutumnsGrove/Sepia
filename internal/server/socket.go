@@ -440,6 +440,8 @@ func (sock *socket) handleMessage(payload []byte) {
 		sock.handleConfirm(ctx, msg)
 	case "reopen":
 		sock.handleReopen(ctx, msg)
+	case "retry":
+		sock.handleRetry(ctx, msg)
 	case "discard":
 		sock.handleDiscard(ctx, msg)
 	case "stop":
@@ -636,6 +638,38 @@ func (sock *socket) handleConfirm(ctx context.Context, msg clientMessage) {
 	}
 	sock.hub.finishTurn(sock.sessionID)
 	sock.ack(msg.ClientMsgID, "accepted", "")
+}
+
+// handleRetry runs the failed turn again for her last message. The message is already stored, so the agent runs it
+// without appending, and the transcript does not gain a second copy.
+func (sock *socket) handleRetry(ctx context.Context, msg clientMessage) {
+	if sock.alreadyApplied(ctx, msg.ClientMsgID) {
+		return
+	}
+	messages, err := sock.server.engine.UserMessages(ctx, sock.sessionID)
+	if err != nil {
+		sock.ackRejection(msg.ClientMsgID, err)
+		return
+	}
+	if len(messages) == 0 {
+		sock.ack(msg.ClientMsgID, "rejected", "invalid_value")
+		return
+	}
+	err = sock.hub.startRetry(ctx, sock.sessionID, messages[len(messages)-1], msg.ClientMsgID)
+	switch {
+	case err == nil:
+		if recordErr := sock.server.engine.RememberRetry(ctx, sock.sessionID, msg.ClientMsgID); recordErr != nil {
+			sock.server.log.Error("retry record failed", "session", sock.sessionID, "err", recordErr.Error())
+		}
+		sock.ack(msg.ClientMsgID, "accepted", "")
+	case errors.Is(err, ErrReplyInProgress):
+		sock.ack(msg.ClientMsgID, "rejected", "reply_in_progress")
+	case errors.Is(err, ErrClosed):
+		sock.ack(msg.ClientMsgID, "rejected", string(codeUnavailable))
+	default:
+		sock.server.log.Warn("retry did not start", "err", err.Error())
+		sock.ack(msg.ClientMsgID, "rejected", string(codeInternal))
+	}
 }
 
 // handleReopen opens a draft revision of a saved entry. The revision target is kept on the hub for the session's
