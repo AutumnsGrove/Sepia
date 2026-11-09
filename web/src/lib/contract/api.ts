@@ -77,7 +77,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The library, newest finished first */
+        /** The library, newest finished first unless a sort says otherwise */
         get: operations["listEntries"];
         put?: never;
         post?: never;
@@ -94,7 +94,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** One entry with its work and its answers */
+        /**
+         * One entry with its work and its answers
+         * @description A deleted entry is answered with 200 and its deleted_at set, not with 404: a link followed after a delete is how she reaches the way back. A draft is answered with 404, because a draft is read through its session.
+         */
         get: operations["getEntry"];
         put?: never;
         post?: never;
@@ -132,6 +135,23 @@ export interface paths {
         put?: never;
         /** Soft-delete an entry. There is no hard delete and no purge */
         post: operations["deleteEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/entries/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Put a deleted entry back in the library. Nothing was erased, so nothing is rebuilt */
+        post: operations["restoreEntry"];
         delete?: never;
         options?: never;
         head?: never;
@@ -216,6 +236,24 @@ export interface paths {
         /** Reachability of every optional dependency, for the Services screen */
         get: operations["getServices"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The few things she can change from the Settings screen */
+        get: operations["getSettings"];
+        /** Change the settings. The whole object, so a partial write cannot leave half a switch */
+        put: operations["putSettings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -325,6 +363,20 @@ export interface components {
         };
         /** @enum {unknown} */
         Medium: "film" | "tv" | "book" | "game" | "album" | "podcast" | "theatre" | "other";
+        /**
+         * @description newest is finished_on then id, both descending. rating is rating_q descending, then finished_on and id, so the order is total and a page never repeats or skips a row.
+         * @default newest
+         * @enum {unknown}
+         */
+        LibrarySort: "newest" | "rating";
+        /** @description Every switch on the Settings screen that is not decided in config. Off means the step does not run, not that it failed. */
+        Settings: {
+            /**
+             * @description The quick read that routes a message and skips questions she already answered. Off sends every message straight to the agent, with no notice: it was her choice.
+             * @default true
+             */
+            preread: boolean;
+        };
         /** @enum {unknown} */
         SessionKind: "entry" | "general";
         /** @enum {unknown} */
@@ -538,7 +590,7 @@ export interface components {
     };
     parameters: {
         Id: string;
-        /** @description Opaque. Never an offset. */
+        /** @description Opaque. Never an offset. It belongs to the query that made it: a cursor from another sort or another set of filters is refused with invalid_value rather than answering a page from somewhere else. */
         Cursor: string;
         Limit: number;
     };
@@ -573,7 +625,7 @@ export interface operations {
             query?: {
                 state?: components["schemas"]["SessionState"];
                 kind?: components["schemas"]["SessionKind"];
-                /** @description Opaque. Never an offset. */
+                /** @description Opaque. Never an offset. It belongs to the query that made it: a cursor from another sort or another set of filters is refused with invalid_value rather than answering a page from somewhere else. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -682,7 +734,11 @@ export interface operations {
             query?: {
                 medium?: components["schemas"]["Medium"];
                 favourite?: boolean;
-                /** @description Opaque. Never an offset. */
+                work?: string;
+                sort?: components["schemas"]["LibrarySort"];
+                /** @description false is the library, which hides deleted entries. true is the Deleted list, which holds only them. A deleted entry is never paged with the entries that are still there. */
+                deleted?: boolean;
+                /** @description Opaque. Never an offset. It belongs to the query that made it: a cursor from another sort or another set of filters is refused with invalid_value rather than answering a page from somewhere else. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -732,7 +788,7 @@ export interface operations {
     listRevisions: {
         parameters: {
             query?: {
-                /** @description Opaque. Never an offset. */
+                /** @description Opaque. Never an offset. It belongs to the query that made it: a cursor from another sort or another set of filters is refused with invalid_value rather than answering a page from somewhere else. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -771,6 +827,28 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Marked deleted. The row stays */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Back in the library. The row never left storage */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -891,6 +969,52 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
+                };
+            };
+        };
+    };
+    putSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Settings"];
+            };
+        };
+        responses: {
+            /** @description Stored, and this is what is now in force */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            413: components["responses"]["TooLarge"];
         };
     };
     updateCheck: {

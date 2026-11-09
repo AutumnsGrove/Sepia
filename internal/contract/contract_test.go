@@ -96,6 +96,8 @@ func TestMalformedClientMessagesAreRefused(t *testing.T) {
 		"bad date":                   `{"type":"message","client_msg_id":"c","data":{"text":"x","client_date":"31/10/2026","tz":"UTC"}}`,
 		"confirm needs a version":    `{"type":"confirm","client_msg_id":"c","data":{}}`,
 		"accept needs fields or all": `{"type":"accept_unverified","client_msg_id":"c","data":{"base_version":1}}`,
+		"reopen with an unknown mode": `{"type":"reopen","client_msg_id":"c","data":{"entry_id":"e1","mode":"delete"}}`,
+		"reopen a version below one":  `{"type":"reopen","client_msg_id":"c","data":{"entry_id":"e1","revision":0}}`,
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {

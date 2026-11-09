@@ -1757,7 +1757,7 @@
           ]
         },
         {
-          "description": "Opens a draft revision of a saved entry: the same card she confirmed, editable again.",
+          "description": "Opens a draft of a saved entry: the same card she confirmed, editable again. mode is the ordinary revision; mode new is Log again, a fresh card on the same work with no body and no rating. revision names an older version to restore as a draft, so confirming makes it the newest version and keeps the one it replaced.",
           "allOf": [
             {
               "$ref": "#/$defs/clientEnvelope"
@@ -1775,6 +1775,19 @@
                   "properties": {
                     "entry_id": {
                       "$ref": "#/$defs/id"
+                    },
+                    "mode": {
+                      "description": "revision edits the saved entry, which keeps the previous version. new logs a second entry on the same work.",
+                      "enum": [
+                        "revision",
+                        "new"
+                      ],
+                      "default": "revision"
+                    },
+                    "revision": {
+                      "description": "The version to restore as the draft. Absent means the saved entry itself.",
+                      "type": "integer",
+                      "minimum": 1
                     }
                   },
                   "additionalProperties": false

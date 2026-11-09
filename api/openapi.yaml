@@ -105,11 +105,19 @@ paths:
 
   /api/entries:
     get:
-      summary: The library, newest finished first
+      summary: The library, newest finished first unless a sort says otherwise
       operationId: listEntries
       parameters:
         - { name: medium, in: query, schema: { $ref: "#/components/schemas/Medium" } }
         - { name: favourite, in: query, schema: { type: boolean } }
+        - { name: work, in: query, schema: { type: string, maxLength: 128 } }
+        - { name: sort, in: query, schema: { $ref: "#/components/schemas/LibrarySort" } }
+        - name: deleted
+          in: query
+          description: >-
+            false is the library, which hides deleted entries. true is the Deleted list, which holds only them. A
+            deleted entry is never paged with the entries that are still there.
+          schema: { type: boolean, default: false }
         - { $ref: "#/components/parameters/Cursor" }
         - { $ref: "#/components/parameters/Limit" }
       responses:
@@ -127,6 +135,9 @@ paths:
   /api/entries/{id}:
     get:
       summary: One entry with its work and its answers
+      description: >-
+        A deleted entry is answered with 200 and its deleted_at set, not with 404: a link followed after a delete is
+        how she reaches the way back. A draft is answered with 404, because a draft is read through its session.
       operationId: getEntry
       parameters: [{ $ref: "#/components/parameters/Id" }]
       responses:
@@ -165,6 +176,16 @@ paths:
       parameters: [{ $ref: "#/components/parameters/Id" }]
       responses:
         "204": { description: Marked deleted. The row stays, forever }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/entries/{id}/restore:
+    post:
+      summary: Put a deleted entry back in the library. Nothing was erased, so nothing is rebuilt
+      operationId: restoreEntry
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "204": { description: Back in the library. The row never left storage }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
@@ -241,6 +262,33 @@ paths:
                 properties:
                   services: { type: array, items: { $ref: "#/components/schemas/ServiceStatus" } }
 
+  /api/settings:
+    get:
+      summary: The few things she can change from the Settings screen
+      operationId: getSettings
+      responses:
+        "200":
+          description: The current settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+    put:
+      summary: Change the settings. The whole object, so a partial write cannot leave half a switch
+      operationId: putSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Settings" }
+      responses:
+        "200":
+          description: Stored, and this is what is now in force
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+
   /api/update/check:
     post:
       summary: Ask the host watcher to look for a newer image
@@ -298,7 +346,9 @@ components:
       name: cursor
       in: query
       schema: { type: string, maxLength: 256 }
-      description: Opaque. Never an offset.
+      description: >-
+        Opaque. Never an offset. It belongs to the query that made it: a cursor from another sort or another set
+        of filters is refused with invalid_value rather than answering a page from somewhere else.
     Limit:
       name: limit
       in: query
@@ -347,6 +397,28 @@ components:
 
     Medium:
       enum: [film, tv, book, game, album, podcast, theatre, other]
+
+    LibrarySort:
+      description: >-
+        newest is finished_on then id, both descending. rating is rating_q descending, then finished_on and id, so
+        the order is total and a page never repeats or skips a row.
+      enum: [newest, rating]
+      default: newest
+
+    Settings:
+      description: >-
+        Every switch on the Settings screen that is not decided in config. Off means the step does not run, not
+        that it failed.
+      type: object
+      required: [preread]
+      properties:
+        preread:
+          description: >-
+            The quick read that routes a message and skips questions she already answered. Off sends every message
+            straight to the agent, with no notice: it was her choice.
+          type: boolean
+          default: true
+      additionalProperties: false
 
     SessionKind:
       enum: [entry, general]
