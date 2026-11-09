@@ -141,10 +141,11 @@ func TestSocketPutsALeftOutPassageBack(t *testing.T) {
 		"type": "include_left_out", "client_msg_id": "i1",
 		"data": map[string]any{"base_version": 0, "segment_id": "seg_0_41"},
 	})
-	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+	both := client.expectBoth("ack", "draft_snapshot")
+	if got := both["ack"].field(t, "status"); got != "accepted" {
 		t.Fatalf("include ack = %v", got)
 	}
-	snapshot := client.expect("draft_snapshot")
+	snapshot := both["draft_snapshot"]
 	var data struct {
 		Version int `json:"version"`
 		Draft   struct {

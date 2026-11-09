@@ -225,10 +225,11 @@ func TestScriptedSessionFromMessageToSaved(t *testing.T) {
 	client.sendJSON(map[string]any{
 		"type": "confirm", "client_msg_id": "c1", "data": map[string]any{"base_version": version},
 	})
-	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+	both := client.expectBoth("ack", "saved")
+	if got := both["ack"].field(t, "status"); got != "accepted" {
 		t.Fatalf("confirm ack = %v", got)
 	}
-	saved := client.expect("saved")
+	saved := both["saved"]
 	entryID, _ := saved.field(t, "entry_id").(string)
 	if entryID == "" {
 		t.Fatal("saved carried no entry id")
@@ -332,8 +333,8 @@ func TestSplitScenarioAsksEveryCardOverTheSocket(t *testing.T) {
 	client.sendJSON(map[string]any{
 		"type": "confirm", "client_msg_id": "c1", "data": map[string]any{"base_version": version},
 	})
-	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+	both := client.expectBoth("ack", "saved")
+	if got := both["ack"].field(t, "status"); got != "accepted" {
 		t.Fatalf("confirm ack = %v", got)
 	}
-	client.expect("saved")
 }
