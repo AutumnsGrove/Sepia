@@ -90,12 +90,12 @@ func TestMalformedClientMessagesAreRefused(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	cases := map[string]string{
-		"no client_msg_id":           `{"type":"confirm","data":{"base_version":1}}`,
-		"unknown type":               `{"type":"delete_everything","client_msg_id":"c","data":{}}`,
-		"message too long":           `{"type":"message","client_msg_id":"c","data":{"text":"` + strings.Repeat("a", 8001) + `","client_date":"2026-10-31","tz":"UTC"}}`,
-		"bad date":                   `{"type":"message","client_msg_id":"c","data":{"text":"x","client_date":"31/10/2026","tz":"UTC"}}`,
-		"confirm needs a version":    `{"type":"confirm","client_msg_id":"c","data":{}}`,
-		"accept needs fields or all": `{"type":"accept_unverified","client_msg_id":"c","data":{"base_version":1}}`,
+		"no client_msg_id":            `{"type":"confirm","data":{"base_version":1}}`,
+		"unknown type":                `{"type":"delete_everything","client_msg_id":"c","data":{}}`,
+		"message too long":            `{"type":"message","client_msg_id":"c","data":{"text":"` + strings.Repeat("a", 8001) + `","client_date":"2026-10-31","tz":"UTC"}}`,
+		"bad date":                    `{"type":"message","client_msg_id":"c","data":{"text":"x","client_date":"31/10/2026","tz":"UTC"}}`,
+		"confirm needs a version":     `{"type":"confirm","client_msg_id":"c","data":{}}`,
+		"accept needs fields or all":  `{"type":"accept_unverified","client_msg_id":"c","data":{"base_version":1}}`,
 		"reopen with an unknown mode": `{"type":"reopen","client_msg_id":"c","data":{"entry_id":"e1","mode":"delete"}}`,
 		"reopen a version below one":  `{"type":"reopen","client_msg_id":"c","data":{"entry_id":"e1","revision":0}}`,
 	}
