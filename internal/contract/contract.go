@@ -120,7 +120,7 @@ var serverEventTypes = map[string]bool{
 var clientMessageTypes = map[string]bool{
 	"message": true, "interaction_response": true, "draft_edit": true,
 	"accept_unverified": true, "include_left_out": true, "confirm": true,
-	"reopen": true, "discard": true, "stop": true, "ping": true,
+	"reopen": true, "retry": true, "discard": true, "stop": true, "ping": true,
 }
 
 // Status is the HTTP status for an error code.
