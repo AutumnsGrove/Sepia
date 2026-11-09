@@ -733,10 +733,11 @@ model down proves the sad route.
 - **A browser that knows it is offline should say so at once.** The socket's silence watchdog is 45 seconds, far
   too long for a strip she is waiting on, so the route listens to `online`/`offline` and shows the strip
   immediately while the machine keeps retrying.
-- **A test helper that discards frames hides a race.** The socket test client's `expect` read past events it was
-  not looking for, and a live ack and a persisted snapshot are two channels with no promised order. On a slow
-  Linux runner the snapshot arrived first, was dropped, and the test waited until the read deadline closed the
-  socket. The helper now keeps what it reads past, in arrival order.
+- **A test that expects two frames in one order is a race.** A live ack and a persisted snapshot leave on two
+  channels, so their order is not promised. On a slow Linux runner the snapshot arrived first, `expect("ack")`
+  read past it, and the test waited until the read deadline closed the socket. The two tests that need both now
+  wait for both in either order (`expectBoth`). A buffer of everything an `expect` read past was tried first and
+  was worse: a stale snapshot of the same kind matched the next expect.
 
 **Deferred, and flagged for Autumn.** Tag editing (the mockup's `+ add`) and Edit on an unverified field are not
 built: `draft_edit` carries entry fields only, and a work's title and year are a different write with its own
