@@ -157,6 +157,13 @@ export function applyHello(state: SessionState, event: ServerEvent): SessionStat
   return next;
 }
 
+/** Closes every assistant block that is still streaming. A stop or a failed stream never sends assistant_end. */
+function closedBlocks(blocks: TranscriptBlock[]): TranscriptBlock[] {
+  return blocks.map((block) =>
+    block.kind === 'assistant' && block.streaming ? { ...block, streaming: false } : block,
+  );
+}
+
 function withoutInteraction(state: SessionState, id: string): OpenInteraction[] {
   return state.interactions.filter((interaction) => interaction.id !== id);
 }
@@ -422,6 +429,8 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
         state: {
           ...state,
           nextOrder: state.nextOrder + 1,
+          // A notice can be the last word on a turn that stopped or failed, so nothing is left streaming.
+          blocks: closedBlocks(state.blocks),
           notices: [
             ...state.notices,
             { level: data.level, code: data.code, text: data.text, at, order: state.nextOrder },
@@ -435,6 +444,8 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
       return {
         state: {
           ...state,
+          // A failed turn never sends assistant_end; without this the composer would stay on Stop.
+          blocks: closedBlocks(state.blocks),
           error: { code: data.code, message: data.message, retryable: data.retryable },
         },
       };

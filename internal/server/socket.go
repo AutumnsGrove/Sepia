@@ -646,6 +646,16 @@ func (sock *socket) handleRetry(ctx context.Context, msg clientMessage) {
 	if sock.alreadyApplied(ctx, msg.ClientMsgID) {
 		return
 	}
+	session, err := sock.server.engine.Session(ctx, sock.sessionID)
+	if err != nil {
+		sock.ackRejection(msg.ClientMsgID, err)
+		return
+	}
+	if session.State != domain.SessionActive {
+		// A saved session keeps its transcript on screen, so the old Try again can still be tapped.
+		sock.ack(msg.ClientMsgID, "rejected", "session_closed")
+		return
+	}
 	messages, err := sock.server.engine.UserMessages(ctx, sock.sessionID)
 	if err != nil {
 		sock.ackRejection(msg.ClientMsgID, err)

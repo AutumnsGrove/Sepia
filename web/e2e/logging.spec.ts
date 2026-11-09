@@ -133,6 +133,32 @@ test.describe('logging a review', () => {
     );
   });
 
+  test('keeps a revision in editing mode after a refresh', async ({ page }) => {
+    await startEntry(page);
+    await send(page, SENTENCE);
+    await page.getByRole('button', { name: /The book/ }).click();
+    await pickBook(page);
+    await page.getByRole('tab', { name: /Setting/ }).click();
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await finishQuestions(page);
+    const save = page.getByRole('button', { name: 'Save entry' });
+    await expect(save).toBeEnabled({ timeout: 20_000 });
+    await save.click();
+    await expect(page.getByText('Saved to your library')).toBeVisible({ timeout: 20_000 });
+
+    // Edit opens a revision. A refresh must not send reopen again to a session that already has its card, and
+    // must still read the saved entry so the card stays in editing mode.
+    await page.getByRole('button', { name: 'Edit' }).click();
+    const banner = page.getByText(
+      'You are editing a saved entry. Saving keeps the previous version.',
+    );
+    await expect(banner).toBeVisible({ timeout: 20_000 });
+    await page.reload();
+    await expect(banner).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
+    await expect(page.getByText('The card changed while you were editing.')).toHaveCount(0);
+  });
+
   test('keeps a message typed offline and sends it when the connection returns', async ({
     page,
     context,
