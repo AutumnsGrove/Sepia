@@ -764,6 +764,10 @@ reachable, and each one is fixed with the test that would have caught it:
   mid-stream failure never sends one, so Stop stayed forever. A notice or an error closes every open block.
 - **`retry` was accepted on a saved session**, where the old Try again is still on screen. It is refused with
   `session_closed` now.
+- **A revision of an extracted review could not be saved.** The body was extracted, the revision session has no
+  messages, and the guard had nothing to prove it against, so Save was off and confirm refused. It is proved
+  against the saved body now, and the card's `can_confirm` comes from the same function the commit uses, so the
+  button and the guard cannot disagree.
 - **A refreshed revision lost its diff.** The hello already carries the revision draft, so reopen was skipped and
   the saved entry was never read. It is read on a refresh too, and reopen is only sent when there is no card.
 - **A pre-existing data race in the agent's turn end state** (the detector found it under load) is guarded now.
