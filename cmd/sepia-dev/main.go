@@ -45,7 +45,8 @@ import (
 func withoutDevKeys(environ []string) []string {
 	out := make([]string, 0, len(environ))
 	for _, entry := range environ {
-		if strings.HasPrefix(entry, "SEPIA_DEV_SCENARIO=") || strings.HasPrefix(entry, "SEPIA_DEV_FAULT=") {
+		if strings.HasPrefix(entry, "SEPIA_DEV_SCENARIO=") || strings.HasPrefix(entry, "SEPIA_DEV_FAULT=") ||
+			strings.HasPrefix(entry, "SEPIA_DEV_SEED=") {
 			continue
 		}
 		out = append(out, entry)
@@ -82,6 +83,17 @@ func main() {
 		fmt.Fprintf(os.Stderr, "sepia-dev: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// seedOf reads the dev stack's seed switch. Anything but "library" seeds nothing, so a typo leaves the stack working
+// rather than half-filled.
+func seedOf(environ []string) string {
+	for _, entry := range environ {
+		if value, ok := strings.CutPrefix(entry, "SEPIA_DEV_SEED="); ok {
+			return value
+		}
+	}
+	return ""
 }
 
 // run is main without the process, so a test can boot the whole dev stack in-process and stop it.
@@ -152,6 +164,16 @@ func run(ctx context.Context, environ []string, stderr io.Writer) error {
 	engine := session.New(session.Config{
 		Store: db, Now: db.Now, NewID: db.NewID, ServerVersion: version.Version,
 	})
+
+	if seedOf(environ) == "library" {
+		// The reading screens need a library to read. It is written through the engine, like any review, and it is
+		// invented: no real work, no real review, nothing of hers (docs/BUILD.md invariant 10).
+		ids, seedErr := seedLibrary(ctx, db, engine, log)
+		if seedErr != nil {
+			return fmt.Errorf("seed: %w", seedErr)
+		}
+		log.Info("seeded", "note", seedNote(ids))
+	}
 
 	finder := providers.NewFinder(providers.Config{
 		TMDBKey: "dev-key", TMDBBaseURL: tmdb.URL(), TMDBCoverBase: tmdb.URL() + "/t/p/w342",

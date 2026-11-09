@@ -92,3 +92,59 @@ func TestDevStackRefusesBadConfig(t *testing.T) {
 		t.Errorf("error = %v, want it to explain the loopback rule", err)
 	}
 }
+
+// The seed switch is wired to the boot, not just to a function: the stack comes up with an invented library the REST
+// routes can read, which is what every reading-screen test stands on.
+func TestDevStackSeedsTheInventedLibrary(t *testing.T) {
+	addr := freeAddr(t)
+	var stderr bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- run(ctx, []string{
+			"SEPIA_ADDR=" + addr, "SEPIA_ALLOWED_HOSTS=" + addr,
+			"SEPIA_DATA_DIR=" + t.TempDir(), "SEPIA_CONFIG_DIR=../../config",
+			"SEPIA_DEV_SEED=library",
+		}, &stderr)
+	}()
+	defer func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Error("the dev stack did not stop")
+		}
+	}()
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	deadline := time.Now().Add(10 * time.Second)
+	var body []byte
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/api/entries", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = addr
+		resp, err := client.Do(req)
+		if err == nil {
+			raw := make([]byte, 0)
+			buf := bytes.NewBuffer(raw)
+			_, _ = buf.ReadFrom(resp.Body)
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				body = buf.Bytes()
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if body == nil {
+		t.Fatalf("the seeded library never answered; log %s", stderr.String())
+	}
+	if !strings.Contains(string(body), "The Lantern Keeper") || !strings.Contains(string(body), "Bramble Hollow") {
+		t.Fatalf("the library = %s, want the invented entries", body)
+	}
+	if !strings.Contains(stderr.String(), "invented reviews") {
+		t.Errorf("the seed was not announced: %s", stderr.String())
+	}
+}
