@@ -21,6 +21,16 @@ func (a *Agent) preread(ctx context.Context, state *RunState) error {
 		return a.notice(ctx, state.SessionID, "info", "preread_off",
 			"The reading step is not set up. That only changes the hints, not your review.")
 	}
+	on, err := a.session.PrereadOn(ctx)
+	if err != nil {
+		return a.notice(ctx, state.SessionID, "warn", "preread_unavailable",
+			"I could not read this message first. That only changes the hints, not your review.")
+	}
+	state.Reading = on
+	if !on {
+		// Her switch, her choice: no call, and no notice about it either. A line on every turn would be nagging.
+		return nil
+	}
 
 	reading := decisions.Reading{Message: state.Text}
 	bias := decisions.Session{Active: true, Intent: "log_review"}

@@ -15,6 +15,7 @@ import (
 	"github.com/AutumnsGrove/sepia/internal/contract"
 	"github.com/AutumnsGrove/sepia/internal/domain"
 	"github.com/AutumnsGrove/sepia/internal/providers"
+	"github.com/AutumnsGrove/sepia/internal/session"
 	"github.com/AutumnsGrove/sepia/internal/store"
 	"github.com/AutumnsGrove/sepia/internal/world"
 )
@@ -511,5 +512,58 @@ func TestAnAllowanceCoveredTurnIsRecordedAsCovered(t *testing.T) {
 	}
 	if last["session_covered_usd"].(float64) > last["session_total_usd"].(float64) {
 		t.Errorf("cost_update = %v, want covered inside the total", last)
+	}
+}
+
+// The quick pre-read is a switch she owns. Off means no decisions call at all and no notice either: a notice every
+// turn about a choice she made would be nagging.
+func TestThePreReadSwitchStopsTheDecisionsCall(t *testing.T) {
+	r := newRig(t, rigOptions{script: bookScript()})
+	scriptBook(r.fake)
+	r.responder.script("describe", map[string]any{"selected": map[string][]string{"feel": {"moving"}}})
+	answerQuestions(t, r)
+	ctx := context.Background()
+
+	if _, err := r.session.SetSettings(ctx, session.Settings{Preread: false}); err != nil {
+		t.Fatalf("SetSettings: %v", err)
+	}
+	sess, err := r.session.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := r.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1"})
+	if err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if calls := r.fake.Calls(); len(calls) != 0 {
+		t.Fatalf("the pre-read ran while it was off: %+v", calls)
+	}
+	// The turn is otherwise unchanged: the deterministic parse still finds the rating and the words.
+	if out.Draft == nil || out.Draft.Entry.Rating != 18 {
+		t.Fatalf("the turn did not finish without the pre-read: %+v", out.Draft)
+	}
+	events, err := r.session.EventsSince(ctx, sess.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.Kind == store.EventNotice {
+			t.Errorf("a notice was sent about a choice she made: %s", event.Payload)
+		}
+	}
+
+	// Back on, and the call happens again, so the switch is not a one-way trip.
+	if _, err = r.session.SetSettings(ctx, session.Settings{Preread: true}); err != nil {
+		t.Fatal(err)
+	}
+	second, err := r.session.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = r.agent.HandleMessage(ctx, TurnInput{SessionID: second.ID, Text: bookMessage, ClientMsgID: "m2"}); err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if calls := r.fake.Calls(); len(calls) == 0 {
+		t.Fatal("the pre-read did not run after it was turned back on")
 	}
 }

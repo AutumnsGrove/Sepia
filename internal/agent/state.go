@@ -38,6 +38,9 @@ type RunState struct {
 	Parsed     Parsed
 	PreRead    decisions.Outcome
 	Medium     string
+	// Reading is whether the quick pre-read is on for this turn. It is read once, from her setting, so a turn cannot
+	// half-read: the pre-read and the fidelity check both consult it (docs/slices/S12-reading-ui.md, Decisions 3).
+	Reading bool
 
 	Draft      *session.Draft
 	Work       *providers.Result
