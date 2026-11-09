@@ -42,7 +42,7 @@
   <title>Drafts · Sepia</title>
 </svelte:head>
 
-<div class="screen">
+<main class="screen">
   <TopBar title="Drafts" back />
 
   <div class="scroll">
@@ -68,4 +68,4 @@
       </ul>
     {/if}
   </div>
-</div>
+</main>

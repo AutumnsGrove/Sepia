@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Star } from '@lucide/svelte';
+  import { Heart, Star } from '@lucide/svelte';
   import Cover from './Cover.svelte';
 
   /**
@@ -11,8 +11,12 @@
     meta?: string;
     coverUrl?: string | null;
     coverVariant?: 'default' | 'sand' | 'rust' | 'slate' | 'green' | 'plum' | 'teal' | 'ink';
+    /** The work's medium, which colours the cover's stand-in when no variant is named. */
+    medium?: string;
     /** Quarters of a star, 0 to 20. Null or undefined means no rating yet. */
     quarters?: number | null;
+    /** A favourite carries a heart beside its rating, which is a second signal and never the only one. */
+    favourite?: boolean;
     /** The sentence under a saved row: what she wrote. */
     note?: string;
     /** The quiet right-hand text on a draft: "2 h ago". */
@@ -25,8 +29,10 @@
     title,
     meta,
     coverUrl = null,
-    coverVariant = 'default',
+    coverVariant,
+    medium = '',
     quarters = null,
+    favourite = false,
     note,
     age,
     waiting,
@@ -39,7 +45,7 @@
 
 <li class="row">
   <button type="button" class="ent" class:draft={waiting !== undefined} {onclick}>
-    <Cover {title} url={coverUrl} variant={coverVariant} />
+    <Cover {title} url={coverUrl} variant={coverVariant} {medium} />
     <span class="body">
       <span class="tt">{title}</span>
       {#if meta}<span class="mm">{meta}</span>{/if}
@@ -47,6 +53,9 @@
       {#if waiting}<span class="st">{waiting}</span>{/if}
     </span>
     <span class="right">
+      {#if favourite}
+        <span class="hrt" aria-label="A favourite"><Heart size={13} aria-hidden="true" /></span>
+      {/if}
       {#if quarters !== null && quarters !== undefined}
         <span class="rt" aria-label="{stars} out of 5 stars">
           <Star size={14} aria-hidden="true" />
@@ -132,6 +141,14 @@
     color: var(--accent);
   }
   .rt :global(svg) {
+    fill: var(--accent);
+    stroke: var(--accent);
+  }
+  .hrt {
+    display: inline-flex;
+    color: var(--accent);
+  }
+  .hrt :global(svg) {
     fill: var(--accent);
     stroke: var(--accent);
   }

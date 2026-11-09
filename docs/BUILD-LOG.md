@@ -792,3 +792,53 @@ every provider field that goes through `cleanTitle`, not only the title the fuzz
 
 This is the first nightly crasher since S00 and it cost one loop and one boundary, which is the shape the nightly
 is for. It is not S11's: it was found on the old main and fixed on main the same day.
+
+## 2026-11-09, S12.1-S12.6, the reading screens
+
+**Built.** Home as a launcher, the Drafts list, the Library with its groups, chips, sort and paging, a saved entry
+with the other entries on its work and its details, the versions screen with Restore as draft, Delete with its
+inline confirmation, the Deleted list with Restore, and the Settings shell with a working quick pre-read switch.
+The contract gained a `sort`, a `work` filter and a `deleted` filter on `GET /api/entries`, `POST
+/api/entries/{id}/restore`, `GET` and `PUT /api/settings`, and two variants of the socket's `reopen`: `mode: new`
+for Log again and `revision: n` for Restore as draft. `cmd/sepia-dev` seeds an invented library through the engine,
+and the end-to-end suite runs on a seeded stack of its own, one per browser project.
+
+**What is true now.** Every reading screen reads from the REST routes and none of them writes an entry: the only
+write is the delete, the restore and the switch, and each of those goes through the same guard as everything else.
+Fourteen end-to-end states on each of two browsers, each with an axe pass, plus a baseline; the happy, bad and sad
+routes of every new boundary are covered in Go and in Vitest.
+
+**Learned, for the next agent.**
+
+- **A saved entry may have no finish date, and the newest-first cursor skipped it.** `finished_on` is nullable and
+  only a rating and a body block a save, so `(finished_on, id) < (?, ?)` was false for every undated row: the tail
+  of the library vanished on page two. The cursor now carries whether its row had a date, and a regression test
+  fails without that branch. The rating order avoids the question entirely by breaking ties on `created_at`, the
+  same reason it exists.
+- **A cursor names the query that made it.** Reusing one across a sort, a filter or a list answered a page from
+  somewhere else. Each cursor now carries a short hash of the list, its sort and its filters, and a mismatch is
+  `invalid_value`. A cursor is not authenticated and does not need to be: it can only move the window inside her
+  own library.
+- **`color-mix()` takes one pair of colours.** The plum cover had three with their own weights, which made the
+  declaration invalid and the cover transparent. It is a nested mix now, and the gallery's covers baseline moved.
+- **The same seeded stack cannot serve two browser projects in parallel.** The spec deletes and restores entries,
+  so a run on Chromium raced the run on WebKit: one project's screenshot caught the other project's delete. Each
+  project has its own seeded stack and its own data directory now.
+- **`getByRole('button', { name: 'More' })` also matches "A quarter star more".** Exact names in an end-to-end test
+  are what keep a selector honest, and an `<li>` inside an `<li>` (the Deleted row wrapping a library row) is a
+  serious axe violation rather than a style choice.
+- **A pixel baseline is only worth having where the data is stable.** The home screen's baseline lived in the smoke
+  test, on the logging stack, which the logging tests fill while it runs: the page the screenshot caught depended on
+  their timing. Home is baselined once, against the seeded reading stack, and the smoke test keeps its semantic
+  checks (the heading, the fonts, no sideways overflow, an axe pass).
+- **A draft's row title is the work, not the session.** The session row carries no title of its own; the waiting
+  reason and the work are read together in one engine call so the two cannot describe different drafts.
+
+**Left out on purpose.** The mockup's snippet under a draft's row is not built: the session list carries no message
+text, and adding a second copy of her words to a list response for decoration was not worth a contract change. The
+mockup's dash icon beside a waiting reason and its delete reason ("· a duplicate") are left out for the same reason:
+nothing stores them.
+
+**Live checks left for Autumn.** The Linux baselines for the fourteen reading states and the new home screen were
+not made here. Run the `baselines` workflow once and commit its artifact, as S11 did, before the end-to-end job is
+green.

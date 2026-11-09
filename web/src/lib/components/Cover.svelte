@@ -9,9 +9,24 @@
     title: string;
     url?: string | null;
     variant?: Variant;
+    /** The work's medium, which picks the stand-in's colour when no variant is named. */
+    medium?: string;
     size?: 'sm' | 'lg';
   }
-  let { title, url = null, variant = 'default', size = 'sm' }: Props = $props();
+  let { title, url = null, variant, medium = '', size = 'sm' }: Props = $props();
+
+  // One palette, and the medium is what varies inside it. A named variant always wins, so the gallery's states are
+  // unchanged.
+  const byMedium: Record<string, Variant> = {
+    book: 'sand',
+    film: 'slate',
+    tv: 'ink',
+    game: 'plum',
+    album: 'teal',
+    theatre: 'rust',
+    podcast: 'green',
+  };
+  const tone = $derived(variant ?? byMedium[medium] ?? 'default');
 
   const initials = $derived(
     title
@@ -23,7 +38,7 @@
   );
 </script>
 
-<span class="cover {variant}" class:lg={size === 'lg'} aria-hidden="true">
+<span class="cover {tone}" class:lg={size === 'lg'} aria-hidden="true">
   {#if url}
     <img src={url} alt="" loading="lazy" decoding="async" />
   {:else}
@@ -66,8 +81,15 @@
   .cover.green {
     background: color-mix(in oklch, var(--accent) 40%, var(--panel));
   }
+  /* A nested mix, because color-mix takes one pair: red and blue make the plum, and the panel darkens it to the
+   * rest of the palette. Three colours in one declaration is invalid, and that is how this cover once came out
+   * transparent. */
   .cover.plum {
-    background: color-mix(in oklch, var(--danger) 14%, var(--imageread) 12%, var(--panel));
+    background: color-mix(
+      in oklch,
+      color-mix(in oklch, var(--danger) 30%, var(--imageread)) 45%,
+      var(--panel)
+    );
   }
   .cover.teal {
     background: color-mix(in oklch, var(--imageread) 30%, var(--panel));

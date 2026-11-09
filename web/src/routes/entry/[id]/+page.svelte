@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
-  import { Check, ChevronDown, History, RotateCcw } from '@lucide/svelte';
+  import { Check, ChevronDown, Heart, History, RotateCcw } from '@lucide/svelte';
   import {
     ApiError,
     createClient,
@@ -140,7 +140,7 @@
   <title>{entry?.work.title ?? 'Entry'} · Sepia</title>
 </svelte:head>
 
-<div class="screen">
+<main class="screen">
   <TopBar title="Entry" back>
     {#snippet actions()}
       {#if entry}
@@ -181,9 +181,14 @@
       {/if}
 
       <section class="work">
-        <Cover title={entry.work.title} url={entry.work.cover_url} size="lg" />
+        <Cover
+          title={entry.work.title}
+          url={entry.work.cover_url}
+          medium={entry.work.medium}
+          size="lg"
+        />
         <div>
-          <h1>{entry.work.title}</h1>
+          <h2>{entry.work.title}</h2>
           <p class="meta">
             {[
               entry.work.year ? String(entry.work.year) : '',
@@ -208,7 +213,10 @@
             : ''}
         </p>
         <div class="ratingrow">
-          <Rating quarters={entry.rating_q} readonly favourite={entry.favourite} showFavourite />
+          <Rating quarters={entry.rating_q} readonly />
+          {#if entry.favourite}
+            <span class="favtag"><Heart size={14} aria-hidden="true" /> Favourite</span>
+          {/if}
         </div>
         {#if entry.body}
           <p class="words">{entry.body}</p>
@@ -341,7 +349,7 @@
       </details>
     {/if}
   </div>
-</div>
+</main>
 
 <style>
   .work {
@@ -350,7 +358,7 @@
     align-items: center;
     padding: 0.85rem 0 0.4rem;
   }
-  .work h1 {
+  .work h2 {
     margin: 0 0 0.2rem;
     font:
       400 1.5rem/1.2 'Fraunces',
@@ -395,7 +403,22 @@
   .ratingrow {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+  }
+  .favtag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+  .favtag :global(svg) {
+    fill: var(--accent);
   }
   .words {
     margin: 1rem 0 0;

@@ -21,8 +21,8 @@ func (a *Agent) preread(ctx context.Context, state *RunState) error {
 		return a.notice(ctx, state.SessionID, "info", "preread_off",
 			"The reading step is not set up. That only changes the hints, not your review.")
 	}
-	on, err := a.session.PrereadOn(ctx)
-	if err != nil {
+	on, settingErr := a.session.PrereadOn(ctx)
+	if settingErr != nil {
 		return a.notice(ctx, state.SessionID, "warn", "preread_unavailable",
 			"I could not read this message first. That only changes the hints, not your review.")
 	}

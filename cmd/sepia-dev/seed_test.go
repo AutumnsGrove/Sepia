@@ -130,8 +130,8 @@ func TestSeedLibraryLeavesANonEmptyDatabaseAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A work of her own appears in the database, which is not the seed's business to remove.
-	if err := db.SaveWork(ctx, domain.Work{ID: "w-mine", Medium: "book", Title: "A Book She Wrote About"}); err != nil {
-		t.Fatal(err)
+	if writeErr := db.SaveWork(ctx, domain.Work{ID: "w-mine", Medium: "book", Title: "A Book She Wrote About"}); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	after, _, err := db.LibraryPage(ctx, domain.LibraryQuery{}, domain.Cursor{}, 100)
 	if err != nil {

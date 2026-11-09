@@ -16,6 +16,15 @@ const BASE_URL = `http://localhost:${PORT}`;
 // A second stack on its own port, with the model down: the sad route needs a real failure.
 const FAULT_PORT = 18894;
 const FAULT_URL = `http://localhost:${FAULT_PORT}`;
+// The reading screens' stacks: seeded with an invented library, which the logging stack must not be. One per browser
+// project, because the spec deletes and restores entries: two projects sharing a library would race each other's
+// assertions and each other's screenshots.
+const READING_PORT = 18895;
+const READING_URL = `http://localhost:${READING_PORT}`;
+const READING_WEBKIT_PORT = 18896;
+const READING_WEBKIT_URL = `http://localhost:${READING_WEBKIT_PORT}`;
+
+export { BASE_URL, FAULT_URL, READING_URL, READING_WEBKIT_URL };
 
 export default defineConfig({
   testDir: 'e2e',
@@ -74,6 +83,41 @@ export default defineConfig({
         SEPIA_DEV: '1',
         // The whole logging flow, one card at a time: medium, candidate, Describe, questions, card.
         SEPIA_DEV_SCENARIO: 'split',
+      },
+    },
+    {
+      // The reading screens' stack: the same service, seeded with invented reviews through the engine, so a list, a
+      // version history and a deleted entry are real rows rather than fixtures.
+      command:
+        'rm -rf /tmp/sepia-e2e-reading-data && go build -o /tmp/sepia-e2e-reading ./cmd/sepia-dev && exec /tmp/sepia-e2e-reading',
+      cwd: repoRoot,
+      url: `${READING_URL}/healthz`,
+      // Never reused: the stack is seeded on start and two tests change it (a delete, a draft opened from a
+      // version), so a second run against the first run's data is a run against a different library.
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        SEPIA_ADDR: `127.0.0.1:${READING_PORT}`,
+        SEPIA_ALLOWED_HOSTS: `localhost:${READING_PORT},127.0.0.1:${READING_PORT}`,
+        SEPIA_DATA_DIR: '/tmp/sepia-e2e-reading-data',
+        SEPIA_DEV: '1',
+        SEPIA_DEV_SEED: 'library',
+      },
+    },
+    {
+      // The same seeded stack, on its own port, for the second browser project.
+      command:
+        'rm -rf /tmp/sepia-e2e-reading-webkit-data && go build -o /tmp/sepia-e2e-reading-webkit ./cmd/sepia-dev && exec /tmp/sepia-e2e-reading-webkit',
+      cwd: repoRoot,
+      url: `${READING_WEBKIT_URL}/healthz`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        SEPIA_ADDR: `127.0.0.1:${READING_WEBKIT_PORT}`,
+        SEPIA_ALLOWED_HOSTS: `localhost:${READING_WEBKIT_PORT},127.0.0.1:${READING_WEBKIT_PORT}`,
+        SEPIA_DATA_DIR: '/tmp/sepia-e2e-reading-webkit-data',
+        SEPIA_DEV: '1',
+        SEPIA_DEV_SEED: 'library',
       },
     },
     {

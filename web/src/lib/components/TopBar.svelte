@@ -34,7 +34,8 @@
       <ChevronLeft size={22} aria-hidden="true" />
     </button>
   {/if}
-  <div class={wordmark ? 'wordmark' : 't'}>{title}</div>
+  <!-- One heading per screen: the wordmark on Home, the screen's name everywhere else. -->
+  <h1 class={wordmark ? 'wordmark' : 't'}>{title}</h1>
   {@render actions?.()}
   {#if back}
     <span class="iconbtn" aria-hidden="true"></span>

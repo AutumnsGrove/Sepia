@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"strings"
@@ -110,7 +111,10 @@ func TestDevStackSeedsTheInventedLibrary(t *testing.T) {
 	defer func() {
 		cancel()
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Errorf("the dev stack stopped with %v", err)
+			}
 		case <-time.After(10 * time.Second):
 			t.Error("the dev stack did not stop")
 		}
