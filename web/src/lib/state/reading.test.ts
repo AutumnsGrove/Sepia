@@ -10,6 +10,7 @@ import {
   groupByMonth,
   otherEntries,
   questionAnswers,
+  sectionsFor,
   versionRows,
   waitingText,
   warningsOf,
@@ -62,6 +63,24 @@ describe('the month groups', () => {
 
   it('of an empty library is no groups, rather than a group with nothing in it', () => {
     expect(groupByMonth([])).toEqual([]);
+  });
+
+  it('are month headings only in the date order: highest rated is one list, because the months would march backwards', () => {
+    const entries = [
+      entry({ id: 'a', rating_q: 20, finished_on: '2026-10-01' }),
+      entry({ id: 'b', rating_q: 19, finished_on: '2024-01-01' }),
+      entry({ id: 'c', rating_q: 18, finished_on: '2026-06-01' }),
+    ];
+    const sections = sectionsFor(entries, 'rating');
+    expect(sections).toHaveLength(1);
+    expect(sections[0].label).toBe('');
+    expect(sections[0].items.map((e) => e.id)).toEqual(['a', 'b', 'c']);
+    expect(sectionsFor(entries, 'newest').map((section) => section.label)).toEqual([
+      'October 2026',
+      'January 2024',
+      'June 2026',
+    ]);
+    expect(sectionsFor([], 'rating')).toEqual([]);
   });
 });
 

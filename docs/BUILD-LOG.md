@@ -827,6 +827,13 @@ routes of every new boundary are covered in Go and in Vitest.
 - **`getByRole('button', { name: 'More' })` also matches "A quarter star more".** Exact names in an end-to-end test
   are what keep a selector honest, and an `<li>` inside an `<li>` (the Deleted row wrapping a library row) is a
   serious axe violation rather than a style choice.
+- **Month headings are a property of the date order, not of the library.** Grouping a rating-sorted list by the
+  month she finished each thing produced headings in rating order, so "June 2026" appeared after "January 2024".
+  The headings now belong to `newest` only; the rating order is one list and the tool row says what it is.
+- **A tie broken by a random id is a screen that changes on every seed.** The rating order breaks ties on
+  `created_at`, and the seed writes ten rows inside one second, so every tie fell through to the generated id and the
+  highest-rated screen was a different picture each run. The dev stack's store clock now steps a millisecond per call:
+  a timestamp is still true, and never twice the same.
 - **A pixel baseline is only worth having where the data is stable.** The home screen's baseline lived in the smoke
   test, on the logging stack, which the logging tests fill while it runs: the page the screenshot caught depended on
   their timing. Home is baselined once, against the seeded reading stack, and the smoke test keeps its semantic
