@@ -39,7 +39,13 @@ type Querier interface {
 	GetClientMessage(ctx context.Context, arg GetClientMessageParams) (ClientMessage, error)
 	GetEntry(ctx context.Context, id string) (Entry, error)
 	GetInteraction(ctx context.Context, id string) (Interaction, error)
+	// One version of an entry, for restoring it as a draft. The snapshot is the entry as it was, so restoring needs no
+	// reconstruction from events.
+	GetRevision(ctx context.Context, arg GetRevisionParams) (EntryRevision, error)
 	GetSession(ctx context.Context, id string) (Session, error)
+	// One stored switch. A missing row is the default, which the caller supplies, so a fresh database and a cleared
+	// settings row answer the same.
+	GetSetting(ctx context.Context, key string) (string, error)
 	GetTagByName(ctx context.Context, name string) (Tag, error)
 	GetWork(ctx context.Context, id string) (Work, error)
 	HeadSequence(ctx context.Context, sessionID string) (interface{}, error)
@@ -51,6 +57,9 @@ type Querier interface {
 	ListAnswers(ctx context.Context, entryID string) ([]Answer, error)
 	// A session's decisions calls, oldest first, for the "why" sheet. The ledger holds odds and costs, never her text.
 	ListDecisionCalls(ctx context.Context, arg ListDecisionCallsParams) ([]DecisionCall, error)
+	// The Deleted list: soft-deleted saved entries, the most recently deleted first. It is the only list that shows
+	// them, and restore is the only way out of it.
+	ListDeletedPage(ctx context.Context, arg ListDeletedPageParams) ([]Entry, error)
 	ListDrafts(ctx context.Context, limit int64) ([]Entry, error)
 	ListEntriesOnWork(ctx context.Context, workID string) ([]Entry, error)
 	ListEntryTags(ctx context.Context, entryID string) ([]ListEntryTagsRow, error)
@@ -61,8 +70,12 @@ type Querier interface {
 	// positional because a repeated named argument makes sqlc emit fewer struct fields than the driver has "?".
 	// A row-value comparison is used so SQLite can walk the (finished_on, id) index instead of sorting.
 	ListLibrary(ctx context.Context, arg ListLibraryParams) ([]Entry, error)
-	// The library with its two filters: medium (on the work) and favourite. Cursor pagination on
-	// (finished_on, id), the same order as ListLibrary.
+	// The same library, highest rating first. The order is rating_q then created_at then id because all three are never
+	// null, so a page can neither repeat nor skip a row even when a saved entry has no finish date.
+	ListLibraryByRating(ctx context.Context, arg ListLibraryByRatingParams) ([]Entry, error)
+	// The library, newest finished first, with its filters: medium (on the work), favourite, and work. Cursor pagination
+	// on (finished_on, id), the same order as the index. An entry saved without a finish date sorts last, which is where
+	// SQLite puts a null in a descending order, and the cursor carries whether the row it names had one.
 	ListLibraryPage(ctx context.Context, arg ListLibraryPageParams) ([]Entry, error)
 	ListMediaForEntry(ctx context.Context, entryID *string) ([]Medium, error)
 	ListMirrors(ctx context.Context, limit int64) ([]Mirror, error)
@@ -97,6 +110,9 @@ type Querier interface {
 	UpdateDraft(ctx context.Context, arg UpdateDraftParams) (sql.Result, error)
 	UpdateSessionMessages(ctx context.Context, arg UpdateSessionMessagesParams) error
 	UpdateWork(ctx context.Context, arg UpdateWorkParams) error
+	// Settings are a small map of switches, not history: the previous value is not kept, because it is a preference,
+	// not a review.
+	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error
 	UpsertTag(ctx context.Context, arg UpsertTagParams) error
 }
 

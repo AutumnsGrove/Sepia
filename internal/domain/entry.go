@@ -72,7 +72,10 @@ type Entry struct {
 	Format       string     `json:"format,omitempty"`
 	FinishedOn   string     `json:"finished_on,omitempty"`
 	Status       Status     `json:"status"`
-	Deleted      bool       `json:"deleted,omitempty"`
+	// Deleted is the soft delete, which never erases a row. DeletedAt is when it happened, empty when it did not:
+	// the Deleted list orders by it and the app says "deleted on" from it.
+	Deleted   bool      `json:"deleted,omitempty"`
+	DeletedAt time.Time `json:"deleted_at,omitzero"`
 	// CreatedAt and UpdatedAt are the store's, not the operator's. The API sends them as RFC 3339 in UTC and the
 	// browser formats them, so nothing here is a display time (docs/STANDARDS.md 4).
 	CreatedAt time.Time `json:"created_at"`

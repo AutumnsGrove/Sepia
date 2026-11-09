@@ -574,6 +574,30 @@ func (q *Queries) GetInteraction(ctx context.Context, id string) (Interaction, e
 	return i, err
 }
 
+const getRevision = `-- name: GetRevision :one
+SELECT id, entry_id, revision, snapshot_json, created_at FROM entry_revisions WHERE entry_id = ?1 AND revision = ?2
+`
+
+type GetRevisionParams struct {
+	EntryID  string `json:"entry_id"`
+	Revision int64  `json:"revision"`
+}
+
+// One version of an entry, for restoring it as a draft. The snapshot is the entry as it was, so restoring needs no
+// reconstruction from events.
+func (q *Queries) GetRevision(ctx context.Context, arg GetRevisionParams) (EntryRevision, error) {
+	row := q.db.QueryRowContext(ctx, getRevision, arg.EntryID, arg.Revision)
+	var i EntryRevision
+	err := row.Scan(
+		&i.ID,
+		&i.EntryID,
+		&i.Revision,
+		&i.SnapshotJson,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSession = `-- name: GetSession :one
 SELECT id, kind, title, entry_id, messages_json, state, created_at, updated_at, draft_version, revises_entry_id FROM sessions WHERE id = ?
 `
@@ -594,6 +618,19 @@ func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
 		&i.RevisesEntryID,
 	)
 	return i, err
+}
+
+const getSetting = `-- name: GetSetting :one
+SELECT value FROM settings WHERE key = ?1
+`
+
+// One stored switch. A missing row is the default, which the caller supplies, so a fresh database and a cleared
+// settings row answer the same.
+func (q *Queries) GetSetting(ctx context.Context, key string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getSetting, key)
+	var value string
+	err := row.Scan(&value)
+	return value, err
 }
 
 const getTagByName = `-- name: GetTagByName :one
@@ -810,6 +847,74 @@ func (q *Queries) ListDecisionCalls(ctx context.Context, arg ListDecisionCallsPa
 			&i.CreatedAt,
 			&i.CostSource,
 			&i.AllowanceUsd,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeletedPage = `-- name: ListDeletedPage :many
+SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at FROM entries JOIN works ON works.id = entries.work_id
+WHERE entries.status = 'saved' AND entries.deleted_at IS NOT NULL
+  AND (?1 IS NULL OR works.medium = ?1)
+  AND (?2 IS NULL OR entries.work_id = ?2)
+  AND (?3 IS NULL
+       OR (entries.deleted_at, entries.id) < (?4, ?3))
+ORDER BY entries.deleted_at DESC, entries.id DESC
+LIMIT ?5
+`
+
+type ListDeletedPageParams struct {
+	Medium          interface{} `json:"medium"`
+	WorkID          interface{} `json:"work_id"`
+	BeforeID        interface{} `json:"before_id"`
+	BeforeDeletedAt *string     `json:"before_deleted_at"`
+	RowLimit        int64       `json:"row_limit"`
+}
+
+// The Deleted list: soft-deleted saved entries, the most recently deleted first. It is the only list that shows
+// them, and restore is the only way out of it.
+func (q *Queries) ListDeletedPage(ctx context.Context, arg ListDeletedPageParams) ([]Entry, error) {
+	rows, err := q.db.QueryContext(ctx, listDeletedPage,
+		arg.Medium,
+		arg.WorkID,
+		arg.BeforeID,
+		arg.BeforeDeletedAt,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Entry{}
+	for rows.Next() {
+		var i Entry
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkID,
+			&i.RatingQ,
+			&i.RatingScale,
+			&i.Favourite,
+			&i.Season,
+			&i.Verdict,
+			&i.Body,
+			&i.BodyOrigin,
+			&i.ImportedFrom,
+			&i.BodySpansJson,
+			&i.Format,
+			&i.FinishedOn,
+			&i.Status,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1088,33 +1193,116 @@ func (q *Queries) ListLibrary(ctx context.Context, arg ListLibraryParams) ([]Ent
 	return items, nil
 }
 
+const listLibraryByRating = `-- name: ListLibraryByRating :many
+SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at FROM entries JOIN works ON works.id = entries.work_id
+WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
+  AND (?1 IS NULL OR works.medium = ?1)
+  AND (?2 IS NULL OR entries.favourite = ?2)
+  AND (?3 IS NULL OR entries.work_id = ?3)
+  AND (?4 IS NULL
+       OR (entries.rating_q, entries.created_at, entries.id)
+          < (CAST(?5 AS INTEGER), CAST(?6 AS TEXT),
+             ?4))
+ORDER BY entries.rating_q DESC, entries.created_at DESC, entries.id DESC
+LIMIT ?7
+`
+
+type ListLibraryByRatingParams struct {
+	Medium          interface{}    `json:"medium"`
+	Favourite       interface{}    `json:"favourite"`
+	WorkID          interface{}    `json:"work_id"`
+	BeforeID        interface{}    `json:"before_id"`
+	BeforeRating    sql.NullInt64  `json:"before_rating"`
+	BeforeCreatedAt sql.NullString `json:"before_created_at"`
+	RowLimit        int64          `json:"row_limit"`
+}
+
+// The same library, highest rating first. The order is rating_q then created_at then id because all three are never
+// null, so a page can neither repeat nor skip a row even when a saved entry has no finish date.
+func (q *Queries) ListLibraryByRating(ctx context.Context, arg ListLibraryByRatingParams) ([]Entry, error) {
+	rows, err := q.db.QueryContext(ctx, listLibraryByRating,
+		arg.Medium,
+		arg.Favourite,
+		arg.WorkID,
+		arg.BeforeID,
+		arg.BeforeRating,
+		arg.BeforeCreatedAt,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Entry{}
+	for rows.Next() {
+		var i Entry
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkID,
+			&i.RatingQ,
+			&i.RatingScale,
+			&i.Favourite,
+			&i.Season,
+			&i.Verdict,
+			&i.Body,
+			&i.BodyOrigin,
+			&i.ImportedFrom,
+			&i.BodySpansJson,
+			&i.Format,
+			&i.FinishedOn,
+			&i.Status,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLibraryPage = `-- name: ListLibraryPage :many
 SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at FROM entries JOIN works ON works.id = entries.work_id
 WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
   AND (?1 IS NULL OR works.medium = ?1)
   AND (?2 IS NULL OR entries.favourite = ?2)
-  AND (?3 IS NULL
-       OR (entries.finished_on, entries.id) < (?3, ?4))
+  AND (?3 IS NULL OR entries.work_id = ?3)
+  AND (?4 IS NULL
+       OR (?5 IS NOT NULL
+           AND (entries.finished_on IS NULL
+                OR (entries.finished_on, entries.id) < (?5, ?4)))
+       OR (?5 IS NULL
+           AND entries.finished_on IS NULL AND entries.id < ?4))
 ORDER BY entries.finished_on DESC, entries.id DESC
-LIMIT ?5
+LIMIT ?6
 `
 
 type ListLibraryPageParams struct {
 	Medium           interface{} `json:"medium"`
 	Favourite        interface{} `json:"favourite"`
+	WorkID           interface{} `json:"work_id"`
+	BeforeID         interface{} `json:"before_id"`
 	BeforeFinishedOn interface{} `json:"before_finished_on"`
-	BeforeID         *string     `json:"before_id"`
 	RowLimit         int64       `json:"row_limit"`
 }
 
-// The library with its two filters: medium (on the work) and favourite. Cursor pagination on
-// (finished_on, id), the same order as ListLibrary.
+// The library, newest finished first, with its filters: medium (on the work), favourite, and work. Cursor pagination
+// on (finished_on, id), the same order as the index. An entry saved without a finish date sorts last, which is where
+// SQLite puts a null in a descending order, and the cursor carries whether the row it names had one.
 func (q *Queries) ListLibraryPage(ctx context.Context, arg ListLibraryPageParams) ([]Entry, error) {
 	rows, err := q.db.QueryContext(ctx, listLibraryPage,
 		arg.Medium,
 		arg.Favourite,
-		arg.BeforeFinishedOn,
+		arg.WorkID,
 		arg.BeforeID,
+		arg.BeforeFinishedOn,
 		arg.RowLimit,
 	)
 	if err != nil {
@@ -1816,6 +2004,24 @@ func (q *Queries) UpdateWork(ctx context.Context, arg UpdateWorkParams) error {
 		arg.UpdatedAt,
 		arg.ID,
 	)
+	return err
+}
+
+const upsertSetting = `-- name: UpsertSetting :exec
+INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)
+ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+`
+
+type UpsertSettingParams struct {
+	Key       string `json:"key"`
+	Value     string `json:"value"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// Settings are a small map of switches, not history: the previous value is not kept, because it is a preference,
+// not a review.
+func (q *Queries) UpsertSetting(ctx context.Context, arg UpsertSettingParams) error {
+	_, err := q.db.ExecContext(ctx, upsertSetting, arg.Key, arg.Value, arg.UpdatedAt)
 	return err
 }
 

@@ -252,16 +252,65 @@ ORDER BY revision DESC
 LIMIT sqlc.arg(row_limit);
 
 -- name: ListLibraryPage :many
--- The library with its two filters: medium (on the work) and favourite. Cursor pagination on
--- (finished_on, id), the same order as ListLibrary.
+-- The library, newest finished first, with its filters: medium (on the work), favourite, and work. Cursor pagination
+-- on (finished_on, id), the same order as the index. An entry saved without a finish date sorts last, which is where
+-- SQLite puts a null in a descending order, and the cursor carries whether the row it names had one.
 SELECT entries.* FROM entries JOIN works ON works.id = entries.work_id
 WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
   AND (sqlc.narg(medium) IS NULL OR works.medium = sqlc.narg(medium))
   AND (sqlc.narg(favourite) IS NULL OR entries.favourite = sqlc.narg(favourite))
-  AND (sqlc.narg(before_finished_on) IS NULL
-       OR (entries.finished_on, entries.id) < (sqlc.narg(before_finished_on), sqlc.narg(before_id)))
+  AND (sqlc.narg(work_id) IS NULL OR entries.work_id = sqlc.narg(work_id))
+  AND (sqlc.narg(before_id) IS NULL
+       OR (sqlc.narg(before_finished_on) IS NOT NULL
+           AND (entries.finished_on IS NULL
+                OR (entries.finished_on, entries.id) < (sqlc.narg(before_finished_on), sqlc.narg(before_id))))
+       OR (sqlc.narg(before_finished_on) IS NULL
+           AND entries.finished_on IS NULL AND entries.id < sqlc.narg(before_id)))
 ORDER BY entries.finished_on DESC, entries.id DESC
 LIMIT sqlc.arg(row_limit);
+
+-- name: ListLibraryByRating :many
+-- The same library, highest rating first. The order is rating_q then created_at then id because all three are never
+-- null, so a page can neither repeat nor skip a row even when a saved entry has no finish date.
+SELECT entries.* FROM entries JOIN works ON works.id = entries.work_id
+WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
+  AND (sqlc.narg(medium) IS NULL OR works.medium = sqlc.narg(medium))
+  AND (sqlc.narg(favourite) IS NULL OR entries.favourite = sqlc.narg(favourite))
+  AND (sqlc.narg(work_id) IS NULL OR entries.work_id = sqlc.narg(work_id))
+  AND (sqlc.narg(before_id) IS NULL
+       OR (entries.rating_q, entries.created_at, entries.id)
+          < (CAST(sqlc.narg(before_rating) AS INTEGER), CAST(sqlc.narg(before_created_at) AS TEXT),
+             sqlc.narg(before_id)))
+ORDER BY entries.rating_q DESC, entries.created_at DESC, entries.id DESC
+LIMIT sqlc.arg(row_limit);
+
+-- name: ListDeletedPage :many
+-- The Deleted list: soft-deleted saved entries, the most recently deleted first. It is the only list that shows
+-- them, and restore is the only way out of it.
+SELECT entries.* FROM entries JOIN works ON works.id = entries.work_id
+WHERE entries.status = 'saved' AND entries.deleted_at IS NOT NULL
+  AND (sqlc.narg(medium) IS NULL OR works.medium = sqlc.narg(medium))
+  AND (sqlc.narg(work_id) IS NULL OR entries.work_id = sqlc.narg(work_id))
+  AND (sqlc.narg(before_id) IS NULL
+       OR (entries.deleted_at, entries.id) < (sqlc.narg(before_deleted_at), sqlc.narg(before_id)))
+ORDER BY entries.deleted_at DESC, entries.id DESC
+LIMIT sqlc.arg(row_limit);
+
+-- name: GetSetting :one
+-- One stored switch. A missing row is the default, which the caller supplies, so a fresh database and a cleared
+-- settings row answer the same.
+SELECT value FROM settings WHERE key = sqlc.arg(key);
+
+-- name: UpsertSetting :exec
+-- Settings are a small map of switches, not history: the previous value is not kept, because it is a preference,
+-- not a review.
+INSERT INTO settings (key, value, updated_at) VALUES (sqlc.arg(key), sqlc.arg(value), sqlc.arg(updated_at))
+ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at;
+
+-- name: GetRevision :one
+-- One version of an entry, for restoring it as a draft. The snapshot is the entry as it was, so restoring needs no
+-- reconstruction from events.
+SELECT * FROM entry_revisions WHERE entry_id = sqlc.arg(entry_id) AND revision = sqlc.arg(revision);
 
 -- name: ListDecisionCalls :many
 -- A session's decisions calls, oldest first, for the "why" sheet. The ledger holds odds and costs, never her text.

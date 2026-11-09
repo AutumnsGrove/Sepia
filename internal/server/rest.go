@@ -1,7 +1,9 @@
 package server
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -113,6 +115,29 @@ func decodeCursor(raw string) ([]string, bool) {
 	return parts, true
 }
 
+// cursorSignature names the query a cursor was made under: the list, its sort and its filters. The cursor carries
+// it, so one handed to a different query is refused instead of answering a page from somewhere else.
+func cursorSignature(list string, fields ...string) string {
+	sum := sha256.Sum256([]byte(list + "\x1f" + strings.Join(fields, "\x1f")))
+	return hex.EncodeToString(sum[:8])
+}
+
+// boundCursor splits a cursor and refuses one that was made for another query. keys is how many key parts the list's
+// order has, and a cursor that is not the whole thing is refused rather than half-read.
+func boundCursor(raw, signature string, keys int) ([]string, bool) {
+	parts, ok := decodeCursor(raw)
+	if !ok {
+		return nil, false
+	}
+	if len(parts) == 0 {
+		return nil, true
+	}
+	if len(parts) != keys+1 || parts[0] != signature {
+		return nil, false
+	}
+	return parts[1:], true
+}
+
 // restError maps an engine or store failure to the contract's code and status. An unrecognised failure is internal
 // and logged, never described to the client.
 func (s *Server) restError(w http.ResponseWriter, err error) {
@@ -204,14 +229,15 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a page size.")
 		return
 	}
-	parts, ok := decodeCursor(query.Get("cursor"))
+	signature := cursorSignature("sessions", string(state), string(kind))
+	parts, ok := boundCursor(query.Get("cursor"), signature, 1)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a cursor Sepia gave you.")
 		return
 	}
 	before := ""
-	if len(parts) > 0 {
-		before = strings.Join(parts, "\x1f")
+	if len(parts) == 1 {
+		before = parts[0]
 	}
 	ctx := r.Context()
 	sessions, err := s.engine.Sessions(ctx, state, kind, before, limit+1)
@@ -223,7 +249,7 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	if len(sessions) > limit {
 		sessions = sessions[:limit]
 		last := sessions[len(sessions)-1]
-		cursor := encodeCursor(instant(last.UpdatedAt) + "|" + last.ID)
+		cursor := encodeCursor(signature, instant(last.UpdatedAt)+"|"+last.ID)
 		next = &cursor
 	}
 	items := make([]wireSession, 0, len(sessions))
@@ -301,22 +327,61 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		}
 		favourite = &value
 	}
+	deleted := false
+	if raw := query.Get("deleted"); raw != "" {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_value", "deleted is true or false.")
+			return
+		}
+		deleted = value
+	}
+	sort, ok := domain.ParseLibrarySort(query.Get("sort"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_value", "That is not an order Sepia sorts by.")
+		return
+	}
+	work := query.Get("work")
+	if len(work) > 128 {
+		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a work Sepia knows.")
+		return
+	}
 	limit, ok := queryLimit(r)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a page size.")
 		return
 	}
-	parts, ok := decodeCursor(query.Get("cursor"))
-	if !ok || len(parts) > 2 {
+	// The order decides how many keys the cursor carries, and the filters are part of what it was made for.
+	keys := 2
+	if sort == domain.SortRating && !deleted {
+		keys = 3
+	}
+	signature := cursorSignature("entries", medium, boolText(favourite), work, string(sort), strconv.FormatBool(deleted))
+	parts, ok := boundCursor(query.Get("cursor"), signature, keys)
+	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a cursor Sepia gave you.")
 		return
 	}
 	cursor := domain.Cursor{}
-	if len(parts) == 2 {
-		cursor = domain.Cursor{FinishedOn: parts[0], ID: parts[1]}
+	if len(parts) == keys {
+		switch {
+		case deleted:
+			cursor = domain.Cursor{DeletedAt: parts[0], ID: parts[1]}
+		case sort == domain.SortRating:
+			rating, err := strconv.Atoi(parts[0])
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_value", "That is not a cursor Sepia gave you.")
+				return
+			}
+			cursor = domain.Cursor{Rating: rating, CreatedAt: parts[1], ID: parts[2]}
+		default:
+			cursor = domain.Cursor{FinishedOn: parts[0], ID: parts[1]}
+		}
 	}
 	ctx := r.Context()
-	entries, next, err := s.engine.Library(ctx, medium, favourite, cursor, limit)
+	entries, next, err := s.engine.Library(ctx, domain.LibraryQuery{
+		Medium: medium, Favourite: favourite, Work: work, Sort: sort, Deleted: deleted,
+	}, cursor, limit)
 	if err != nil {
 		s.restError(w, err)
 		return
@@ -332,10 +397,27 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 	}
 	var cursorOut *string
 	if !next.Empty() {
-		encoded := encodeCursor(next.FinishedOn, next.ID)
+		var encoded string
+		switch {
+		case deleted:
+			encoded = encodeCursor(signature, next.DeletedAt, next.ID)
+		case sort == domain.SortRating:
+			encoded = encodeCursor(signature, strconv.Itoa(next.Rating), next.CreatedAt, next.ID)
+		default:
+			encoded = encodeCursor(signature, next.FinishedOn, next.ID)
+		}
 		cursorOut = &encoded
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": cursorOut})
+}
+
+// boolText keeps "not filtered" apart from "filtered to false" in a cursor's signature, so the two lists cannot share
+// a cursor by accident.
+func boolText(value *bool) string {
+	if value == nil {
+		return "any"
+	}
+	return strconv.FormatBool(*value)
 }
 
 func (s *Server) serveEntry(w http.ResponseWriter, r *http.Request) {
@@ -347,8 +429,9 @@ func (s *Server) serveEntry(w http.ResponseWriter, r *http.Request) {
 		s.restError(w, err)
 		return
 	}
-	// The REST entry is the library's: a draft is reached through its session and the socket, and its rating may
-	// be zero, which the entry contract does not allow.
+	// The REST entry is the library's: a draft is reached through its session and the socket, and its rating may be
+	// zero, which the entry contract does not allow. A deleted entry is answered, because following a stale link is
+	// how she reaches Restore.
 	if view.Entry.Status != domain.StatusSaved {
 		writeError(w, http.StatusNotFound, "not_found", "There is nothing here.")
 		return
@@ -366,8 +449,9 @@ func (s *Server) listRevisions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a page size.")
 		return
 	}
-	parts, ok := decodeCursor(r.URL.Query().Get("cursor"))
-	if !ok || len(parts) > 1 {
+	signature := cursorSignature("revisions", entryID)
+	parts, ok := boundCursor(r.URL.Query().Get("cursor"), signature, 1)
+	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a cursor Sepia gave you.")
 		return
 	}
@@ -392,7 +476,7 @@ func (s *Server) listRevisions(w http.ResponseWriter, r *http.Request) {
 	}
 	var cursorOut *string
 	if next > 0 {
-		encoded := encodeCursor(strconv.Itoa(next))
+		encoded := encodeCursor(signature, strconv.Itoa(next))
 		cursorOut = &encoded
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": cursorOut})
@@ -412,6 +496,55 @@ func (s *Server) deleteEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// restoreEntry is the way back out of the Deleted list. Nothing was erased, so nothing is rebuilt: the row is
+// un-marked and the entry appears in the library exactly where it was.
+func (s *Server) restoreEntry(w http.ResponseWriter, r *http.Request) {
+	if !s.needEngine(w) {
+		return
+	}
+	if err := s.engine.RestoreEntry(r.Context(), r.PathValue("id")); err != nil {
+		s.restError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- settings -------------------------------------------------------------------------------------------
+
+// settings reads and writes the few switches the Settings screen holds. It is the whole object either way, so a
+// partial write cannot leave a switch showing something that is not in force.
+func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
+	if !s.needEngine(w) {
+		return
+	}
+	ctx := r.Context()
+	if r.Method == http.MethodPut {
+		var body struct {
+			Preread *bool `json:"preread"`
+		}
+		if !s.decodeJSON(w, r, &body) {
+			return
+		}
+		if body.Preread == nil {
+			writeError(w, http.StatusBadRequest, "invalid_value", "Say whether the pre-read is on.")
+			return
+		}
+		updated, err := s.engine.SetSettings(ctx, session.Settings{Preread: *body.Preread})
+		if err != nil {
+			s.restError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"preread": updated.Preread})
+		return
+	}
+	current, err := s.engine.Settings(ctx)
+	if err != nil {
+		s.restError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"preread": current.Preread})
 }
 
 // --- works, search, export, version and services -----------------------------------------------------------

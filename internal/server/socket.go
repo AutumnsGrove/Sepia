@@ -689,17 +689,26 @@ func (sock *socket) handleReopen(ctx context.Context, msg clientMessage) {
 		return
 	}
 	var data struct {
-		EntryID string `json:"entry_id"`
+		EntryID  string `json:"entry_id"`
+		Mode     string `json:"mode"`
+		Revision int    `json:"revision"`
 	}
 	if err := json.Unmarshal(msg.Data, &data); err != nil {
 		sock.ack(msg.ClientMsgID, "rejected", string(codeMalformed))
 		return
 	}
-	if _, err := sock.server.engine.Reopen(ctx, sock.sessionID, data.EntryID, msg.ClientMsgID); err != nil {
+	_, err := sock.server.engine.ReopenAs(ctx, sock.sessionID, session.ReopenRequest{
+		EntryID: data.EntryID, ClientMsgID: msg.ClientMsgID, Mode: data.Mode, Revision: data.Revision,
+	})
+	if err != nil {
 		sock.ackDraftRejection(msg.ClientMsgID, err)
 		return
 	}
-	sock.hub.setRevises(sock.sessionID, data.EntryID)
+	// Log again is a new entry, so there is nothing for the confirm to revise. Edit and Restore as draft both write
+	// onto the saved entry, which is what keeps every version.
+	if data.Mode != session.ReopenNew {
+		sock.hub.setRevises(sock.sessionID, data.EntryID)
+	}
 	sock.ack(msg.ClientMsgID, "accepted", "")
 }
 

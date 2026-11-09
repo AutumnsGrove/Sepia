@@ -262,43 +262,113 @@ func (s *Store) RestoreEntry(ctx context.Context, id string) error {
 // Library returns a page of saved entries, newest finished first, and the cursor for the next page. An empty next
 // cursor means the list ended.
 func (s *Store) Library(ctx context.Context, cursor domain.Cursor, limit int) ([]domain.Entry, domain.Cursor, error) {
-	return s.LibraryPage(ctx, "", nil, cursor, limit)
+	return s.LibraryPage(ctx, domain.LibraryQuery{}, cursor, limit)
 }
 
-// LibraryPage is the library with its two filters. medium is a provider's medium name and favourite is nil when the
-// list is not filtered by it; both are applied in SQL so a filtered page is still one indexed read.
-func (s *Store) LibraryPage(ctx context.Context, medium string, favourite *bool, cursor domain.Cursor,
+// LibraryPage is the library with its filters, in the order its sort names. Both orders and every filter are
+// applied in SQL, so a filtered page is still one indexed read and a cursor never has to be filtered afterwards.
+func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, cursor domain.Cursor,
 	limit int,
 ) ([]domain.Entry, domain.Cursor, error) {
 	limit = clampLimit(limit)
-	var mediumArg, favouriteArg, beforeArg interface{}
-	if medium != "" {
-		mediumArg = medium
+	mediumArg, favouriteArg, workArg := any(nil), any(nil), any(nil)
+	if query.Medium != "" {
+		mediumArg = query.Medium
 	}
-	if favourite != nil {
-		favouriteArg = boolToInt(*favourite)
+	if query.Favourite != nil {
+		favouriteArg = boolToInt(*query.Favourite)
 	}
-	if !cursor.Empty() {
-		beforeArg = cursor.FinishedOn
+	if query.Work != "" {
+		workArg = query.Work
 	}
-	rows, err := s.ReadQueries().ListLibraryPage(ctx, db.ListLibraryPageParams{
-		Medium: mediumArg, Favourite: favouriteArg, BeforeFinishedOn: beforeArg,
-		BeforeID: nullableString(cursor.ID), RowLimit: int64(limit + 1),
-	})
-	if err != nil {
-		return nil, domain.Cursor{}, fmt.Errorf("store: list library: %w", err)
+	beforeID := nullableString(cursor.ID)
+
+	var rows []db.Entry
+	if query.Deleted {
+		page, err := s.ReadQueries().ListDeletedPage(ctx, db.ListDeletedPageParams{
+			Medium: mediumArg, WorkID: workArg, BeforeDeletedAt: nullableString(cursor.DeletedAt),
+			BeforeID: beforeID, RowLimit: int64(limit + 1),
+		})
+		if err != nil {
+			return nil, domain.Cursor{}, fmt.Errorf("store: list deleted: %w", err)
+		}
+		rows = page
+	} else if query.Sort == domain.SortRating {
+		page, err := s.ReadQueries().ListLibraryByRating(ctx, db.ListLibraryByRatingParams{
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg,
+			BeforeRating: int64Null(cursor.Rating), BeforeCreatedAt: stringNull(cursor.CreatedAt),
+			BeforeID: beforeID, RowLimit: int64(limit + 1),
+		})
+		if err != nil {
+			return nil, domain.Cursor{}, fmt.Errorf("store: list library by rating: %w", err)
+		}
+		rows = page
+	} else {
+		page, err := s.ReadQueries().ListLibraryPage(ctx, db.ListLibraryPageParams{
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg,
+			BeforeFinishedOn: nullableString(cursor.FinishedOn), BeforeID: beforeID, RowLimit: int64(limit + 1),
+		})
+		if err != nil {
+			return nil, domain.Cursor{}, fmt.Errorf("store: list library: %w", err)
+		}
+		rows = page
 	}
+
 	var next domain.Cursor
 	if len(rows) > limit {
 		rows = rows[:limit]
 		last := rows[len(rows)-1]
-		next = domain.Cursor{FinishedOn: derefString(last.FinishedOn), ID: last.ID}
+		next = domain.Cursor{ID: last.ID, FinishedOn: derefString(last.FinishedOn)}
+		if query.Deleted {
+			next = domain.Cursor{ID: last.ID, DeletedAt: derefString(last.DeletedAt)}
+		}
+		if query.Sort == domain.SortRating && !query.Deleted {
+			next = domain.Cursor{ID: last.ID, Rating: int(last.RatingQ), CreatedAt: last.CreatedAt}
+		}
 	}
 	out := make([]domain.Entry, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, entryFromRow(row))
 	}
 	return out, next, nil
+}
+
+// Setting reads one stored switch, or the default when it was never written. A storage failure is an error, not the
+// default: a switch that silently reads as on when the database is unavailable is a lie about her choice.
+func (s *Store) Setting(ctx context.Context, key, fallback string) (string, error) {
+	value, err := s.ReadQueries().GetSetting(ctx, key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fallback, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("store: read setting %q: %w", key, err)
+	}
+	return value, nil
+}
+
+// SetSetting stores one switch.
+func (s *Store) SetSetting(ctx context.Context, key, value string) error {
+	now := s.Now().UTC().Format(timeLayout)
+	if err := s.InTx(ctx, func(q *db.Queries) error {
+		return q.UpsertSetting(ctx, db.UpsertSettingParams{Key: key, Value: value, UpdatedAt: now})
+	}); err != nil {
+		return fmt.Errorf("store: write setting %q: %w", key, err)
+	}
+	return nil
+}
+
+// int64Null turns a cursor's number into the nullable argument a first page needs. Zero is never a real key on any
+// list Sepia pages, so it reads as "no cursor".
+func int64Null(value int) sql.NullInt64 {
+	if value == 0 {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(value), Valid: true}
+}
+
+// stringNull is the same for a text key, where the empty string is never a real value either.
+func stringNull(value string) sql.NullString {
+	return sql.NullString{String: value, Valid: value != ""}
 }
 
 // Drafts returns drafts, most recently touched first, which is the Drafts list on the home screen.
@@ -370,6 +440,23 @@ func (s *Store) RevisionsPage(ctx context.Context, entryID string, before, limit
 		})
 	}
 	return out, next, nil
+}
+
+// RevisionAt reads one version of an entry, newest first being number one. A version that is not there is
+// ErrNotFound, which the caller turns into a plain refusal rather than a restore of something else.
+func (s *Store) RevisionAt(ctx context.Context, entryID string, revision int) (domain.Entry, error) {
+	row, err := s.ReadQueries().GetRevision(ctx, db.GetRevisionParams{EntryID: entryID, Revision: int64(revision)})
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Entry{}, ErrNotFound
+	}
+	if err != nil {
+		return domain.Entry{}, fmt.Errorf("store: read revision: %w", err)
+	}
+	var snapshot domain.Entry
+	if err := json.Unmarshal([]byte(row.SnapshotJson), &snapshot); err != nil {
+		return domain.Entry{}, fmt.Errorf("store: decode revision: %w", err)
+	}
+	return snapshot, nil
 }
 
 // EntryTags reads the genres and her own tags on an entry, in name order.
@@ -614,6 +701,10 @@ func entryFromRow(row db.Entry) domain.Entry {
 	_ = json.Unmarshal([]byte(row.BodySpansJson), &e.BodySpans)
 	e.CreatedAt, _ = time.Parse(timeLayout, row.CreatedAt)
 	e.UpdatedAt, _ = time.Parse(timeLayout, row.UpdatedAt)
+	// A soft delete's timestamp is read the same way as the others, so the Deleted list can say when.
+	if row.DeletedAt != nil {
+		e.DeletedAt, _ = time.Parse(timeLayout, *row.DeletedAt)
+	}
 	return e
 }
 

@@ -235,7 +235,7 @@ func TestScriptedSessionFromMessageToSaved(t *testing.T) {
 		t.Fatal("saved carried no entry id")
 	}
 
-	library, _, err := rig.engine.Library(ctx, "", nil, domain.Cursor{}, 10)
+	library, _, err := rig.engine.Library(ctx, domain.LibraryQuery{}, domain.Cursor{}, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
