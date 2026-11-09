@@ -711,3 +711,31 @@ func TestPipelineDoesNotNudgeARefusedSave(t *testing.T) {
 		t.Errorf("model turns = %d, want 4 (no nudge after a refused save)", got)
 	}
 }
+
+// A retry runs the turn again for a message that is already stored. Appending it again would put her words in the
+// transcript twice, and in the source text the body is located in, so the message count is the assertion.
+func TestARetryDoesNotAppendHerMessageAgain(t *testing.T) {
+	r := newRig(t, rigOptions{script: []world.ChatTurn{{Text: "Ready."}}})
+	scriptBook(r.fake)
+	ctx := context.Background()
+	sess, _ := r.session.CreateEntry(ctx)
+	if _, err := r.agent.HandleMessage(ctx, TurnInput{
+		SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1",
+	}); err != nil {
+		t.Fatalf("first turn: %v", err)
+	}
+	before, _ := r.session.UserMessages(ctx, sess.ID)
+	if len(before) != 1 {
+		t.Fatalf("messages after the first turn = %v", before)
+	}
+
+	if _, err := r.agent.HandleMessage(ctx, TurnInput{
+		SessionID: sess.ID, Text: bookMessage, ClientMsgID: "r1", Retry: true,
+	}); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	after, _ := r.session.UserMessages(ctx, sess.ID)
+	if len(after) != 1 {
+		t.Fatalf("messages after the retry = %v, want the same one", after)
+	}
+}

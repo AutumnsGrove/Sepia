@@ -27,6 +27,8 @@ type queuedMessage struct {
 	clientMsgID string
 	clientDate  string
 	tz          string
+	// retry runs the turn for a message that is already stored, without appending it again.
+	retry bool
 }
 
 // turn is the one turn a session may have in flight, and whatever is waiting behind it.
@@ -143,6 +145,29 @@ func (h *hub) closeAll(code int, reason string) {
 	}
 }
 
+// ErrReplyInProgress means a turn is already running, so a retry has nothing to retry yet.
+var ErrReplyInProgress = errors.New("server: a reply is already in progress")
+
+// startRetry runs a failed turn again. It is refused while another turn is in flight: a retry is not a queued
+// message, and running it behind the one in flight would answer the same message twice.
+func (h *hub) startRetry(ctx context.Context, sessionID, text, clientMsgID string) error {
+	h.mu.Lock()
+	if h.closing {
+		h.mu.Unlock()
+		return ErrClosed
+	}
+	if _, running := h.turns[sessionID]; running {
+		h.mu.Unlock()
+		return ErrReplyInProgress
+	}
+	turnCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	h.turns[sessionID] = &turn{cancel: cancel}
+	h.turnsWG.Add(1)
+	h.mu.Unlock()
+	go h.runTurn(turnCtx, sessionID, queuedMessage{text: text, clientMsgID: clientMsgID, retry: true})
+	return nil
+}
+
 // startTurn runs a message, or queues it behind the one in flight. The caller has already made the message the
 // agent's, so an error means nothing started.
 func (h *hub) startTurn(ctx context.Context, sessionID string, msg queuedMessage) error {
@@ -179,7 +204,7 @@ func (h *hub) runTurn(ctx context.Context, sessionID string, msg queuedMessage) 
 	if h.server.model != nil {
 		outcome, err := h.server.model.HandleMessage(ctx, agent.TurnInput{
 			SessionID: sessionID, Text: msg.text, ClientMsgID: msg.clientMsgID,
-			ClientDate: msg.clientDate, Timezone: msg.tz,
+			ClientDate: msg.clientDate, Timezone: msg.tz, Retry: msg.retry,
 		})
 		switch {
 		case err != nil:

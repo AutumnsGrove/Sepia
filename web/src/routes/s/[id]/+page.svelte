@@ -18,7 +18,7 @@
     emptySession,
     type SessionState,
   } from '../../../lib/state/session';
-  import { liveActivity } from '../../../lib/state/timeline';
+  import { isWorking } from '../../../lib/state/timeline';
 
   /**
    * One entry session: the socket, the reducer and the screen. This is the only place the logging screen talks to
@@ -34,7 +34,7 @@
   let versions = $state(0);
   let caughtUp = $state(false);
   let sendProblem = $state('');
-  let lastText = $state('');
+  let restore = $state({ seq: 0, text: '' });
   let online = $state(true);
 
   let socket: SessionSocket | null = null;
@@ -64,7 +64,6 @@
     versions = 0;
     caughtUp = false;
     sendProblem = '';
-    lastText = '';
     wasOffline = false;
     reopenSent = false;
   }
@@ -125,7 +124,7 @@
       },
       onHello: (hello) => {
         session = applyHello(session, hello);
-        if (reopen && !reopenSent) {
+        if (reopen && !reopenSent && session.draft === null) {
           reopenSent = true;
           void loadSaved(reopen);
           send({ type: 'reopen', data: { entry_id: reopen } });
@@ -146,7 +145,7 @@
         const held = pending.find((message) => message.id === ack.client_msg_id);
         if (held) {
           // The text goes back where she typed it, so a refusal never loses it.
-          lastText = held.text;
+          restore = { seq: restore.seq + 1, text: held.text };
           pending = pending.filter((message) => message.id !== ack.client_msg_id);
         }
         sendProblem = ack.reason ? copyFor(ack.reason) : 'Sepia could not take that.';
@@ -169,9 +168,8 @@
 
   const handlers: ScreenHandlers = {
     onsend: (text) => {
-      lastText = text;
       sendProblem = '';
-      const working = liveActivity(session) !== null;
+      const working = isWorking(session);
       const offline = !online || connection !== 'open';
       const id = send({
         type: 'message',
@@ -216,9 +214,7 @@
     },
     ondiscard: () => send({ type: 'discard', data: {} }),
     onstop: () => send({ type: 'stop', data: {} }),
-    onretry: () => {
-      if (lastText) handlers.onsend(lastText);
-    },
+    onretry: () => send({ type: 'retry', data: {} }),
     oncancel: (id: string) => {
       socket?.cancel(id);
       pending = pending.filter((message) => message.id !== id);
@@ -250,4 +246,5 @@
   {versions}
   {caughtUp}
   problem={sendProblem}
+  {restore}
 />
