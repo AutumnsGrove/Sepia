@@ -255,6 +255,9 @@ type wsClient struct {
 	conn net.Conn
 	br   *bufio.Reader
 	bw   *bufio.Writer
+	// queued holds events an expect() read past. A live ack and a persisted snapshot are two channels, so the
+	// order they reach the socket is not promised; a test looking for one must not lose the other.
+	queued []event
 }
 
 func (r *socketRig) dial(sessionID string, lastSeq int, origin string) *wsClient {
@@ -318,6 +321,11 @@ func (c *wsClient) next() (event, bool) { return c.nextWithin(5 * time.Second) }
 
 func (c *wsClient) nextWithin(wait time.Duration) (event, bool) {
 	c.t.Helper()
+	if len(c.queued) > 0 {
+		ev := c.queued[0]
+		c.queued = c.queued[1:]
+		return ev, true
+	}
 	for {
 		_ = c.conn.SetReadDeadline(time.Now().Add(wait))
 		f, err := readFrameServer(c.br)
@@ -353,6 +361,12 @@ func (c *wsClient) expect(kind string) event {
 // uses a generous wait, because the race build on a loaded machine is slow enough to miss a tight one.
 func (c *wsClient) expectWithin(kind string, wait time.Duration) event {
 	c.t.Helper()
+	for i, ev := range c.queued {
+		if ev.Type == kind {
+			c.queued = append(c.queued[:i], c.queued[i+1:]...)
+			return ev
+		}
+	}
 	for i := 0; i < 200; i++ {
 		ev, ok := c.nextWithin(wait)
 		if !ok {
@@ -361,6 +375,7 @@ func (c *wsClient) expectWithin(kind string, wait time.Duration) event {
 		if ev.Type == kind {
 			return ev
 		}
+		c.queued = append(c.queued, ev)
 	}
 	c.t.Fatalf("%s never arrived", kind)
 	return event{}
