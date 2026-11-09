@@ -744,10 +744,29 @@ built: `draft_edit` carries entry fields only, and a work's title and year are a
 accept rules. Both belong with S12's entry page or a later patch addition. The import frames (02 C, 07 3 and 4)
 stay S18's.
 
-**Live checks left for Autumn.** The Linux baselines for the eighteen new gallery states need one run of the
-`baselines` workflow and the artifact committed, as S00's and S10's did. The copy table in the slice plan's
-Decisions section is hers to approve or edit. Everything else is green on this machine: `make check`, the Go
-suite, 76 Vitest tests and 102 Playwright tests across Chromium and WebKit.
+**The review found the rest, and it was right.** The PR's review pass found the paths the new screen made
+reachable, and each one is fixed with the test that would have caught it:
+
+- **The revision target was process memory only.** A restart mid-revision lost it, and confirm saved the working
+  copy as a second entry. It is now `sessions.revises_entry_id` (migration 0007), written when the copy is made
+  and read by confirm when the hub has nothing. The regression test confirms without a target and was seen
+  failing first.
+- **A rejected message lost her text.** The composer had already cleared; the text now goes back into it.
+- **A hello could not name an open interaction.** `interaction_id` is in the contract's interaction shape, so a
+  reconnect no longer replaces an answerable card with one whose id is empty.
+- **Working was only a live activity row.** While the model streamed there was no row, so Stop vanished and a
+  message sent then was not held. `isWorking` is true for a live row, a streaming reply or a queued message.
+- **`reopen` was re-sent on refresh.** It is only sent when the hello carries no card, so refreshing a revision
+  does not ask for it twice.
+- **Try again re-sent her words as a new message.** A successful retry would have stored and shown them twice.
+  With Autumn's yes the protocol gained `retry`, which runs the turn again for the message already stored.
+- **A pre-existing data race in the agent's turn end state** (the detector found it under load) is guarded now.
+- **The socket test helper could lose a frame it read past.** Every action that acks and writes now waits for
+  both, in either order, instead of expecting one before the other.
+
+**Live checks left for Autumn.** The Linux baselines for the eighteen new gallery states were made by the
+`baselines` workflow on this branch and committed (they also fill in S10's missing Linux set). The copy table in
+the slice plan's Decisions section is hers to approve or edit.
 
 **Next.** S12, the reading UI: home, Drafts, the library, the entry page with its versions, and delete that never
 erases.
