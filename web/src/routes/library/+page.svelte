@@ -16,7 +16,7 @@
   import SkeletonRows from '../../lib/components/SkeletonRows.svelte';
   import TopBar from '../../lib/components/TopBar.svelte';
   import { appendList, emptyList, replaceList, type ListState } from '../../lib/state/lists';
-  import { entryMeta, groupByMonth, monthLabel } from '../../lib/state/reading';
+  import { entryMeta, groupByMonth } from '../../lib/state/reading';
 
   /**
    * The Library: one list across every medium, grouped by the month she finished each thing. The medium chips filter
@@ -103,7 +103,7 @@
   <title>Library · Sepia</title>
 </svelte:head>
 
-<div class="screen">
+<main class="screen">
   <TopBar title="Library" back />
 
   <div class="scroll">
@@ -156,13 +156,15 @@
       </div>
     {:else}
       {#each groups as group (group.key)}
-        <p class="grp" id="grp-{group.key || 'none'}">{monthLabel(group.key)}</p>
+        <p class="grp" id="grp-{group.key || 'none'}">{group.label}</p>
         <ul class="list" aria-labelledby="grp-{group.key || 'none'}">
           {#each group.items as entry (entry.id)}
             <ListRow
               title={entry.work.title}
               meta={entryMeta(entry, thisYear)}
               quarters={entry.rating_q}
+              medium={entry.work.medium}
+              favourite={entry.favourite}
               coverUrl={entry.work.cover_url}
               onclick={() => void goto(resolve('/entry/[id]', { id: entry.id }))}
             />
@@ -178,7 +180,7 @@
       {/if}
     {/if}
   </div>
-</div>
+</main>
 
 <style>
   /* The search box's place, reserved: it is a control and it says why it cannot be used yet. */

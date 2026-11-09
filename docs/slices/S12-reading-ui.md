@@ -85,7 +85,12 @@ the contract now carry; anything not listed here was settled already.
    cursor from another query is refused with `invalid_value`, which is the bad route below.
 8. **A deleted entry read by a stale link answers 200**, with `deleted_at` set, and the page says it was deleted
    and offers Restore. Answering 404 would leave her without the way back, which is the point of soft delete.
-9. **Log again and Restore as draft are both `reopen`.** Log again sends `mode: "new"`: a fresh draft on the same
+9. **Three mockup details are deliberately not built.** The snippet under a draft's row needs the draft's last
+   message, which the session list does not carry; adding a second copy of her words to a list response for
+   decoration is not a trade worth making. The dash icon beside a waiting reason and the delete reason on a Deleted
+   row ("· a duplicate") are the same: nothing stores them, and a control or a field that invents what it shows is
+   worse than one that is absent. The rest of the frames on pages 03, 04 and 07 are built as drawn.
+10. **Log again and Restore as draft are both `reopen`.** Log again sends `mode: "new"`: a fresh draft on the same
    work with no body and no rating, so the card asks for them. Restore as draft sends `revision: n`: a working
    copy of that version's snapshot, so confirming makes it the newest version and keeps the one it replaced.
 
@@ -93,3 +98,8 @@ the contract now carry; anything not listed here was settled already.
 
 The reading screens match the mockups on a phone, every empty and error state has a test, and soft delete and
 restore are demonstrated through the UI.
+
+**Status: built.** Fourteen end-to-end states on each of two browsers, each with an axe pass and a baseline, against a
+seeded stack of its own; the Go and Vitest suites cover the new boundary's three routes. Two live checks are left for
+Autumn, in [`../BUILD-LOG.md`](../BUILD-LOG.md): the Linux baselines are made by the `baselines` workflow, and the
+screens have not been looked at on the potato.

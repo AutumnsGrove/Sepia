@@ -196,8 +196,8 @@ func TestDeletedListAndRestore(t *testing.T) {
 		t.Fatalf("library = %v, want only the entry that is still there", ids(library))
 	}
 
-	if err := s.RestoreEntry(ctx, "e1"); err != nil {
-		t.Fatalf("restore e1: %v", err)
+	if restoreErr := s.RestoreEntry(ctx, "e1"); restoreErr != nil {
+		t.Fatalf("restore e1: %v", restoreErr)
 	}
 	library, _, err = s.LibraryPage(ctx, domain.LibraryQuery{}, domain.Cursor{}, 10)
 	if err != nil {
@@ -228,15 +228,15 @@ func TestSettingsRoundTrip(t *testing.T) {
 	if value != "on" {
 		t.Fatalf("a setting that was never written = %q, want the default", value)
 	}
-	if err := s.SetSetting(ctx, "preread", "off"); err != nil {
-		t.Fatalf("SetSetting: %v", err)
+	if writeErr := s.SetSetting(ctx, "preread", "off"); writeErr != nil {
+		t.Fatalf("SetSetting: %v", writeErr)
 	}
 	if value, err = s.Setting(ctx, "preread", "on"); err != nil || value != "off" {
 		t.Fatalf("Setting = %q %v, want off", value, err)
 	}
 	// The second attempt updates the row: one key, one row, whatever the number of writes.
-	if err := s.SetSetting(ctx, "preread", "on"); err != nil {
-		t.Fatalf("SetSetting again: %v", err)
+	if writeErr := s.SetSetting(ctx, "preread", "on"); writeErr != nil {
+		t.Fatalf("SetSetting again: %v", writeErr)
 	}
 	if value, err = s.Setting(ctx, "preread", "off"); err != nil || value != "on" {
 		t.Fatalf("Setting = %q %v, want on", value, err)

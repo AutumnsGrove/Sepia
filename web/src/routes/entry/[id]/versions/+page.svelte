@@ -77,7 +77,7 @@
   <title>Earlier versions · Sepia</title>
 </svelte:head>
 
-<div class="screen">
+<main class="screen">
   <TopBar title="Earlier versions" back />
 
   <div class="scroll">
@@ -117,7 +117,7 @@
       {/each}
     {/if}
   </div>
-</div>
+</main>
 
 <style>
   .note {

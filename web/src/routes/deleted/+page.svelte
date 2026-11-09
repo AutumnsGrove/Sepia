@@ -5,7 +5,7 @@
   import { ApiError, createClient, type Entry } from '../../lib/api/client';
   import Button from '../../lib/components/Button.svelte';
   import Errbox from '../../lib/components/Errbox.svelte';
-  import ListRow from '../../lib/components/ListRow.svelte';
+  import Cover from '../../lib/components/Cover.svelte';
   import SkeletonRows from '../../lib/components/SkeletonRows.svelte';
   import TopBar from '../../lib/components/TopBar.svelte';
   import { deletedMeta } from '../../lib/state/reading';
@@ -57,7 +57,7 @@
   <title>Deleted · Sepia</title>
 </svelte:head>
 
-<div class="screen">
+<main class="screen">
   <TopBar title="Deleted" back />
 
   <div class="scroll">
@@ -80,13 +80,22 @@
       </p>
       <ul class="list">
         {#each items as entry (entry.id)}
-          <li class="row">
-            <ListRow
-              title={entry.work.title}
-              meta={deletedMeta(entry, thisYear)}
-              coverUrl={entry.work.cover_url}
+          <li class="delrow">
+            <button
+              type="button"
+              class="target"
               onclick={() => void goto(resolve('/entry/[id]', { id: entry.id }))}
-            />
+            >
+              <Cover
+                title={entry.work.title}
+                url={entry.work.cover_url}
+                medium={entry.work.medium}
+              />
+              <span class="body">
+                <span class="tt">{entry.work.title}</span>
+                <span class="mm">{deletedMeta(entry, thisYear)}</span>
+              </span>
+            </button>
             <Button size="sm" disabled={restoring === entry.id} onclick={() => void restore(entry)}>
               <RotateCcw size={14} aria-hidden="true" />
               {restoring === entry.id ? 'Restoring' : 'Restore'}
@@ -97,7 +106,7 @@
       </ul>
     {/if}
   </div>
-</div>
+</main>
 
 <style>
   .note {
@@ -105,14 +114,41 @@
     font-size: 0.875rem;
     color: var(--text-2);
   }
-  .row {
+  /* The Deleted row is not the library's row: it carries an action, so it is a target and a Restore side by side
+   * rather than one button that opens the entry. */
+  .delrow {
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 0.5rem;
     align-items: center;
     border-bottom: 1px solid var(--line);
   }
-  .row :global(.row) {
-    border-bottom: 0;
+  .target {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 0.85rem;
+    align-items: center;
+    min-height: 72px;
+    padding: 0.75rem 0;
+    border: 0;
+    background: none;
+    text-align: left;
+    color: inherit;
+  }
+  .body {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+  .tt {
+    font:
+      500 1.0625rem/1.25 'Fraunces',
+      Georgia,
+      serif;
+    color: var(--text);
+  }
+  .mm {
+    font-size: 0.8125rem;
+    color: var(--text-2);
   }
 </style>

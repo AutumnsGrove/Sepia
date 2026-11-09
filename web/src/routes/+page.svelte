@@ -78,7 +78,7 @@
   <meta name="description" content="A private review journal for anything you finish." />
 </svelte:head>
 
-<div class="screen">
+<main class="screen">
   <TopBar title="Sepia" wordmark>
     {#snippet actions()}
       <a
@@ -145,6 +145,8 @@
             title={entry.work.title}
             meta={entryMeta(entry, thisYear)}
             quarters={entry.rating_q}
+            favourite={entry.favourite}
+            medium={entry.work.medium}
             coverUrl={entry.work.cover_url}
             onclick={() => void goto(resolve('/entry/[id]', { id: entry.id }))}
           />
@@ -154,7 +156,7 @@
   </div>
 
   <HomeComposer bind:value={text} onsend={() => void start()} busy={starting} />
-</div>
+</main>
 
 <style>
   .ex {

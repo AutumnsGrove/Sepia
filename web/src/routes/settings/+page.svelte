@@ -66,7 +66,7 @@
   <title>Settings · Sepia</title>
 </svelte:head>
 
-<div class="screen">
+<main class="screen">
   <TopBar title="Settings" back />
 
   <div class="scroll">
@@ -118,7 +118,7 @@
       >
     {/if}
   </div>
-</div>
+</main>
 
 <style>
   .group {

@@ -50,10 +50,7 @@ test.describe('the walking skeleton', () => {
     expect(typeof body.version).toBe('string');
   });
 
-  test('matches the recorded screen', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.getByRole('heading', { level: 1, name: 'Sepia' })).toBeVisible();
-    // The first baseline for the first screen. Look at the diff before you ever update this file.
-    await expect(page).toHaveScreenshot('home.png', { fullPage: true });
-  });
+  // The home screen's pixel baseline is not here: this stack is the logging tests' and fills up while they run, so the
+  // page the smoke test sees depends on their timing. Home is baselined against the seeded reading stack instead,
+  // where the library is the same on every run (e2e/reading.spec.ts).
 });

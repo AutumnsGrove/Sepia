@@ -123,6 +123,10 @@ select,
   gap: 0.25rem;
   padding: 0 0.5rem 0 0.75rem;
 }
+.topbar h1 {
+  margin: 0;
+  font-weight: 500;
+}
 .topbar .wordmark {
   flex: 1;
   font:
