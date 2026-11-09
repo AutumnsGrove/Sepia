@@ -821,7 +821,8 @@ func saveEntry(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (to
 // checkFidelity asks the decisions layer whether the extract left an opinion out. It can only ever warn: the body
 // is already proved to be her words, and a model's opinion about the extract cannot change that.
 func (s *RunState) checkFidelity(ctx context.Context) error {
-	if s.Agent.decisions == nil || s.Draft == nil || strings.TrimSpace(s.Draft.Entry.Body) == "" {
+	// The fidelity check is a decisions call like the pre-read, so it follows the same switch.
+	if s.Agent.decisions == nil || !s.Reading || s.Draft == nil || strings.TrimSpace(s.Draft.Entry.Body) == "" {
 		return nil
 	}
 	originals, err := s.Agent.session.UserMessages(ctx, s.SessionID)
