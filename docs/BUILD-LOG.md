@@ -781,3 +781,14 @@ the slice plan's Decisions section is hers to approve or edit.
 
 **Next.** S12, the reading UI: home, Drafts, the library, the entry page with its versions, and delete that never
 erases.
+
+## 2026-11-09, the nightly fuzz found a title one rune over
+
+The nightly fuzz on main failed `FuzzOpenLibraryPayload` with "title is 302 characters". `cleanTitle` checked the
+bound after writing a rune, so a four-byte rune written at byte 299 went past it: the comment promised a cut at a
+rune boundary and the code cut at a byte count. The cut is made after the loop now, at a rune boundary, and the
+crasher is committed as a seed under `internal/providers/testdata/fuzz/FuzzOpenLibraryPayload/`. The fix covers
+every provider field that goes through `cleanTitle`, not only the title the fuzz happened to reach.
+
+This is the first nightly crasher since S00 and it cost one loop and one boundary, which is the shape the nightly
+is for. It is not S11's: it was found on the old main and fixed on main the same day.
