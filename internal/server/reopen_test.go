@@ -69,10 +69,10 @@ func TestReopenOverTheSocket(t *testing.T) {
 	client.sendJSON(map[string]any{
 		"type": "confirm", "client_msg_id": "c1", "data": map[string]any{"base_version": data.Version},
 	})
-	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+	both = client.expectBoth("ack", "saved")
+	if got := both["ack"].field(t, "status"); got != "accepted" {
 		t.Fatalf("confirm ack = %v", got)
 	}
-	client.expect("saved")
 
 	revisions, err := rig.db.Revisions(ctx, saved.ID)
 	if err != nil {
