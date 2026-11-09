@@ -575,7 +575,7 @@ func (q *Queries) GetInteraction(ctx context.Context, id string) (Interaction, e
 }
 
 const getSession = `-- name: GetSession :one
-SELECT id, kind, title, entry_id, messages_json, state, created_at, updated_at, draft_version FROM sessions WHERE id = ?
+SELECT id, kind, title, entry_id, messages_json, state, created_at, updated_at, draft_version, revises_entry_id FROM sessions WHERE id = ?
 `
 
 func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
@@ -591,6 +591,7 @@ func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DraftVersion,
+		&i.RevisesEntryID,
 	)
 	return i, err
 }
@@ -669,6 +670,21 @@ func (q *Queries) LinkEntryTag(ctx context.Context, arg LinkEntryTagParams) erro
 	return err
 }
 
+const linkRevisionTarget = `-- name: LinkRevisionTarget :exec
+UPDATE sessions SET revises_entry_id = ?, updated_at = ? WHERE id = ?
+`
+
+type LinkRevisionTargetParams struct {
+	RevisesEntryID sql.NullString `json:"revises_entry_id"`
+	UpdatedAt      string         `json:"updated_at"`
+	ID             string         `json:"id"`
+}
+
+func (q *Queries) LinkRevisionTarget(ctx context.Context, arg LinkRevisionTargetParams) error {
+	_, err := q.db.ExecContext(ctx, linkRevisionTarget, arg.RevisesEntryID, arg.UpdatedAt, arg.ID)
+	return err
+}
+
 const linkSessionEntry = `-- name: LinkSessionEntry :exec
 UPDATE sessions SET entry_id = ?, updated_at = ? WHERE id = ?
 `
@@ -685,7 +701,7 @@ func (q *Queries) LinkSessionEntry(ctx context.Context, arg LinkSessionEntryPara
 }
 
 const listActiveSessions = `-- name: ListActiveSessions :many
-SELECT id, kind, title, entry_id, messages_json, state, created_at, updated_at, draft_version FROM sessions WHERE state = 'active' ORDER BY updated_at DESC, id DESC LIMIT ?
+SELECT id, kind, title, entry_id, messages_json, state, created_at, updated_at, draft_version, revises_entry_id FROM sessions WHERE state = 'active' ORDER BY updated_at DESC, id DESC LIMIT ?
 `
 
 func (q *Queries) ListActiveSessions(ctx context.Context, limit int64) ([]Session, error) {
@@ -707,6 +723,7 @@ func (q *Queries) ListActiveSessions(ctx context.Context, limit int64) ([]Sessio
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftVersion,
+			&i.RevisesEntryID,
 		); err != nil {
 			return nil, err
 		}
@@ -932,7 +949,7 @@ func (q *Queries) ListEntryTags(ctx context.Context, entryID string) ([]ListEntr
 }
 
 const listGeneralSessions = `-- name: ListGeneralSessions :many
-SELECT id, kind, title, entry_id, messages_json, state, created_at, updated_at, draft_version FROM sessions WHERE kind = 'general' ORDER BY updated_at DESC, id DESC LIMIT ?
+SELECT id, kind, title, entry_id, messages_json, state, created_at, updated_at, draft_version, revises_entry_id FROM sessions WHERE kind = 'general' ORDER BY updated_at DESC, id DESC LIMIT ?
 `
 
 func (q *Queries) ListGeneralSessions(ctx context.Context, limit int64) ([]Session, error) {
@@ -954,6 +971,7 @@ func (q *Queries) ListGeneralSessions(ctx context.Context, limit int64) ([]Sessi
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftVersion,
+			&i.RevisesEntryID,
 		); err != nil {
 			return nil, err
 		}
@@ -1361,7 +1379,7 @@ func (q *Queries) ListSessionEventsSince(ctx context.Context, arg ListSessionEve
 }
 
 const listSessions = `-- name: ListSessions :many
-SELECT id, kind, title, entry_id, messages_json, state, created_at, updated_at, draft_version FROM sessions
+SELECT id, kind, title, entry_id, messages_json, state, created_at, updated_at, draft_version, revises_entry_id FROM sessions
 WHERE (?1 IS NULL OR state = ?1)
   AND (?2 IS NULL OR kind = ?2)
   AND (?3 IS NULL OR (updated_at || '|' || id) < ?3)
@@ -1402,6 +1420,7 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftVersion,
+			&i.RevisesEntryID,
 		); err != nil {
 			return nil, err
 		}
@@ -1582,6 +1601,17 @@ type RestoreEntryParams struct {
 func (q *Queries) RestoreEntry(ctx context.Context, arg RestoreEntryParams) error {
 	_, err := q.db.ExecContext(ctx, restoreEntry, arg.UpdatedAt, arg.ID)
 	return err
+}
+
+const revisionTarget = `-- name: RevisionTarget :one
+SELECT COALESCE(revises_entry_id, '') FROM sessions WHERE id = ?
+`
+
+func (q *Queries) RevisionTarget(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, revisionTarget, id)
+	var revises_entry_id string
+	err := row.Scan(&revises_entry_id)
+	return revises_entry_id, err
 }
 
 const saveEntry = `-- name: SaveEntry :execresult

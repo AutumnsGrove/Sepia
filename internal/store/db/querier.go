@@ -45,6 +45,7 @@ type Querier interface {
 	HeadSequence(ctx context.Context, sessionID string) (interface{}, error)
 	LatestRevisionNumber(ctx context.Context, entryID string) (interface{}, error)
 	LinkEntryTag(ctx context.Context, arg LinkEntryTagParams) error
+	LinkRevisionTarget(ctx context.Context, arg LinkRevisionTargetParams) error
 	LinkSessionEntry(ctx context.Context, arg LinkSessionEntryParams) error
 	ListActiveSessions(ctx context.Context, limit int64) ([]Session, error)
 	ListAnswers(ctx context.Context, entryID string) ([]Answer, error)
@@ -80,6 +81,7 @@ type Querier interface {
 	// Resolving is the one update an interaction allows, and only while it is open. The trigger is the backstop.
 	ResolveInteraction(ctx context.Context, arg ResolveInteractionParams) (sql.Result, error)
 	RestoreEntry(ctx context.Context, arg RestoreEntryParams) error
+	RevisionTarget(ctx context.Context, id string) (string, error)
 	// The confirm tap. Every column the card can edit is written, so the saved row is the card she confirmed rather than
 	// a draft-time snapshot of it. A draft becomes saved here; a saved row is rewritten here only after the revision of
 	// what it replaced was written in the same transaction (docs/ENTRY_CARD.md 7). The count tells the caller whether
