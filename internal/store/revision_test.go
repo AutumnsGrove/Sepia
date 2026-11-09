@@ -19,8 +19,8 @@ func TestRevisionTargetRoundTrips(t *testing.T) {
 		t.Fatalf("target on a plain draft = %q, want empty", empty)
 	}
 
-	if err := s.LinkRevisionTarget(ctx, "s1", "e1"); err != nil {
-		t.Fatalf("LinkRevisionTarget: %v", err)
+	if linkErr := s.LinkRevisionTarget(ctx, "s1", "e1"); linkErr != nil {
+		t.Fatalf("LinkRevisionTarget: %v", linkErr)
 	}
 	target, err := s.RevisionTarget(ctx, "s1")
 	if err != nil {
