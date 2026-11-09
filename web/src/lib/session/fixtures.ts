@@ -590,10 +590,3 @@ export const fixtureHandlers = {
   onmore: () => {},
   onversions: () => {},
 };
-
-/** The card alone, for the states that are about the card rather than the screen. */
-export function draftFixture(patch: Partial<Draft> = {}): Draft {
-  return draft(patch);
-}
-
-export { savedEntry as savedEntryFixture };
