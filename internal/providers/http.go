@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // maxBody bounds one provider reply, from docs/STANDARDS.md 4a. A body one byte over is refused rather than
@@ -289,7 +290,20 @@ func cleanTitle(s string) string {
 			break
 		}
 	}
-	return strings.TrimSpace(b.String())
+	// The loop can write one rune past the bound (a four-byte rune at byte 299), so the cut is made here, at a
+	// rune boundary. A title is bounded by bytes because that is what the card and the wire carry.
+	return clipToBytes(strings.TrimSpace(b.String()), maxTitleChars)
+}
+
+// clipToBytes cuts s to at most n bytes without splitting a rune.
+func clipToBytes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // isUnsafeRune reports a control or a bidirectional format character, which a title must never carry: a bidi
