@@ -3,8 +3,10 @@ package providers
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // The pacing is the one part of the clients that can hang a turn, so it is tested directly rather than only
@@ -103,5 +105,18 @@ func TestCleanTitle(t *testing.T) {
 	}
 	if got := len(cleanTitle(string(long))); got > maxTitleChars {
 		t.Errorf("cleanTitle kept %d characters, want at most %d", got, maxTitleChars)
+	}
+}
+
+// A title is bounded by bytes, and a rune can straddle the bound: four bytes written at 299 would make 302. The
+// nightly fuzz found exactly that (S11's merge week), and the cut is now made at a rune boundary.
+func TestCleanTitleCutsAtARuneBoundary(t *testing.T) {
+	long := strings.Repeat("é", maxTitleChars)
+	got := cleanTitle(long)
+	if len(got) > maxTitleChars {
+		t.Fatalf("title is %d bytes, want at most %d", len(got), maxTitleChars)
+	}
+	if !utf8.ValidString(got) {
+		t.Fatal("the cut split a rune")
 	}
 }
