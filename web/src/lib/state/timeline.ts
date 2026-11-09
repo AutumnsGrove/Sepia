@@ -35,6 +35,18 @@ export function timeline(state: SessionState): TimelineEntry[] {
   return rows.sort((a, b) => a.order - b.order || a.kind.localeCompare(b.kind));
 }
 
+/**
+ * Whether a turn is in flight. A live activity row is the obvious sign, but the model can be streaming a reply with
+ * no row at all, and a queued message is waiting behind a turn. Stop and the composer both hang off this, so it has
+ * to be true for every one of those.
+ */
+export function isWorking(state: SessionState): boolean {
+  if (state.status !== 'active') return false;
+  if (state.queue > 0) return true;
+  if (state.activity.some((row) => row.live)) return true;
+  return state.blocks.some((block) => block.kind === 'assistant' && block.streaming);
+}
+
 /** The activity row still waiting to end, which is the one that pulses. */
 export function liveActivity(state: SessionState): ActivityRow | null {
   for (let i = state.activity.length - 1; i >= 0; i -= 1) {
