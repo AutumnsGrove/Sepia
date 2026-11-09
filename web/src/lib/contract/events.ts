@@ -381,6 +381,14 @@ export type ClientMessage =
       type?: 'reopen';
       data?: {
         entry_id: Id;
+        /**
+         * revision edits the saved entry, which keeps the previous version. new logs a second entry on the same work.
+         */
+        mode?: 'revision' | 'new';
+        /**
+         * The version to restore as the draft. Absent means the saved entry itself.
+         */
+        revision?: number;
       };
     })
   | (ClientEnvelope & {

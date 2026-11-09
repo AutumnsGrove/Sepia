@@ -111,7 +111,7 @@ something new.
 | `include_left_out` | `base_version`, `segment_id` | Move a left-out segment into the body |
 | `confirm` | `base_version` | The one commit. Rejected if the version is stale or the card does not satisfy section 2 of `ENTRY_CARD.md` |
 | `retry` | none | Runs the failed turn again for her last message. The message is already stored, so it is not appended a second time. Refused while a turn is in flight |
-| `reopen` | `entry_id` | Opens a draft revision of a saved entry, so Edit on a saved card needs no new lookup. The session must be active and have no card yet, and the entry must be saved and not deleted. Confirming keeps the previous version in the revisions table |
+| `reopen` | `entry_id`, `mode` (`revision` or `new`), `revision` (optional) | Opens a draft of a saved entry, so Edit on a saved card needs no new lookup. `mode: revision` is the ordinary edit and keeps the previous version in the revisions table; `mode: new` is Log again, a fresh card on the same work with nothing filled in. `revision: n` restores that version as the draft, so confirming makes it the newest version and keeps the one it replaced. The session must be active and have no card yet, and the entry must be saved and not deleted |
 | `discard` | none | Throw the draft away; the session closes |
 | `stop` | none | Cancel the turn in flight |
 | `ping` | none | Optional keepalive from the client |
@@ -159,9 +159,11 @@ Plain requests, all behind the same origin check. Detailed shapes belong with th
 
 - `POST /api/sessions`, `GET /api/sessions/{id}`, `GET /api/sessions?state=active` (the Drafts list),
   `GET /api/sessions?kind=general` (past library chats, newest first)
-- `GET /api/entries`, `GET /api/entries/{id}`, `GET /api/entries/{id}/revisions`,
-  `POST /api/entries/{id}/delete` (soft; plain entry view only)
+- `GET /api/entries` (`medium`, `favourite`, `work`, `sort`, `deleted`, `cursor`, `limit`),
+  `GET /api/entries/{id}`, `GET /api/entries/{id}/revisions`, `POST /api/entries/{id}/delete` (soft; plain entry
+  view only), `POST /api/entries/{id}/restore` (back in the library, from the Deleted list)
 - `GET /api/works/{id}`, `GET /api/search?q=`
+- `GET /api/settings`, `PUT /api/settings` (the quick pre-read switch and nothing else yet)
 - `POST /api/sessions/{id}/media` (multipart upload, returns a `media_id`), `GET /media/{id}` (Phase 3)
 - `GET /covers/{id}` (static), `GET /healthz`, `POST /api/export`
 - `GET /api/version`, `POST /api/update/check`, `GET /api/update/available`, `POST /api/update/start`, `GET /api/update/status`, `POST /api/restart`, `GET /api/services` (see [`UPDATE.md`](UPDATE.md))
