@@ -463,7 +463,8 @@ func TestSocketEditConfirmAndDuplicate(t *testing.T) {
 	rig := newSocketRig(t)
 	defer rig.close()
 	sess := rig.newDraft()
-	client := rig.dial(sess.ID, 0, "http://"+rig.host)
+	// At the head, so the replay of the draft that newDraft made cannot be mistaken for the edit's snapshot.
+	client := dialFresh(t, rig, sess.ID)
 	client.expect("hello")
 
 	edit := map[string]any{
@@ -473,10 +474,11 @@ func TestSocketEditConfirmAndDuplicate(t *testing.T) {
 		}},
 	}
 	client.sendJSON(edit)
-	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+	both := client.expectBoth("ack", "draft_snapshot")
+	if got := both["ack"].field(t, "status"); got != "accepted" {
 		t.Fatalf("edit ack = %v", got)
 	}
-	snapshot := client.expect("draft_snapshot")
+	snapshot := both["draft_snapshot"]
 	var data struct {
 		Version int `json:"version"`
 		Draft   struct {
@@ -503,10 +505,11 @@ func TestSocketEditConfirmAndDuplicate(t *testing.T) {
 		"data": map[string]any{"base_version": data.Version},
 	}
 	client.sendJSON(confirm)
-	if got := client.expect("ack").field(t, "status"); got != "accepted" {
+	both = client.expectBoth("ack", "saved")
+	if got := both["ack"].field(t, "status"); got != "accepted" {
 		t.Fatalf("confirm ack = %v", got)
 	}
-	saved := client.expect("saved")
+	saved := both["saved"]
 	if saved.field(t, "entry_id") == "" {
 		t.Error("saved carried no entry id")
 	}
@@ -525,11 +528,11 @@ func TestSocketReturnsTheCardAfterAStaleVersion(t *testing.T) {
 		"type": "draft_edit", "client_msg_id": "e1",
 		"data": map[string]any{"base_version": 99, "set": map[string]any{"rating": 18}},
 	})
-	ack := client.expect("ack")
+	both := client.expectBoth("ack", "draft_snapshot")
+	ack := both["ack"]
 	if ack.field(t, "status") != "rejected" || ack.field(t, "reason") != "stale_version" {
 		t.Fatalf("ack = %+v", ack)
 	}
-	client.expect("draft_snapshot")
 	// The rejected edit changed nothing.
 	if _, err := rig.engine.Draft(context.Background(), sess.ID); err != nil {
 		t.Fatal(err)
