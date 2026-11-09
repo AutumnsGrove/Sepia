@@ -24,6 +24,10 @@ type Card struct {
 	Tags       []domain.Tag
 	SourceText string
 	LeftOut    []domain.Segment
+	// Confirmable and Missing are the save guard's answer for this card, computed here so the wire and the commit
+	// cannot disagree. A revision of an extracted body is proved against the saved body, not against nothing.
+	Confirmable bool
+	Missing     []string
 
 	Checks      []Check
 	Tools       []ToolTrace
@@ -105,7 +109,29 @@ func (e *Engine) CardFor(ctx context.Context, sessionID string, entry domain.Ent
 	spans := append([]domain.Span(nil), entry.BodySpans...)
 	sort.SliceStable(spans, func(i, j int) bool { return spans[i].Start < spans[j].Start })
 	card.LeftOut = domain.Complement(sourceText, spans)
+	card.Confirmable, card.Missing = e.confirmable(ctx, sessionID, entry, sourceText)
 	return card, nil
+}
+
+// confirmable answers the save guard for a card. A revision of an extracted review has no messages of its own, so
+// an unchanged body is proved against the saved body: the same proof Confirm uses, in one place.
+func (e *Engine) confirmable(ctx context.Context, sessionID string, entry domain.Entry,
+	sourceText string,
+) (bool, []string) {
+	if sourceText != "" || entry.BodyOrigin != domain.BodyExtracted {
+		return domain.CanConfirm(entry, sourceText)
+	}
+	target, err := e.store.RevisionTarget(ctx, sessionID)
+	if err != nil || target == "" {
+		return domain.CanConfirm(entry, sourceText)
+	}
+	saved, err := e.store.Entry(ctx, target)
+	if err != nil || saved.Body != entry.Body {
+		return domain.CanConfirm(entry, sourceText)
+	}
+	proof := entry
+	proof.BodySpans = []domain.Span{{Start: 0, End: len(saved.Body), Text: saved.Body}}
+	return domain.CanConfirm(proof, saved.Body)
 }
 
 // EntryView is a saved entry with the work it is about and the answers she gave.
