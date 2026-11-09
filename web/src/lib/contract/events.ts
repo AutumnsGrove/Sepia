@@ -370,6 +370,10 @@ export type ClientMessage =
       };
     })
   | (ClientEnvelope & {
+      type?: 'retry';
+      data?: {};
+    })
+  | (ClientEnvelope & {
       type?: 'discard';
       data?: {};
     })
@@ -669,6 +673,7 @@ export interface CostSummary {
  * One mechanism for every question the service asks. The payload shape follows the kind.
  */
 export interface Interaction {
+  interaction_id: Id;
   kind: InteractionKind;
   payload: {};
 }
