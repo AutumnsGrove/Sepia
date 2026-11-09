@@ -353,3 +353,48 @@ func TestReopenRefusesAClosedSessionAndADeletedEntry(t *testing.T) {
 		t.Fatal("a deleted entry was reopened")
 	}
 }
+
+// The revision target is the session's, not the process's. A restart loses the hub's memory, and confirm has to
+// still write onto the saved entry rather than adding the working copy to the library as a second review.
+func TestARevisionSurvivesARestartBecauseTheSessionKnowsIt(t *testing.T) {
+	e, db := newEngine(t)
+	ctx := context.Background()
+	if err := db.SaveWork(ctx, domain.Work{ID: "w1", Medium: "book", Title: "The Lantern Keeper"}); err != nil {
+		t.Fatal(err)
+	}
+	saved := saveOne(t, e, db)
+
+	next, err := e.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, err := e.Reopen(ctx, next.ID, saved.ID, "r1")
+	if err != nil {
+		t.Fatalf("Reopen: %v", err)
+	}
+	edited, err := e.EditDraft(ctx, next.ID, Edit{BaseVersion: revision.Version, Set: patch(map[string]any{
+		"rating": 19,
+	})})
+	if err != nil {
+		t.Fatalf("EditDraft: %v", err)
+	}
+
+	// No Revises: the hub that remembered it is gone, which is what a restart leaves behind.
+	entry, _, _, err := e.Confirm(ctx, next.ID, ConfirmRequest{BaseVersion: edited.Version})
+	if err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	if entry.ID != saved.ID {
+		t.Errorf("entry id = %q, want the saved entry %q", entry.ID, saved.ID)
+	}
+	if entry.Rating != 19 {
+		t.Errorf("rating = %d, want 19", entry.Rating)
+	}
+	revisions, err := db.Revisions(ctx, saved.ID)
+	if err != nil {
+		t.Fatalf("Revisions: %v", err)
+	}
+	if len(revisions) != 1 || revisions[0].Snapshot.Rating != 15 {
+		t.Errorf("revisions = %+v, want the first version kept", revisions)
+	}
+}

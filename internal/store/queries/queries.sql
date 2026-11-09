@@ -213,6 +213,12 @@ SELECT * FROM client_messages WHERE session_id = ? AND client_msg_id = ?;
 -- name: LinkSessionEntry :exec
 UPDATE sessions SET entry_id = ?, updated_at = ? WHERE id = ?;
 
+-- name: LinkRevisionTarget :exec
+UPDATE sessions SET revises_entry_id = ?, updated_at = ? WHERE id = ?;
+
+-- name: RevisionTarget :one
+SELECT COALESCE(revises_entry_id, '') FROM sessions WHERE id = ?;
+
 -- name: UpdateDraft :execresult
 -- A draft's fields. The status guard is the WHERE clause, so a saved entry can never be rewritten this way.
 UPDATE entries

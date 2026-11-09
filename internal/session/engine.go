@@ -569,9 +569,19 @@ func (e *Engine) Confirm(ctx context.Context, sessionID string, in ConfirmReques
 	if guardErr := domain.ValidateForSave(draft.Entry, in.SourceText); guardErr != nil {
 		return domain.Entry{}, 0, nil, guardErr
 	}
+	// The hub remembers the target while the process is up. After a restart it is the session's own record that
+	// says what this card revises, so a revision cannot quietly become a second entry.
+	revises := in.Revises
+	if revises == "" {
+		stored, readErr := e.store.RevisionTarget(ctx, sessionID)
+		if readErr != nil {
+			return domain.Entry{}, 0, nil, readErr
+		}
+		revises = stored
+	}
 	entry, version, events, err := e.store.ConfirmDraft(ctx, store.Confirm{
 		SessionID: sessionID, BaseVersion: in.BaseVersion, Entry: draft.Entry, ClientMsgID: in.ClientMsgID,
-		Revises: in.Revises,
+		Revises: revises,
 	})
 	if errors.Is(err, store.ErrStaleVersion) {
 		return domain.Entry{}, 0, nil, &Refusal{Code: CodeStaleVersion, Message: "The card changed on another screen; it has been refreshed."}
@@ -954,6 +964,9 @@ func (e *Engine) StartRevision(ctx context.Context, sessionID string, saved doma
 	if err := e.store.LinkDraft(ctx, sessionID, copy.ID); err != nil {
 		return Draft{}, err
 	}
+	if err := e.store.LinkRevisionTarget(ctx, sessionID, saved.ID); err != nil {
+		return Draft{}, err
+	}
 	if _, err := e.Append(ctx, sessionID, store.EventDraftSnapshot, map[string]any{"version": 0, "draft": copy}); err != nil {
 		return Draft{}, err
 	}
@@ -993,6 +1006,17 @@ func (e *Engine) Reopen(ctx context.Context, sessionID, entryID, clientMsgID str
 		}
 	}
 	return draft, nil
+}
+
+// RememberRetry records a retry's client message. No append happens for a retry, so without this a repeat of the
+// same message would start a second turn.
+func (e *Engine) RememberRetry(ctx context.Context, sessionID, clientMsgID string) error {
+	if clientMsgID == "" {
+		return nil
+	}
+	return e.store.RememberClient(ctx, domain.ClientMessage{
+		SessionID: sessionID, ClientMsgID: clientMsgID, Status: "accepted",
+	})
 }
 
 // Rounds returns how many question rounds a session has already asked, so the agent can stop at the cap.

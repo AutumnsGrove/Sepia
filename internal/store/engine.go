@@ -240,6 +240,29 @@ func (s *Store) ClientMessage(ctx context.Context, sessionID, clientMsgID string
 	}, nil
 }
 
+// LinkRevisionTarget records which saved entry a session's working copy revises. It is written when the copy is
+// made, so a restart mid-revision still knows what it is revising.
+func (s *Store) LinkRevisionTarget(ctx context.Context, sessionID, entryID string) error {
+	return s.InTx(ctx, func(q *db.Queries) error {
+		return q.LinkRevisionTarget(ctx, db.LinkRevisionTargetParams{
+			RevisesEntryID: sql.NullString{String: entryID, Valid: entryID != ""},
+			UpdatedAt:      s.Now().UTC().Format(timeLayout), ID: sessionID,
+		})
+	})
+}
+
+// RevisionTarget reads the saved entry a session's working copy revises, or "" when it is not a revision.
+func (s *Store) RevisionTarget(ctx context.Context, sessionID string) (string, error) {
+	target, err := s.ReadQueries().RevisionTarget(ctx, sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("store: read revision target: %w", err)
+	}
+	return target, nil
+}
+
 // LinkDraft attaches the entry a session is building.
 func (s *Store) LinkDraft(ctx context.Context, sessionID, entryID string) error {
 	return s.InTx(ctx, func(q *db.Queries) error {
