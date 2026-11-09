@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
@@ -464,5 +465,148 @@ func TestARevisionOfAnExtractedBodyCanBeConfirmed(t *testing.T) {
 	}
 	if entry.ID != saved.ID || entry.Body != saved.Body {
 		t.Errorf("entry = %+v, want the saved entry and body", entry)
+	}
+}
+
+// Log again is a second entry on the same work: a fresh card that asks for the rating and the words, rather than a
+// copy of the one she already wrote.
+func TestReopenAsNewLogsASecondEntryOnTheSameWork(t *testing.T) {
+	e, db := newEngine(t)
+	ctx := context.Background()
+	if err := db.SaveWork(ctx, domain.Work{ID: "w1", Medium: "book", Title: "The Lantern Keeper"}); err != nil {
+		t.Fatal(err)
+	}
+	saved := saveOne(t, e, db)
+
+	next, err := e.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := e.ReopenAs(ctx, next.ID, ReopenRequest{EntryID: saved.ID, ClientMsgID: "r1", Mode: ReopenNew})
+	if err != nil {
+		t.Fatalf("ReopenAs new: %v", err)
+	}
+	if fresh.Entry.ID == saved.ID || fresh.Entry.Body != "" || fresh.Entry.Rating != 0 {
+		t.Fatalf("a fresh card = %+v, want an empty one", fresh.Entry)
+	}
+	if fresh.Entry.WorkID != saved.WorkID {
+		t.Fatalf("work = %q, want the same work", fresh.Entry.WorkID)
+	}
+
+	filled, err := e.EditDraft(ctx, next.ID, Edit{BaseVersion: fresh.Version, Set: patch(map[string]any{
+		"rating": 19, "body": "Second time through, and it holds up.", "finished_on": "2026-11-01",
+	})})
+	if err != nil {
+		t.Fatalf("EditDraft: %v", err)
+	}
+	// No revision target: this is a new entry, so confirming adds a row instead of rewriting the saved one.
+	second, _, _, err := e.Confirm(ctx, next.ID, ConfirmRequest{BaseVersion: filled.Version})
+	if err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	if second.ID == saved.ID {
+		t.Fatal("Log again rewrote the saved entry instead of adding one")
+	}
+	onWork, err := db.EntriesOnWork(ctx, "w1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(onWork) != 2 {
+		t.Fatalf("entries on the work = %d, want the saved one and the new one", len(onWork))
+	}
+	if revisions, revErr := db.Revisions(ctx, saved.ID); revErr != nil || len(revisions) != 0 {
+		t.Fatalf("the first entry gained revisions: %+v %v", revisions, revErr)
+	}
+}
+
+// Restore as draft opens an older version. Confirming makes it the newest version and keeps the one it replaced, so
+// nothing is ever lost by going back.
+func TestReopenAsRevisionRestoresAnOlderVersion(t *testing.T) {
+	e, db := newEngine(t)
+	ctx := context.Background()
+	if err := db.SaveWork(ctx, domain.Work{ID: "w1", Medium: "book", Title: "The Lantern Keeper"}); err != nil {
+		t.Fatal(err)
+	}
+	saved := saveOne(t, e, db)
+
+	// Two edits, so the history is: v1 the first save, v2 what the first edit replaced, v3 what the second replaced.
+	for _, rating := range []int{17, 19} {
+		next, err := e.CreateEntry(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		revision, err := e.Reopen(ctx, next.ID, saved.ID, "edit-"+strconv.Itoa(rating))
+		if err != nil {
+			t.Fatalf("Reopen: %v", err)
+		}
+		edited, err := e.EditDraft(ctx, next.ID, Edit{BaseVersion: revision.Version, Set: patch(map[string]any{
+			"rating": rating,
+		})})
+		if err != nil {
+			t.Fatalf("EditDraft: %v", err)
+		}
+		if _, _, _, err = e.Confirm(ctx, next.ID, ConfirmRequest{BaseVersion: edited.Version, Revises: saved.ID}); err != nil {
+			t.Fatalf("Confirm: %v", err)
+		}
+	}
+	versions, err := db.Revisions(ctx, saved.ID)
+	if err != nil || len(versions) != 2 {
+		t.Fatalf("revisions = %+v %v, want two", versions, err)
+	}
+	oldest := versions[len(versions)-1]
+
+	next, err := e.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := e.ReopenAs(ctx, next.ID, ReopenRequest{EntryID: saved.ID, ClientMsgID: "restore", Revision: oldest.Number})
+	if err != nil {
+		t.Fatalf("ReopenAs revision: %v", err)
+	}
+	if restored.Entry.Body != oldest.Snapshot.Body || restored.Entry.Rating != oldest.Snapshot.Rating {
+		t.Fatalf("restored draft = %+v, want version %d", restored.Entry, oldest.Number)
+	}
+	if _, _, _, err = e.Confirm(ctx, next.ID, ConfirmRequest{BaseVersion: restored.Version, Revises: saved.ID}); err != nil {
+		t.Fatalf("Confirm restore: %v", err)
+	}
+	current, err := db.Entry(ctx, saved.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Rating != oldest.Snapshot.Rating {
+		t.Fatalf("the entry = %d stars, want the restored version's", current.Rating)
+	}
+	// The version it replaced is kept, so the history still holds every step.
+	after, err := db.Revisions(ctx, saved.ID)
+	if err != nil || len(after) != 3 {
+		t.Fatalf("revisions after restore = %d %v, want three", len(after), err)
+	}
+}
+
+func TestReopenAsRefusesWhatItCannotOpen(t *testing.T) {
+	e, db := newEngine(t)
+	ctx := context.Background()
+	if err := db.SaveWork(ctx, domain.Work{ID: "w1", Medium: "book", Title: "The Lantern Keeper"}); err != nil {
+		t.Fatal(err)
+	}
+	saved := saveOne(t, e, db)
+
+	cases := map[string]ReopenRequest{
+		"a version that is not there": {EntryID: saved.ID, Revision: 9},
+		"a mode it does not know":     {EntryID: saved.ID, Mode: "delete"},
+		"new and a version at once":   {EntryID: saved.ID, Mode: ReopenNew, Revision: 1},
+	}
+	for name, in := range cases {
+		t.Run(name, func(t *testing.T) {
+			next, err := e.CreateEntry(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = e.ReopenAs(ctx, next.ID, in)
+			var refusal *Refusal
+			if !errors.As(err, &refusal) || refusal.Code != CodeInvalidValue {
+				t.Fatalf("err = %v, want invalid_value", err)
+			}
+		})
 	}
 }

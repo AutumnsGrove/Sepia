@@ -185,12 +185,11 @@ func (e *Engine) WorkView(ctx context.Context, workID string) (WorkView, error) 
 	return WorkView{Work: work, Sources: sources}, nil
 }
 
-// Library is one page of saved entries, newest finished first, with the cursor for the next page. favourite is nil
-// when the list is not filtered by it.
-func (e *Engine) Library(ctx context.Context, medium string, favourite *bool, cursor domain.Cursor,
+// Library is one page of saved entries in the order the query asks for, with the cursor for the next page.
+func (e *Engine) Library(ctx context.Context, query domain.LibraryQuery, cursor domain.Cursor,
 	limit int,
 ) ([]domain.Entry, domain.Cursor, error) {
-	return e.store.LibraryPage(ctx, medium, favourite, cursor, limit)
+	return e.store.LibraryPage(ctx, query, cursor, limit)
 }
 
 // Sessions is one page of sessions, newest first. before is the opaque cursor from the previous page.
@@ -208,6 +207,61 @@ func (e *Engine) RevisionsPage(ctx context.Context, entryID string, before, limi
 // DeleteEntry soft-deletes one entry. There is no hard delete and no purge (docs/BUILD.md invariant 4).
 func (e *Engine) DeleteEntry(ctx context.Context, entryID string) error {
 	return e.store.SoftDeleteEntry(ctx, entryID)
+}
+
+// RestoreEntry puts a soft-deleted entry back in the library. Nothing was erased, so nothing is rebuilt, and the
+// entry's revisions are exactly as they were when it was deleted.
+func (e *Engine) RestoreEntry(ctx context.Context, entryID string) error {
+	entry, err := e.store.Entry(ctx, entryID)
+	if err != nil {
+		return err
+	}
+	if !entry.Deleted {
+		return &Refusal{Code: CodeInvalidValue, Message: "That entry is not deleted."}
+	}
+	return e.store.RestoreEntry(ctx, entryID)
+}
+
+// SettingKeyPreread is the quick pre-read switch on the Settings screen.
+const SettingKeyPreread = "preread"
+
+// Settings is every switch the Settings screen holds. It is a struct rather than a map so a switch cannot be
+// forgotten by a caller, and so the wiring between the agent and the screen is checked by the compiler.
+type Settings struct {
+	Preread bool
+}
+
+// Settings reads the stored switches, with the shipped defaults for anything never written.
+func (e *Engine) Settings(ctx context.Context) (Settings, error) {
+	preread, err := e.store.Setting(ctx, SettingKeyPreread, "on")
+	if err != nil {
+		return Settings{}, err
+	}
+	return Settings{Preread: preread != "off"}, nil
+}
+
+// SetSettings stores every switch at once. A partial write would leave the screen showing a value that is not in
+// force, so the whole object goes in one transaction.
+func (e *Engine) SetSettings(ctx context.Context, in Settings) (Settings, error) {
+	value := "on"
+	if !in.Preread {
+		value = "off"
+	}
+	if err := e.store.SetSetting(ctx, SettingKeyPreread, value); err != nil {
+		return Settings{}, err
+	}
+	return e.Settings(ctx)
+}
+
+// PrereadOn reports whether the quick pre-read should run. A read failure is returned rather than guessed at, because
+// a switch that silently reads as on is a lie about her choice; the agent turns the error into a notice and carries
+// on, so the turn is not blocked either way.
+func (e *Engine) PrereadOn(ctx context.Context) (bool, error) {
+	settings, err := e.Settings(ctx)
+	if err != nil {
+		return false, err
+	}
+	return settings.Preread, nil
 }
 
 // EventsSince replays the session log after a client's last seen sequence number. The socket's tail uses it to

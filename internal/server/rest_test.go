@@ -432,3 +432,193 @@ func TestWorkDetailCarriesEverySourceAndItsTrust(t *testing.T) {
 		t.Errorf("trust = %v", trust)
 	}
 }
+
+// The reading screens' three additions to the entries routes: the rating order, the entries on one work, and the
+// Deleted list with the way back.
+
+func TestLibrarySortWorkAndDeleted(t *testing.T) {
+	h, engine, db := newREST(t)
+	low := aConfirmedEntry(t, engine, db, "The Lantern Keeper", "2026-10-30")
+	high := aConfirmedEntry(t, engine, db, "The Quarry Line", "2026-10-31")
+	// A second entry on the same work, so "also on this work" has something to return.
+	again := aConfirmedEntry(t, engine, db, "The Lantern Keeper", "2026-11-02")
+
+	var page struct {
+		Items      []wireEntry `json:"items"`
+		NextCursor *string     `json:"next_cursor"`
+	}
+
+	// Happy: the rating order puts the best first, and every row is there.
+	byRating := doJSON(t, h, http.MethodGet, "/api/entries?sort=rating", nil)
+	if byRating.Code != http.StatusOK {
+		t.Fatalf("rating sort = %d: %s", byRating.Code, byRating.Body)
+	}
+	decode(t, byRating, &page)
+	if len(page.Items) != 3 || page.Items[0].RatingQ < page.Items[1].RatingQ {
+		t.Fatalf("rating order = %+v", page.Items)
+	}
+
+	// Happy: one work's timeline, which is what the entry page's "also on this work" reads.
+	onWork := doJSON(t, h, http.MethodGet, "/api/entries?work="+workIDFor("The Lantern Keeper"), nil)
+	if onWork.Code != http.StatusOK {
+		t.Fatalf("work filter = %d: %s", onWork.Code, onWork.Body)
+	}
+	decode(t, onWork, &page)
+	if len(page.Items) != 2 || page.Items[0].ID != again.ID || page.Items[1].ID != low.ID {
+		t.Fatalf("entries on the work = %+v", page.Items)
+	}
+	if onWork := doJSON(t, h, http.MethodGet, "/api/entries?work="+workIDFor("The Quarry Line"), nil); onWork.Code == http.StatusOK {
+		decode(t, onWork, &page)
+		if len(page.Items) != 1 || page.Items[0].ID != high.ID {
+			t.Fatalf("the other work's timeline = %+v", page.Items)
+		}
+	}
+
+	// Sad: a deleted entry leaves the library, is still readable by id, and is the Deleted list's only row.
+	if del := doJSON(t, h, http.MethodPost, "/api/entries/"+low.ID+"/delete", nil); del.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d: %s", del.Code, del.Body)
+	}
+	library := doJSON(t, h, http.MethodGet, "/api/entries", nil)
+	decode(t, library, &page)
+	if len(page.Items) != 2 {
+		t.Fatalf("library after delete = %+v", page.Items)
+	}
+	gone := doJSON(t, h, http.MethodGet, "/api/entries/"+low.ID, nil)
+	if gone.Code != http.StatusOK {
+		t.Fatalf("a deleted entry by id = %d, want 200 so the page can say so", gone.Code)
+	}
+	var entry wireEntry
+	decode(t, gone, &entry)
+	if entry.DeletedAt == "" {
+		t.Fatal("the deleted entry did not say it was deleted")
+	}
+	trash := doJSON(t, h, http.MethodGet, "/api/entries?deleted=true", nil)
+	if trash.Code != http.StatusOK {
+		t.Fatalf("deleted list = %d: %s", trash.Code, trash.Body)
+	}
+	decode(t, trash, &page)
+	if len(page.Items) != 1 || page.Items[0].ID != low.ID {
+		t.Fatalf("deleted list = %+v", page.Items)
+	}
+
+	// Happy: restore puts it back where it was, and the Deleted list is empty again.
+	if restore := doJSON(t, h, http.MethodPost, "/api/entries/"+low.ID+"/restore", nil); restore.Code != http.StatusNoContent {
+		t.Fatalf("restore = %d: %s", restore.Code, restore.Body)
+	}
+	library = doJSON(t, h, http.MethodGet, "/api/entries", nil)
+	decode(t, library, &page)
+	if len(page.Items) != 3 {
+		t.Fatalf("library after restore = %+v", page.Items)
+	}
+	trash = doJSON(t, h, http.MethodGet, "/api/entries?deleted=true", nil)
+	decode(t, trash, &page)
+	if len(page.Items) != 0 {
+		t.Fatalf("deleted list after restore = %+v", page.Items)
+	}
+
+	// Bad: restoring something that was never deleted, and restoring nothing at all.
+	if rec := doJSON(t, h, http.MethodPost, "/api/entries/"+low.ID+"/restore", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("restore a live entry = %d, want 400", rec.Code)
+	}
+	if rec := doJSON(t, h, http.MethodPost, "/api/entries/no-such/restore", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("restore a missing entry = %d, want 404", rec.Code)
+	}
+}
+
+// Bad: a cursor belongs to the query that made it. Reusing one from another sort, or another set of filters, must be
+// refused rather than answering a page from somewhere else.
+func TestCursorFromAnotherQueryIsRefused(t *testing.T) {
+	h, engine, db := newREST(t)
+	for _, title := range []string{"The Lantern Keeper", "The Quarry Line", "The Salt Road"} {
+		aConfirmedEntry(t, engine, db, title, "2026-10-30")
+	}
+	var page struct {
+		Items      []wireEntry `json:"items"`
+		NextCursor *string     `json:"next_cursor"`
+	}
+	first := doJSON(t, h, http.MethodGet, "/api/entries?limit=1", nil)
+	decode(t, first, &page)
+	if page.NextCursor == nil {
+		t.Fatal("no cursor to reuse")
+	}
+	cursor := *page.NextCursor
+
+	for name, target := range map[string]string{
+		"another sort":      "/api/entries?limit=1&sort=rating&cursor=" + cursor,
+		"another filter":    "/api/entries?limit=1&medium=film&cursor=" + cursor,
+		"the deleted list":  "/api/entries?limit=1&deleted=true&cursor=" + cursor,
+		"another list":      "/api/sessions?limit=1&cursor=" + cursor,
+		"a tampered cursor": "/api/entries?limit=1&cursor=not-base64",
+		"a short cursor":    "/api/entries?limit=1&cursor=" + "MDAw",
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := doJSON(t, h, http.MethodGet, target, nil)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("%s = %d, want 400: %s", name, rec.Code, rec.Body)
+			}
+		})
+	}
+
+	// Bad: the values that are not a filter at all.
+	for _, target := range []string{
+		"/api/entries?sort=oldest",
+		"/api/entries?deleted=maybe",
+		"/api/entries?work=" + strings.Repeat("w", 129),
+	} {
+		if rec := doJSON(t, h, http.MethodGet, target, nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", target, rec.Code)
+		}
+	}
+}
+
+// The settings row: the screen reads it, writes it, and the write is the whole object.
+func TestSettings(t *testing.T) {
+	h, _, _ := newREST(t)
+
+	var got struct {
+		Preread bool `json:"preread"`
+	}
+	initial := doJSON(t, h, http.MethodGet, "/api/settings", nil)
+	if initial.Code != http.StatusOK {
+		t.Fatalf("settings = %d: %s", initial.Code, initial.Body)
+	}
+	decode(t, initial, &got)
+	if !got.Preread {
+		t.Fatal("a fresh database has the pre-read off")
+	}
+
+	written := doJSON(t, h, http.MethodPut, "/api/settings", map[string]any{"preread": false})
+	if written.Code != http.StatusOK {
+		t.Fatalf("write = %d: %s", written.Code, written.Body)
+	}
+	decode(t, written, &got)
+	if got.Preread {
+		t.Fatal("the write did not turn the pre-read off")
+	}
+	again := doJSON(t, h, http.MethodGet, "/api/settings", nil)
+	decode(t, again, &got)
+	if got.Preread {
+		t.Fatal("the switch did not stick")
+	}
+
+	// Bad: an unknown field, a missing field, and a write without the origin check.
+	if rec := doJSON(t, h, http.MethodPut, "/api/settings", map[string]any{"preread": true, "other": 1}); rec.Code != http.StatusBadRequest {
+		t.Errorf("unknown field = %d, want 400", rec.Code)
+	}
+	if rec := doJSON(t, h, http.MethodPut, "/api/settings", map[string]any{}); rec.Code != http.StatusBadRequest {
+		t.Errorf("missing switch = %d, want 400", rec.Code)
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, "/api/settings",
+		strings.NewReader(`{"preread":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Host = "localhost:8893"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code == http.StatusOK {
+		t.Errorf("a hostile origin wrote the settings: %d", rec.Code)
+	}
+}

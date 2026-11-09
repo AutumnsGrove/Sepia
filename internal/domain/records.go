@@ -214,13 +214,58 @@ type SessionEvent struct {
 }
 
 // Cursor is an opaque position in a list. It is never an offset: a list that shifts under a reader must not repeat or
-// skip rows (docs/STANDARDS.md 4).
+// skip rows (docs/STANDARDS.md 4). Each list uses the keys its own order is built from, and the id always breaks the
+// tie.
 type Cursor struct {
-	// FinishedOn is the local date of the last row on the previous page, for the library.
+	// FinishedOn is the last row's local finish date on the newest-first library. It is empty when that row had no
+	// date, which is also where the undated tail of the list begins.
 	FinishedOn string
-	// ID is the last row's id, which breaks ties on the date.
+	// Rating and CreatedAt are the first two keys of the rating-sorted library. CreatedAt rather than FinishedOn,
+	// because a saved entry may have no finish date and a cursor comparison against null skips a row.
+	Rating    int
+	CreatedAt string
+	// DeletedAt is the first key of the Deleted list, newest deletion first.
+	DeletedAt string
+	// ID is the last row's id, which breaks ties on every list.
 	ID string
 }
 
 // Empty reports whether this is the first page.
-func (c Cursor) Empty() bool { return c.ID == "" && c.FinishedOn == "" }
+func (c Cursor) Empty() bool { return c.ID == "" }
+
+// LibrarySort is the order of a library page. Both orders are total, so a page can never repeat or skip a row.
+type LibrarySort string
+
+const (
+	// SortNewest is finished_on descending, then id: what she finished most recently, first.
+	SortNewest LibrarySort = "newest"
+	// SortRating is rating_q descending, then created_at and id. A saved entry may have no finish date, so the tie
+	// inside one rating is broken by when it was logged rather than by a column that can be null.
+	SortRating LibrarySort = "rating"
+)
+
+// LibraryQuery is one read of the library: the filters the API exposes, and the order it asks for. It lives here
+// rather than in the store so the server can name it without importing the database (docs/BUILD.md 4).
+type LibraryQuery struct {
+	// Medium is a provider's medium name, empty for every medium.
+	Medium string
+	// Favourite is nil when the list is not filtered by it, so "not set" and "only favourites" stay distinct.
+	Favourite *bool
+	// Work is the timeline of one work, empty for every work.
+	Work string
+	Sort LibrarySort
+	// Deleted switches the list from the library to the Deleted one, which holds only the soft-deleted rows.
+	Deleted bool
+}
+
+// ParseLibrarySort reads the API's sort value. An empty value is the default.
+func ParseLibrarySort(raw string) (LibrarySort, bool) {
+	switch LibrarySort(raw) {
+	case "", SortNewest:
+		return SortNewest, true
+	case SortRating:
+		return SortRating, true
+	default:
+		return "", false
+	}
+}

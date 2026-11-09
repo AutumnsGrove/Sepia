@@ -1003,20 +1003,58 @@ func (e *Engine) StartRevision(ctx context.Context, sessionID string, saved doma
 	return e.Draft(ctx, sessionID)
 }
 
+// The ways a saved entry can be opened as a draft. Revision edits it and keeps the version it replaced; new logs a
+// second entry on the same work with nothing filled in.
+const (
+	ReopenRevision = "revision"
+	ReopenNew      = "new"
+)
+
+// ReopenRequest is everything opening a saved entry can ask for: which entry, whether this is an edit or a second
+// entry on the same work, and whether to start from an older version.
+type ReopenRequest struct {
+	EntryID     string
+	ClientMsgID string
+	// Mode is ReopenRevision (empty means the same) or ReopenNew.
+	Mode string
+	// Revision restores that version as the draft. Only meaningful for an edit.
+	Revision int
+}
+
 // Reopen opens a draft revision of a saved entry: the path Edit on a saved card takes, with no new lookup. It is
 // the same working copy the revisit choice makes, so confirming keeps the previous version in the revisions table
 // (docs/PROTOCOL.md 5).
 func (e *Engine) Reopen(ctx context.Context, sessionID, entryID, clientMsgID string) (Draft, error) {
-	if entryID == "" {
+	return e.ReopenAs(ctx, sessionID, ReopenRequest{EntryID: entryID, ClientMsgID: clientMsgID})
+}
+
+// ReopenAs opens a saved entry as a draft in one of the three ways the entry page offers: Edit, Log again, and
+// Restore as draft from an older version. All three end in the ordinary card, so everything downstream, including
+// the confirm guard, is unchanged.
+func (e *Engine) ReopenAs(ctx context.Context, sessionID string, in ReopenRequest) (Draft, error) {
+	if in.EntryID == "" {
 		return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "That is not an entry Sepia knows."}
 	}
+	mode := in.Mode
+	if mode == "" {
+		mode = ReopenRevision
+	}
+	if mode != ReopenRevision && mode != ReopenNew {
+		return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "That is not a way to open an entry."}
+	}
+	if mode == ReopenNew && in.Revision > 0 {
+		return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "A second entry does not start from an old version."}
+	}
+	if in.Revision < 0 {
+		return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "That is not a version of an entry."}
+	}
 	// A retry after a lost ack is a duplicate, not a second card.
-	if clientMsgID != "" {
-		if _, err := e.store.ClientMessage(ctx, sessionID, clientMsgID); err == nil {
+	if in.ClientMsgID != "" {
+		if _, err := e.store.ClientMessage(ctx, sessionID, in.ClientMsgID); err == nil {
 			return Draft{}, store.ErrDuplicateClientMessage
 		}
 	}
-	saved, err := e.store.Entry(ctx, entryID)
+	saved, err := e.store.Entry(ctx, in.EntryID)
 	if err != nil {
 		// A missing entry is store.ErrNotFound, which the socket answers as not_found rather than as a failure.
 		return Draft{}, err
@@ -1024,13 +1062,30 @@ func (e *Engine) Reopen(ctx context.Context, sessionID, entryID, clientMsgID str
 	if saved.Status != domain.StatusSaved || saved.Deleted {
 		return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "That is not a saved entry."}
 	}
-	draft, err := e.StartRevision(ctx, sessionID, saved)
+
+	var draft Draft
+	switch {
+	case mode == ReopenNew:
+		// The work carries over and nothing else: a second review of the same thing is its own review.
+		draft, err = e.StartDraft(ctx, sessionID, domain.Entry{WorkID: saved.WorkID})
+	case in.Revision > 0:
+		snapshot, snapErr := e.store.RevisionAt(ctx, saved.ID, in.Revision)
+		if errors.Is(snapErr, store.ErrNotFound) {
+			return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "There is no such version of this entry."}
+		}
+		if snapErr != nil {
+			return Draft{}, snapErr
+		}
+		draft, err = e.StartRevision(ctx, sessionID, snapshot)
+	default:
+		draft, err = e.StartRevision(ctx, sessionID, saved)
+	}
 	if err != nil {
 		return Draft{}, err
 	}
-	if clientMsgID != "" {
+	if in.ClientMsgID != "" {
 		if err := e.store.RememberClient(ctx, domain.ClientMessage{
-			SessionID: sessionID, ClientMsgID: clientMsgID, Status: "accepted",
+			SessionID: sessionID, ClientMsgID: in.ClientMsgID, Status: "accepted",
 		}); err != nil && !IsDuplicate(err) {
 			return Draft{}, err
 		}

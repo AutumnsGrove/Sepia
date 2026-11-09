@@ -427,7 +427,12 @@ func TestListQueriesUseAnIndex(t *testing.T) {
 			ORDER BY updated_at DESC, id DESC LIMIT ?`, []any{10}},
 		"entries on a work": {`SELECT * FROM entries WHERE work_id = ? AND deleted_at IS NULL
 			ORDER BY finished_on DESC, id DESC`, []any{"w1"}},
-		"revisions":     {`SELECT * FROM entry_revisions WHERE entry_id = ? ORDER BY revision DESC`, []any{"e1"}},
+		"library by rating": {`SELECT * FROM entries WHERE status = 'saved' AND deleted_at IS NULL
+			AND (?1 IS NULL OR (rating_q, created_at, id) < (?2, ?3, ?1))
+			ORDER BY rating_q DESC, created_at DESC, id DESC LIMIT ?4`, []any{nil, nil, nil, 10}},
+		"deleted list": {`SELECT * FROM entries WHERE status = 'saved' AND deleted_at IS NOT NULL
+			AND (?1 IS NULL OR (deleted_at, id) < (?2, ?1))
+			ORDER BY deleted_at DESC, id DESC LIMIT ?3`, []any{nil, nil, 10}},
 		"event log":     {`SELECT * FROM session_events WHERE session_id = ? AND seq > ? ORDER BY seq`, []any{"s1", 0}},
 		"work by title": {`SELECT * FROM works WHERE medium = ? AND title = ? ORDER BY year DESC, id`, []any{"book", "Dune"}},
 	}

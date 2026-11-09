@@ -131,6 +131,12 @@ type SessionEvent struct {
 	CreatedAt   string `json:"created_at"`
 }
 
+type Setting struct {
+	Key       string `json:"key"`
+	Value     string `json:"value"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 type Tag struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`

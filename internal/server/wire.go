@@ -557,6 +557,9 @@ func wireEntryOf(view session.EntryView) wireEntry {
 		FinishedOn: entry.FinishedOn,
 		Season:     entry.Season, CreatedAt: instant(entry.CreatedAt), UpdatedAt: instant(entry.UpdatedAt),
 	}
+	if !entry.DeletedAt.IsZero() {
+		out.DeletedAt = instant(entry.DeletedAt)
+	}
 	for _, answer := range view.Answers {
 		out.Answers = append(out.Answers, wireAnswer{
 			QuestionID: answer.QuestionID, Category: answer.Category, Prompt: answer.Prompt,
