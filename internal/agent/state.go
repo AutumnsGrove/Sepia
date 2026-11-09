@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"text/template"
 
 	novaagent "github.com/AutumnsGrove/nova/agent"
@@ -54,6 +55,9 @@ type RunState struct {
 	StartedCard   bool
 	lookupRetries int
 	stopped       bool
+	// mu guards the turn's end state. Nova may call the TurnEnd hook and return from Run on different goroutines,
+	// so a plain field is a data race the detector finds under load.
+	mu sync.Mutex
 
 	Steps        int
 	MessageIndex int
@@ -63,6 +67,34 @@ type RunState struct {
 	Ended        string
 	// transcript is what nova produced this turn, kept so the session's own messages_json survives a restart.
 	transcript []message.Message
+}
+
+// setEnded records why the turn ended. It is the only writer of Ended.
+func (s *RunState) setEnded(reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Ended = reason
+}
+
+// ended reports why the turn ended, or an empty string while it is still running.
+func (s *RunState) ended() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Ended
+}
+
+// markStopped records that the step cap stopped the loop.
+func (s *RunState) markStopped() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stopped = true
+}
+
+// isStopped reports whether the loop was stopped by the step cap.
+func (s *RunState) isStopped() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stopped
 }
 
 // hint is the automatic note that precedes her message. It is data, framed as data, and never an instruction.
@@ -164,7 +196,7 @@ func (s *RunState) onMessage(m message.Message, _ *provider.Usage) error {
 //   - this turn started the card but the model never tried save_entry. A refused save counts as a try: a prose reply to a
 //     refusal is the model talking to her, not a stall.
 func (s *RunState) stallNudge() string {
-	if s.Ended != "done" || s.stopped {
+	if s.ended() != "done" || s.isStopped() {
 		return ""
 	}
 	if s.Chosen != nil && s.Draft == nil {
@@ -183,7 +215,7 @@ func (s *RunState) guardCall(_ context.Context, c novaagent.ToolCall) *novaagent
 	}
 	s.Steps++
 	if s.Steps > s.Agent.maxSteps {
-		s.stopped = true
+		s.markStopped()
 		return &novaagent.CallDecision{Block: true, Reason: "the step limit for this turn has been reached"}
 	}
 	if s.SaveCalled && c.Name != "search_library" {
@@ -211,7 +243,7 @@ func (s *RunState) checkInputBudget(_ context.Context, msgs []message.Message) (
 // endTurn stops the loop once the card is built and the model has had its one closing sentence. It also stops a
 // turn that hit the budget, with the reason already written.
 func (s *RunState) endTurn(_ context.Context, t novaagent.Turn) novaagent.TurnDecision {
-	if s.Ended == "budget" || s.stopped {
+	if s.ended() == "budget" || s.isStopped() {
 		return novaagent.TurnDecision{End: true}
 	}
 	if s.SaveCalled && len(t.Message.ToolCalls) == 0 {
