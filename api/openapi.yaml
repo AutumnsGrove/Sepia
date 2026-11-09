@@ -441,7 +441,12 @@ components:
         id: { type: string }
         kind: { $ref: "#/components/schemas/SessionKind" }
         state: { $ref: "#/components/schemas/SessionState" }
-        title: { type: string, maxLength: 300 }
+        title:
+          description: >-
+            What the session is about. An entry session carries the work it is about, which is the Drafts list's
+            row title, or nothing while no work has been chosen yet.
+          type: string
+          maxLength: 300
         entry_id: { type: [string, "null"] }
         draft_version: { type: [integer, "null"], minimum: 0 }
         waiting_reason:
@@ -568,7 +573,7 @@ components:
 
     Revision:
       type: object
-      required: [id, entry_id, revision, created_at]
+      required: [id, entry_id, revision, snapshot, created_at]
       properties:
         id: { type: string }
         entry_id: { type: string }

@@ -1,6 +1,76 @@
 <script lang="ts">
-  // S00 renders one honest page. The logging flow, the library and the entry card arrive in S10 to S12, and
-  // they are built against the mockups, not against this placeholder.
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { Layers, Library, Settings } from '@lucide/svelte';
+  import { ApiError, createClient, type Entry, type Session } from '../lib/api/client';
+  import HomeComposer from '../lib/components/HomeComposer.svelte';
+  import ListRow from '../lib/components/ListRow.svelte';
+  import Errbox from '../lib/components/Errbox.svelte';
+  import SkeletonRows from '../lib/components/SkeletonRows.svelte';
+  import TopBar from '../lib/components/TopBar.svelte';
+  import { stashFirstMessage } from '../lib/state/handoff';
+  import { draftsOf } from '../lib/state/lists';
+  import { ageText, countText, entryMeta, waitingText } from '../lib/state/reading';
+
+  /**
+   * Home: the launcher. Drafts that are waiting come first, then what she has read lately, and the composer sits where
+   * her thumb is. A first run is not an error state: it is an empty page that teaches by example.
+   */
+  const client = createClient();
+  const thisYear = new Date().getFullYear();
+  // The first-run examples are invented sentences, the first of them the one the dev world is scripted for, so the
+  // whole flow can be tried offline by tapping it.
+  const examples = [
+    'finished the lantern keeper last night, 4.5, the ending landed but it was too long',
+    'watched bramble hollow at the cinema, 5/5, the sound design carried it',
+    'just beat hollow deep, 4 stars, the boss fights were great but the story dragged',
+  ];
+
+  let drafts = $state<Session[]>([]);
+  let recent = $state<Entry[]>([]);
+  let loading = $state(true);
+  let problem = $state('');
+  let text = $state('');
+  let starting = $state(false);
+  const now = new Date();
+
+  const badge = $derived(drafts.length > 0 ? countText(drafts.length) : '');
+  const firstRun = $derived(
+    !loading && problem === '' && drafts.length === 0 && recent.length === 0,
+  );
+
+  async function load() {
+    loading = true;
+    problem = '';
+    try {
+      const [sessions, entries] = await Promise.all([
+        client.listSessions({ state: 'active', kind: 'entry', limit: 100 }),
+        client.listEntries({ limit: 4 }),
+      ]);
+      drafts = draftsOf(sessions.items);
+      recent = entries.items;
+    } catch (error) {
+      problem = error instanceof ApiError ? error.copy : 'Sepia could not read your library.';
+    } finally {
+      loading = false;
+    }
+  }
+
+  $effect(() => {
+    void load();
+  });
+
+  async function start() {
+    if (starting) return;
+    // The sentence travels in memory, never in the URL: her words do not go in a browser's history.
+    stashFirstMessage(text);
+    starting = true;
+    try {
+      await goto(resolve('/new'));
+    } finally {
+      starting = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -8,63 +78,104 @@
   <meta name="description" content="A private review journal for anything you finish." />
 </svelte:head>
 
-<main>
-  <div class="mark" aria-hidden="true"></div>
-  <h1>Sepia</h1>
-  <p class="lede">
-    A private journal for everything you finish. Films, TV, books, games, albums and more.
-  </p>
-  <p class="state">
-    The app is being built. This is the walking skeleton: it serves this page and answers a health
-    check.
-  </p>
-</main>
+<div class="screen">
+  <TopBar title="Sepia" wordmark>
+    {#snippet actions()}
+      <a
+        class="iconbtn"
+        href={resolve('/drafts')}
+        aria-label={drafts.length === 1 ? 'Drafts, 1 waiting' : `Drafts, ${drafts.length} waiting`}
+      >
+        <Layers size={21} aria-hidden="true" />
+        {#if badge}<span class="badge" aria-hidden="true">{badge}</span>{/if}
+      </a>
+      <a class="iconbtn" href={resolve('/library')} aria-label="Library">
+        <Library size={21} aria-hidden="true" />
+      </a>
+      <a class="iconbtn" href={resolve('/settings')} aria-label="Settings">
+        <Settings size={21} aria-hidden="true" />
+      </a>
+    {/snippet}
+  </TopBar>
+
+  <div class="scroll">
+    {#if problem}
+      <Errbox message={problem} retryable onretry={() => void load()} />
+    {:else if loading}
+      <p class="lbl"><span>Recent</span></p>
+      <SkeletonRows rows={4} label="Reading your library" />
+    {:else if firstRun}
+      <div class="zero">
+        <h2>Finished something?</h2>
+        <p>
+          Say what you thought, the way you would out loud. Sepia finds the details and asks a few
+          questions.
+        </p>
+        <div class="ex">
+          {#each examples as example (example)}
+            <button type="button" onclick={() => (text = example)}>{example}</button>
+          {/each}
+        </div>
+      </div>
+    {:else}
+      {#if drafts.length > 0}
+        <p class="lbl">
+          <span>Waiting for you</span>
+          <a class="more" href={resolve('/drafts')}>All drafts</a>
+        </p>
+        <ul class="list">
+          {#each drafts.slice(0, 3) as draft (draft.id)}
+            <ListRow
+              title={draft.title || 'Not identified yet'}
+              waiting={waitingText(draft.waiting_reason)}
+              age={ageText(draft.updated_at, now)}
+              onclick={() => void goto(resolve('/s/[id]', { id: draft.id }))}
+            />
+          {/each}
+        </ul>
+      {/if}
+
+      <p class="lbl">
+        <span>Recent</span>
+        <a class="more" href={resolve('/library')}>Library</a>
+      </p>
+      <ul class="list">
+        {#each recent as entry (entry.id)}
+          <ListRow
+            title={entry.work.title}
+            meta={entryMeta(entry, thisYear)}
+            quarters={entry.rating_q}
+            coverUrl={entry.work.cover_url}
+            onclick={() => void goto(resolve('/entry/[id]', { id: entry.id }))}
+          />
+        {/each}
+      </ul>
+    {/if}
+  </div>
+
+  <HomeComposer bind:value={text} onsend={() => void start()} busy={starting} />
+</div>
 
 <style>
-  main {
-    min-height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 0.75rem;
-    max-width: 34rem;
-    padding: 2rem max(1.25rem, env(safe-area-inset-left)) 4rem;
-    margin: 0 auto;
+  .ex {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    width: 100%;
   }
-
-  /* One flat accent bar, a stroke of ink rather than an illustration: the name is the ink, not a
-     filter, so the mark stays a single shape. */
-  .mark {
-    width: 2.5rem;
-    height: 0.25rem;
-    border-radius: var(--r-sm);
-    background: var(--accent);
-    margin-bottom: 1rem;
-  }
-
-  h1 {
-    font-family: 'Fraunces', Georgia, serif;
-    font-weight: 400;
-    font-size: clamp(2.5rem, 12vw, 3.5rem);
-    line-height: 1.05;
-    letter-spacing: -0.01em;
-    margin: 0;
-  }
-
-  .lede {
-    font-size: 1.125rem;
-    line-height: 1.6;
+  .ex button {
+    text-align: left;
+    border: 1px solid var(--line);
+    background: var(--panel);
     color: var(--text-2);
-    margin: 0;
-    max-width: 28ch;
+    border-radius: var(--r-md);
+    padding: 0.7rem 0.85rem;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    min-height: 44px;
   }
-
-  .state {
-    margin: 1.5rem 0 0;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--line);
-    color: var(--text-3);
-    font-size: 0.9375rem;
-    max-width: 34ch;
+  .ex button:hover {
+    border-color: var(--accent);
+    color: var(--text);
   }
 </style>

@@ -96,12 +96,36 @@ describe('the API client', () => {
     expect((error as ApiError).code).toBe('internal');
   });
 
-  it('sends the base version with a delete and accepts an empty reply', async () => {
+  it('deletes and restores without a body, and accepts an empty reply', async () => {
     const { calls, fetch } = fakeFetch(204, undefined);
     const client = createClient({ fetch });
 
-    await expect(client.deleteEntry('e1', 3)).resolves.toBeUndefined();
-    expect(calls[0].init.body).toBe('{"base_version":3}');
+    await expect(client.deleteEntry('e1')).resolves.toBeUndefined();
+    expect(calls[0].init.body).toBeUndefined();
     expect(calls[0].url).toBe('/api/entries/e1/delete');
+
+    await expect(client.restoreEntry('e1')).resolves.toBeUndefined();
+    expect(calls[1].url).toBe('/api/entries/e1/restore');
+  });
+
+  it('reads the library with the filters the reading screens use', async () => {
+    const { calls, fetch } = fakeFetch(200, { items: [], next_cursor: null });
+    const client = createClient({ fetch });
+
+    await client.listEntries({ sort: 'rating', work: 'w1', deleted: true, limit: 50 });
+
+    expect(calls[0].url).toBe('/api/entries?sort=rating&work=w1&deleted=true&limit=50');
+  });
+
+  it('reads and writes the settings object whole', async () => {
+    const { calls, fetch } = fakeFetch(200, { preread: false });
+    const client = createClient({ fetch });
+
+    await expect(client.getSettings()).resolves.toEqual({ preread: false });
+    expect(calls[0].url).toBe('/api/settings');
+
+    await client.putSettings({ preread: true });
+    expect(calls[1].init.method).toBe('PUT');
+    expect(calls[1].init.body).toBe('{"preread":true}');
   });
 });

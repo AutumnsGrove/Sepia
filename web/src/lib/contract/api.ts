@@ -389,6 +389,7 @@ export interface components {
             id: string;
             kind: components["schemas"]["SessionKind"];
             state: components["schemas"]["SessionState"];
+            /** @description What the session is about. An entry session carries the work it is about, which is the Drafts list's row title, or nothing while no work has been chosen yet. */
             title?: string;
             entry_id?: string | null;
             draft_version?: number | null;
@@ -491,7 +492,7 @@ export interface components {
             id: string;
             entry_id: string;
             revision: number;
-            snapshot?: components["schemas"]["Entry"];
+            snapshot: components["schemas"]["Entry"];
             /** Format: date-time */
             created_at: string;
         };
