@@ -398,3 +398,62 @@ func TestARevisionSurvivesARestartBecauseTheSessionKnowsIt(t *testing.T) {
 		t.Errorf("revisions = %+v, want the first version kept", revisions)
 	}
 }
+
+// A revision of an extracted review has no messages of its own. Its body is the one she proved when she first
+// saved, so confirm checks it against the saved body instead of refusing a card she cannot confirm at all.
+func TestARevisionOfAnExtractedBodyCanBeConfirmed(t *testing.T) {
+	e, db := newEngine(t)
+	ctx := context.Background()
+	if err := db.SaveWork(ctx, domain.Work{ID: "w1", Medium: "book", Title: "The Lantern Keeper"}); err != nil {
+		t.Fatal(err)
+	}
+	source := "I finished the lantern keeper last night and the ending landed but it was too long"
+	first := draftFor(t, e, db, "w1")
+	if _, err := e.AppendUserMessage(ctx, first.ID, source, "m1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.SetExtractedBody(ctx, first.ID, 0, source,
+		[]string{"the ending landed but it was too long"}, "the ending landed", "m2"); err != nil {
+		t.Fatalf("SetExtractedBody: %v", err)
+	}
+	draft, err := e.Draft(ctx, first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err = e.EditDraft(ctx, first.ID, Edit{BaseVersion: draft.Version, Set: patch(map[string]any{"rating": 18})})
+	if err != nil {
+		t.Fatalf("EditDraft: %v", err)
+	}
+	saved, _, _, err := e.Confirm(ctx, first.ID, ConfirmRequest{
+		BaseVersion: draft.Version, SourceText: source,
+	})
+	if err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	if saved.BodyOrigin != domain.BodyExtracted {
+		t.Fatalf("saved body origin = %s, want extracted", saved.BodyOrigin)
+	}
+
+	next, err := e.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, err := e.Reopen(ctx, next.ID, saved.ID, "r1")
+	if err != nil {
+		t.Fatalf("Reopen: %v", err)
+	}
+	// No source text: the revision session has no messages, and the body came from the saved entry.
+	if target, targetErr := db.RevisionTarget(ctx, next.ID); targetErr != nil || target != saved.ID {
+		t.Fatalf("target = %q, %v, want %q", target, targetErr, saved.ID)
+	}
+	if revision.Entry.BodyOrigin != domain.BodyExtracted {
+		t.Fatalf("revision body origin = %s, want extracted", revision.Entry.BodyOrigin)
+	}
+	entry, _, _, err := e.Confirm(ctx, next.ID, ConfirmRequest{BaseVersion: revision.Version})
+	if err != nil {
+		t.Fatalf("Confirm revision: %v", err)
+	}
+	if entry.ID != saved.ID || entry.Body != saved.Body {
+		t.Errorf("entry = %+v, want the saved entry and body", entry)
+	}
+}

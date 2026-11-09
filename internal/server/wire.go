@@ -211,7 +211,8 @@ func (s *Server) wireCardOf(card session.Card) wireCard {
 	out.Unverified = unverifiedOf(card.Sources)
 	out.Fidelity = fidelityOfCard(card.Fidelity)
 	out.Why = whyOf(card)
-	out.CanConfirm, out.Missing = domain.CanConfirm(entry, card.SourceText)
+	out.CanConfirm = card.Confirmable
+	out.Missing = card.Missing
 	if out.Missing == nil {
 		out.Missing = []string{}
 	}

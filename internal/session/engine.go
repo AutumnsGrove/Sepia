@@ -566,9 +566,6 @@ func (e *Engine) Confirm(ctx context.Context, sessionID string, in ConfirmReques
 	if err != nil {
 		return domain.Entry{}, 0, nil, err
 	}
-	if guardErr := domain.ValidateForSave(draft.Entry, in.SourceText); guardErr != nil {
-		return domain.Entry{}, 0, nil, guardErr
-	}
 	// The hub remembers the target while the process is up. After a restart it is the session's own record that
 	// says what this card revises, so a revision cannot quietly become a second entry.
 	revises := in.Revises
@@ -578,6 +575,29 @@ func (e *Engine) Confirm(ctx context.Context, sessionID string, in ConfirmReques
 			return domain.Entry{}, 0, nil, readErr
 		}
 		revises = stored
+	}
+	// A revision of a saved entry has no messages of its own. An unchanged extracted body is the one she already
+	// proved when she first saved it, so it is checked against the saved body rather than against nothing. The
+	// stored spans stay the original ones; only the proof is rewritten.
+	proven := false
+	if revises != "" && in.SourceText == "" && draft.Entry.BodyOrigin == domain.BodyExtracted {
+		saved, readErr := e.store.Entry(ctx, revises)
+		if readErr != nil {
+			return domain.Entry{}, 0, nil, readErr
+		}
+		if saved.Body == draft.Entry.Body {
+			proof := draft.Entry
+			proof.BodySpans = []domain.Span{{Start: 0, End: len(saved.Body), Text: saved.Body}}
+			if guardErr := domain.ValidateForSave(proof, saved.Body); guardErr != nil {
+				return domain.Entry{}, 0, nil, guardErr
+			}
+			proven = true
+		}
+	}
+	if !proven {
+		if guardErr := domain.ValidateForSave(draft.Entry, in.SourceText); guardErr != nil {
+			return domain.Entry{}, 0, nil, guardErr
+		}
 	}
 	entry, version, events, err := e.store.ConfirmDraft(ctx, store.Confirm{
 		SessionID: sessionID, BaseVersion: in.BaseVersion, Entry: draft.Entry, ClientMsgID: in.ClientMsgID,

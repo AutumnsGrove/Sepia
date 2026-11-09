@@ -157,6 +157,14 @@ test.describe('logging a review', () => {
     await expect(banner).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
     await expect(page.getByText('The card changed while you were editing.')).toHaveCount(0);
+
+    // Saving the revision keeps the query in the URL. A refresh of the saved page must not ask to reopen a
+    // finished session and leave a refusal above the card.
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('Saved to your library')).toBeVisible({ timeout: 20_000 });
+    await page.reload();
+    await expect(page.getByText('Saved to your library')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('alert')).toHaveCount(0);
   });
 
   test('keeps a message typed offline and sends it when the connection returns', async ({
