@@ -145,6 +145,22 @@ func TestLocateLookalikeStoresTheOriginal(t *testing.T) {
 	}
 }
 
+// The spacing she typed is not what the quote has to look like: a leading space, doubled spaces and a blank line
+// must still find her words, and the span must hold the source's own bytes. This pins the whitespace-collapsing
+// branch of the offset map, which until S13 was reached only by whatever string testing/quick happened to generate
+// that run, so the package's statement coverage moved with the clock (94.8% or 95.0%) and tripped the coverage job's
+// floor at random.
+func TestLocateMatchesAcrossIrregularWhitespace(t *testing.T) {
+	source := "  i finally read Dune\n\nand   it was dense"
+	got := Locate(source, []string{"i finally read dune and it was dense"})
+	if len(got.Spans) != 1 {
+		t.Fatalf("spans = %+v, want the passage found across the spacing", got.Spans)
+	}
+	if want := "i finally read Dune\n\nand   it was dense"; got.Spans[0].Text != want {
+		t.Errorf("stored %q, want the source's own bytes %q", got.Spans[0].Text, want)
+	}
+}
+
 // Bad: a short quote may not be matched approximately, because one edit turns one word into another.
 func TestLocateShortQuotesNeedAnExactMatch(t *testing.T) {
 	source := "the ending was done well enough"
@@ -349,5 +365,19 @@ func TestComplementIsTheRestOfTheSource(t *testing.T) {
 	}
 	if len(Complement(source, []Span{{Start: -1, End: 2, Text: "he"}})) != 0 {
 		t.Error("a damaged span should yield no left-out text")
+	}
+}
+
+// Sad: a damaged or oversized source yields no left-out text rather than a panic or a scan of a hostile size.
+func TestComplementRefusesABadSource(t *testing.T) {
+	if got := Complement("", []Span{{Start: 0, End: 1, Text: "x"}}); got != nil {
+		t.Errorf("Complement of an empty source = %+v, want nil", got)
+	}
+	huge := strings.Repeat("a", MaxSpanSource+1)
+	if got := Complement(huge, nil); got != nil {
+		t.Errorf("Complement of an oversized source returned %d segments, want nil", len(got))
+	}
+	if got := Complement("ok", []Span{{Start: 3, End: 9, Text: "past the end"}}); got != nil {
+		t.Errorf("Complement with a span past the end = %+v, want nil", got)
 	}
 }

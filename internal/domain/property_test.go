@@ -1,10 +1,22 @@
 package domain
 
 import (
+	"math/rand"
 	"strings"
 	"testing"
 	"testing/quick"
 )
+
+// propertyConfig is one property test's configuration.
+//
+// The random source is seeded, and deliberately so. testing/quick seeds itself from the clock when Rand is nil,
+// which costs twice: a failing property cannot be reproduced from the log, and the statements the suite reaches
+// move between runs, so statement coverage is not a property of the commit. At S13 that showed up as
+// internal/domain reading 94.8% or 95.0% at random against a 95% floor. Random exploration is the nightly fuzz
+// targets' job, where a crasher lands in testdata; this suite's job is to be the same test every time.
+func propertyConfig(seed int64) *quick.Config {
+	return &quick.Config{MaxCount: 300, Rand: rand.New(rand.NewSource(seed))}
+}
 
 // The properties that must hold for every input, not just the ones someone thought of. These are the assertions
 // that would catch a clever optimisation breaking invariant 1.
@@ -22,7 +34,7 @@ func TestPropertySpansAreTrueSubstrings(t *testing.T) {
 		}
 		return true
 	}
-	if err := quick.Check(f, &quick.Config{MaxCount: 300}); err != nil {
+	if err := quick.Check(f, propertyConfig(1)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -37,7 +49,7 @@ func TestPropertySpansAreOrderedAndDisjoint(t *testing.T) {
 		}
 		return true
 	}
-	if err := quick.Check(f, &quick.Config{MaxCount: 300}); err != nil {
+	if err := quick.Check(f, propertyConfig(2)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -50,7 +62,7 @@ func TestPropertyComposeIsASubsequence(t *testing.T) {
 		body := strings.ReplaceAll(Compose(source, got.Spans), "\n", "")
 		return isSubsequence(body, source)
 	}
-	if err := quick.Check(f, &quick.Config{MaxCount: 300}); err != nil {
+	if err := quick.Check(f, propertyConfig(3)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -68,7 +80,7 @@ func TestPropertySpansAreContained(t *testing.T) {
 		}
 		return true
 	}
-	if err := quick.Check(f, &quick.Config{MaxCount: 300}); err != nil {
+	if err := quick.Check(f, propertyConfig(4)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -105,7 +117,7 @@ func TestPropertyLeftOutAndKeptPartition(t *testing.T) {
 		}
 		return true
 	}
-	if err := quick.Check(f, &quick.Config{MaxCount: 300}); err != nil {
+	if err := quick.Check(f, propertyConfig(5)); err != nil {
 		t.Fatal(err)
 	}
 }
