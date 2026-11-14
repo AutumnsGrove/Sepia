@@ -27,6 +27,15 @@ proxies 8891, 8892, 8895, 8896 and 8899 and has no line for 8893 yet. Four watch
 waiting: `warbler-update.path`, `ivy-update.path`, `polaris-update.path`, `pixelsort-update.path`. `~/Sepia`
 did not exist; `~/Sepia/.env` was created for the keys (see Decisions).
 
+**The house pattern, as it really is** (`docker ps` on 2026-11-14). Every app there is a container, and each
+compose file sits at its repository root, so `docker compose` in the project folder is the whole invocation:
+**Polaris** `127.0.0.1:8899->8899` plus a `host.docker.internal:host-gateway` entry so it can reach its searxng,
+**Warbler** `127.0.0.1:8892->8080` with `read_only`, `cap_drop: [ALL]`, `no-new-privileges` and `tmpfs: /tmp`,
+**Pixelsort** `127.0.0.1:8895->8895`, **Ivy** `0.0.0.0:8418` where the host-name check is the guard, and
+**searxng** and **vaultwarden** on every interface. **None of them uses host networking.** A `polaris.service`
+unit exists but is `inactive` and `disabled`: Polaris is a container now and the unit is a leftover. What that
+implies for this slice is in Decisions.
+
 ## Decisions (answered 2026-11-14, before starting)
 
 - **Host networking.** `network_mode: host`, not a published loopback port. The container's `127.0.0.1` is the
@@ -35,6 +44,20 @@ did not exist; `~/Sepia/.env` was created for the keys (see Decisions).
   can reach Polaris on `127.0.0.1:8899`, which closes `PLAN.md` open question 3 without a second decision. Cost
   accepted: no port mapping and no per-container health isolation, it only behaves on Linux, and `sepia-dev`
   stays the macOS story.
+  - **This is a deliberate departure from every sibling, and both alternatives were worse.** Three of them
+    publish on loopback, which needs the process to bind `0.0.0.0` *inside* its own namespace, so `config.Load`
+    would need an exception to the rule in `STANDARDS.md` 6 that it enforces today, and reaching Polaris would
+    need the `host-gateway` line Polaris itself carries. Ivy publishes on every interface and leans on the
+    host-name check, which is the guard the loopback rule exists so as not to need. Host networking keeps the
+    rule true in the code rather than in a YAML file, and is the only shape that makes the Polaris call work
+    with no alias. The cost: Meridian and the health-check script see no published ports, so both reach Sepia
+    with a plain `curl http://localhost:8893/healthz`, as they already do for every other app.
+- **The compose file sits at the repository root** (`docker-compose.yml`), not in `compose/`, because every
+  sibling does it that way and because `docker compose` resolves the project directory from the file's folder:
+  anywhere else turns a mount of `./data` into `./compose/data`, and Meridian's compose targets run
+  `docker compose` in the project folder. `compose/` keeps the watcher and the systemd units, which is what
+  `BUILD.md` 4 means by "docker-compose.yml, the host watcher, systemd units"; that layout line is amended in
+  this commit.
 - **The watcher fast-forwards the checkout** in the same run as the image swap, as Polaris does, so `compose/`
   and any config the new image needs land with it rather than a release later.
 - **The ruleset stays on direct pushes.** The PR-required phase S00 planned for this slice is **declined**:
