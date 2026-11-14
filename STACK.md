@@ -79,5 +79,5 @@ runs as a separate process in CI and on the operator's machine only. If that eve
 | Image | Pinned by | Why |
 |---|---|---|
 | `node:26-alpine` | tag (S13 pins a digest) | The frontend build stage. Node 25 and later dropped `corepack`, so pnpm is installed at an exact version instead |
-| `golang:1.27-trixie` | tag (S13 pins a digest) | Builds the Go stage for the target architecture with `CGO_ENABLED=0` |
+| `golang:1.27.4-trixie` | tag (S13 pins a digest) | Builds the Go stage for the target architecture with `CGO_ENABLED=0`. The patch is exact because GO-2026-6859 in `net/http` is fixed only from 1.27.4, and a floating minor could build a vulnerable binary |
 | `gcr.io/distroless/static-debian12:nonroot` | tag (S13 pins a digest) | The run stage: no shell, no package manager, non-root, and nothing to exploit |
