@@ -3,7 +3,7 @@
 The settings that are not in the code, because GitHub keeps them, and the one thing S00 cannot do for me. The
 rule they implement is in [`CI.md`](CI.md) 4.6 and the reasoning is in [`BUILD.md`](BUILD.md) 5.
 
-## Now: S00 to S12, direct pushes to `main`
+## Now, and after S13: direct pushes to `main`
 
 A single-operator repository pushing straight to `main` cannot also require a pull request, so the guard rails
 move onto the push. Apply these once:
@@ -14,10 +14,10 @@ move onto the push. Apply these once:
   - **Require linear history**: on.
   - **Require status checks to pass before merging**: on, and add the required checks below. Because direct
     pushes are allowed, the checks are reported on the push itself; a red run is visible within the run.
-  - **Require a pull request**: **off**, for now.
+  - **Require a pull request**: **off**, now and after S13.
 - **Required status checks:** `go`, `nocgo`, `coverage`, `drift`, `web`, `e2e`, `guard`, `deps`, `codeql`. `deps` only
-  runs on pull requests, so it is required only once pull requests are required (S13); until then it is listed
-  but not enforced.
+  runs on pull requests, so it is listed but not enforced; it is advisory for the pull requests Autumn opens by
+  preference.
 - **Secret scanning** and **push protection**: on. The repo is public and holds no keys, and push protection
   is what stops the first one being added by accident.
 - **Dependabot alerts** and **security updates**: on.
@@ -28,14 +28,12 @@ move onto the push. Apply these once:
   the only secrets that will ever exist, and they are never triggered by a pull request
   ([`CI.md`](CI.md) 3).
 
-## From S13: pull requests
+## From S13: no change
 
-At deploy and update, flip one switch and one addition:
-
-- **Require a pull request before merging**: on, with **1** approving review and "dismiss stale approvals".
-- Add `deps` to the required checks, and keep every other check unchanged.
-
-Nothing else about the workflow changes, so the change is small and reversible.
+The phase this file used to describe (pull requests required, one approving review, `deps` enforced) was
+**declined on 2026-11-14**. Autumn pushes to `main` occasionally and mostly works through pull requests by
+preference, so requiring a review on a single-operator repository adds ceremony and no reviewer. The settings
+above stay exactly as they are, including `deps` as advisory. Nothing here changes at deploy and update.
 
 ## Never
 

@@ -849,3 +849,43 @@ nothing stores them.
 **Live checks left for Autumn.** The Linux baselines for the fourteen reading states and the new home screen were
 not made here. Run the `baselines` workflow once and commit its artifact, as S11 did, before the end-to-end job is
 green.
+
+## 2026-11-14, before S13: the flaky property suite, the Go advisory and the missing baselines
+
+**Built.** Nothing. Three defects were fixed on `main`, which had been red on every push for three days and on the
+nightly for four, with a second failure waiting behind the first.
+
+**What is true now.** `internal/domain`'s statement coverage is 95.9% and the same number every run, so the coverage
+job passes on merit rather than on luck. `go.mod` requires Go 1.27.4 and `govulncheck` is clean; the image stage
+builds from `golang:1.27.4-trixie` so a rebuilt image cannot pick the vulnerability back up. The Linux screenshot
+baselines for S12's fourteen reading states and the home screen are made by the `baselines` workflow and committed,
+which is what the end-to-end job has been waiting for.
+
+**Learned, for the next agent.**
+
+- **`testing/quick` seeds itself from the clock when its `Config` carries no `Rand`.** Every run of
+  `internal/domain` therefore fed `Locate` a different random source, which cost twice at once: a failing property
+  could not be reproduced from the log, and the statements the suite reached moved between runs, so the package read
+  94.8% or 95.0% at random against a 95% floor. The properties now take a seeded config. Random exploration is the
+  nightly fuzz targets' job, where a crasher lands in `testdata`; a property suite's job is to be the same test
+  every time. Any future `quick.Check` in this repo takes `propertyConfig(n)`.
+- **The same flake was hiding an untested branch, not just a red job.** The whitespace branch of the offset map in
+  `newNormalised` was reached only by whatever string `quick` happened to generate; it now has a written case, and
+  `ParseLibrarySort`, `Cursor.Empty`, `Interaction.Open` and `Complement`'s damaged-source guard have tests they
+  never had. A package at 94.96% prints `95.0%`; `covercheck` compares statements, so a rounded display is not the
+  number that passes.
+- **`GOTOOLCHAIN: local` makes `go.mod`'s directive the whole toolchain pin.** CI installs exactly what `go.mod`
+  asks for, so a stdlib advisory is fixed by that one line and by nothing else. The `Dockerfile`'s floating
+  `golang:1.27-trixie` was a separate hole: a rebuild could pick a vulnerable patch, so it moved to
+  `golang:1.27.4-trixie`. Reproducing the failure first took `GOTOOLCHAIN=go1.27.3 govulncheck ./...`, which named
+  `net/http@go1.27.3` and exited 3, against a local toolchain of 1.27.4 that reported nothing.
+- **A baseline that has never been made is not a green test.** S12's note said the Linux baselines were missing;
+  the end-to-end job failed all twenty-two comparisons for exactly that reason and no other. Only the `baselines`
+  workflow makes them, deliberately, because a pixel baseline is a claim about the machine that compares against it.
+
+**Pending, not in a slice.** The pi-review workflow is committed and its app has not been installed on the
+repository yet. S01 is still `planned`: its model, provider and Polaris questions were answered inside S08's live
+runs, but Polaris's ask path stays unconfirmed and Phase 0's gate was never formally closed.
+
+**Left for Autumn.** Paste the two keys into `~/Sepia/.env` on the potato (mode 0600, staged empty). Rotation is
+moot: the G4 temporary keys expired.
