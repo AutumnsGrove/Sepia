@@ -124,7 +124,8 @@ sepia/
     config/              strict config loading
   config/                shipped defaults: decisions/{wording,policy}.yaml, questions/*.yaml
   web/                   SvelteKit (Svelte 5), adapter-static, embedded into the binary
-  compose/               docker-compose.yml, the host watcher, systemd units
+  docker-compose.yml      at the root, so `docker compose` in the project folder is the whole invocation
+  compose/                the host update watcher and its systemd units
   docs/  mockups/  scripts/  spikes/
 ```
 
