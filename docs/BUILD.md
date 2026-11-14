@@ -150,12 +150,15 @@ package imports nova's `agent`, `mode`, `session`, `config`, `tui` or `bundled` 
 6. Update the slice's status in `slices/README.md` and add a line to [`BUILD-LOG.md`](BUILD-LOG.md).
 7. If you hit a gate or a trigger, **stop** (section 7).
 
-Branching (settled at S00, 2026-10-31): **commits go straight to `main` until S13.** The ruleset on `main`
-forbids force-pushes and branch deletion but allows direct pushes, and **every required check runs on each
-push**, so a red `main` is visible within the run, not after a merge. At S13 the ruleset flips to
-PR-required and each slice becomes a branch and a pull request. [`../docs/CI.md`](CI.md) 4.6 holds the exact
-settings for both phases. Nothing else about the workflow changes; a slice is still one coherent commit
-series with its docs updated in the same commit.
+Branching (settled at S00, 2026-10-31; **amended at S13, 2026-11-14**): **direct pushes to `main` stay
+allowed.** The ruleset on `main` forbids force-pushes and branch deletion and **every required check runs on
+each push**, so a red `main` is visible within the run, not after a merge. A slice may land straight on `main`
+or through a pull request; **a pull request is the preference** for anything that touches deploy, the database
+or the contract, and Autumn merges in the GitHub UI. The PR-required phase that S00 planned to switch on at
+S13 was declined: a single operator who pushes to `main` sometimes would be reviewing their own work, and the
+guards that matter are already on the push. [`../docs/CI.md`](CI.md) 4.6 and
+[`REPO-SETTINGS.md`](REPO-SETTINGS.md) hold the settings actually applied. Nothing else about the workflow
+changes; a slice is still one coherent commit series with its docs updated in the same commit.
 
 ## 6. Escalation gates
 

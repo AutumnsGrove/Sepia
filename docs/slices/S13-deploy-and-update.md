@@ -18,6 +18,39 @@ S09 (a working service) and S12 (the Settings shell). S00 supplies the CI that b
 `compose/watcher/update.sh`, Warbler's `update/view.ts` and Ivy's `updateFlow.ts` are the references. The
 mockups are page 05.
 
+**The board, checked 2026-11-14** (`ssh potato-remote`): Armbian 26.2.1 trixie, aarch64, Docker 29.6.1,
+Compose v5.3.1, autumn in the `docker` group. 233 G of disk with 195 G free. **1.9 GiB of RAM with about
+760 MiB available and 557 MiB of the 958 MiB swap already in use**, which is the tightest resource on it and
+the reason the board never builds the image. Port 8893 is free (8891 Meridian, 8892 Warbler, 8895, 8896
+Outpost, 8899 Polaris, 8890 on every interface; 8894, 8897 and 8898 also free). `tailscale serve` already
+proxies 8891, 8892, 8895, 8896 and 8899 and has no line for 8893 yet. Four watchers are installed and
+waiting: `warbler-update.path`, `ivy-update.path`, `polaris-update.path`, `pixelsort-update.path`. `~/Sepia`
+did not exist; `~/Sepia/.env` was created for the keys (see Decisions).
+
+## Decisions (answered 2026-11-14, before starting)
+
+- **Host networking.** `network_mode: host`, not a published loopback port. The container's `127.0.0.1` is the
+  potato's, so the loopback-only rule in `config.Load` stays literally true with no exception in the code, the
+  host's `tailscale serve` and the watcher's health check reach it the same way as every other app, and Sepia
+  can reach Polaris on `127.0.0.1:8899`, which closes `PLAN.md` open question 3 without a second decision. Cost
+  accepted: no port mapping and no per-container health isolation, it only behaves on Linux, and `sepia-dev`
+  stays the macOS story.
+- **The watcher fast-forwards the checkout** in the same run as the image swap, as Polaris does, so `compose/`
+  and any config the new image needs land with it rather than a release later.
+- **The ruleset stays on direct pushes.** The PR-required phase S00 planned for this slice is **declined**:
+  Autumn pushes to `main` occasionally and mostly works through pull requests by preference, so forcing a
+  review on a single-operator repository buys ceremony and no reviewer. The guards that matter (no force-push,
+  no deletion, every required check on every push) are already in place. `BUILD.md` 5, `CI.md` 4.6 and
+  `REPO-SETTINGS.md` are amended in this commit rather than left describing a phase that will not happen.
+- **Secrets.** The G4 temporary keys were never rotated and have now expired. `~/Sepia/.env` is staged on the
+  potato with mode 0600 and owner `autumn:autumn`, holding `SEPIA_IMAGE`, `SEPIA_UID`, `SEPIA_GID` and two
+  empty key lines. **Autumn pastes the values; no agent reads them.** The doctor command in S13.6 checks only
+  presence, mode and owner, and never echoes a value.
+- **G5 is demonstrated on the potato, not locally.** A second compose project, `~/Sepia-scratch`, on port
+  8897 (verified free) with its own `sepia-scratch-update.path` and a deliberately broken image. A local Docker
+  run would prove the script's logic; the scratch project proves the units, the Docker on that board and the
+  rollback under the real systemd path unit.
+
 ## Settled
 
 - The container never touches Docker; the watcher is a host systemd path unit (`sepia-update.path`) reacting to a
@@ -62,20 +95,8 @@ scratch container, and the secrets plan.
 
 ## Open questions
 
-- **Host networking or a published port?** (opened by S00). The service refuses any bind that is not loopback,
-  which is the rule in `STANDARDS.md` 6 and is enforced in `config.Load`; the container proved it by refusing
-  `SEPIA_ADDR=0.0.0.0:8893` and exiting 1. That leaves two coherent shapes:
-  - **Host networking** (`network_mode: host`): the container's `127.0.0.1` is the potato's, so the loopback
-    rule stays literally true, a compose mistake cannot publish the port, and the Sepia container can reach
-    Polaris on `127.0.0.1:8899` directly, which closes `PLAN.md` open question 3. Cost: no port mapping, no
-    per-container health isolation, and it only behaves on Linux, so `sepia-dev` stays the macOS story.
-  - **Published loopback port** (`127.0.0.1:8893:8893`, the Warbler pattern): the process must bind all
-    interfaces *inside* its own namespace, so the loopback-only rule in `config.Load` needs an explicit,
-    narrowly named exception. The safety then rests on the compose line and the Host check.
-  *Recommended: host networking*, because it keeps the rule true in the code rather than in a YAML file. This
-  needs Autumn's decision before S13.1.
-- Whether the watcher also fast-forwards the checkout as Polaris's does (proposed: yes, so config templates land
-  with the image).
+None. The two that were open (host networking or a published port, and whether the watcher fast-forwards the
+checkout) were answered on 2026-11-14 and are recorded under Decisions above.
 
 ## Done when
 

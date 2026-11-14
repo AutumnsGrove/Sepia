@@ -93,9 +93,10 @@ pulls the image and compiles nothing. This is what the update flow ([`UPDATE.md`
    pushing straight to `main` cannot also require a pull request:
    - **S00 to S12 (now):** direct pushes allowed; **force-push and deletion blocked**; required checks run on
      `push` as well as `pull_request`, so `main` is never ahead of a green run for long; linear history.
-   - **From S13 (deploy and update):** pull requests required, the required checks below plus one approving
-     review, no direct pushes. This is the phase [`../docs/BUILD.md`](../docs/BUILD.md) 5 describes as the
-     default.
+   - **From S13 (deploy and update): declined on 2026-11-14.** The PR-required phase is not switched on. The
+     single-operator argument against requiring a pull request never expired; Autumn works through pull requests
+     by preference and pushes to `main` occasionally, so the settings above stay as they are. `deps` runs on
+     pull requests and is advisory, and becomes required only if a review phase is ever turned on.
    The switch is a repository setting, not a code change, and it is listed on the S13 checklist.
 7. **Logs are public.** Tests use **synthetic reviews and invented titles only**. A real review of yours must
    never appear in a test, a fixture or a CI log.
@@ -105,8 +106,8 @@ pulls the image and compiles nothing. This is what the update flow ([`UPDATE.md`
 ## 5. Definition of done for CI
 
 - A failing required check on `main` is visible in the run for that push, and a force-push or branch deletion
-  is impossible in either phase.
-- After S13, a pull request cannot merge with a failing required check.
+  is impossible. There is no review phase; a pull request is the preferred route for deploy, database and
+  contract changes, not a requirement.
 - A brand-new fuzz target without a seed corpus fails `guard`.
 - `govulncheck` fails the build on a reachable vulnerability, and the nightly run catches advisories
   published after a merge.
