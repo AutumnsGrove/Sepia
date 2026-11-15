@@ -3,7 +3,7 @@
 //	sepia serve     listen on 127.0.0.1:8893 and serve the health check and the embedded frontend
 //	sepia version   print the version the health check reports
 //
-// verify, export and import arrive in later slices (S14 and S19).
+// restore arrived with S14; export and import arrive in S19.
 package main
 
 import (
@@ -24,6 +24,8 @@ const usage = `sepia: a private review journal.
 
   sepia serve                            run the service on 127.0.0.1:8893 (override with SEPIA_ADDR)
   sepia doctor [--env-file path]         check the install: .env mode and owner, loopback, database protections
+  sepia restore --snapshot path --into dir [--compare db]
+                                         restore a snapshot into an empty directory and prove the copy
   sepia version                          print the version
   sepia help                             this text
 `
@@ -70,6 +72,9 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			return 2
 		}
 		return runDoctor(ctx, cfg, envFile, stdout)
+
+	case "restore":
+		return runRestore(ctx, args[1:], stdout, stderr)
 
 	case "version":
 		fmt.Fprintln(stdout, version.Version)
