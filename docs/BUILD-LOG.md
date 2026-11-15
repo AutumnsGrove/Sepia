@@ -889,3 +889,59 @@ runs, but Polaris's ask path stays unconfirmed and Phase 0's gate was never form
 
 **Left for Autumn.** Paste the two keys into `~/Sepia/.env` on the potato (mode 0600, staged empty). Rotation is
 moot: the G4 temporary keys expired.
+
+## 2026-11-15, S13.1-S13.6, deploy and update
+
+**Built.** The deploy and update flow, all of it. A hardened image and a compose file at the repository root with
+host networking; a multi-arch publish by digest, queued rather than cancelled, with an SBOM and a Trivy scan; the
+host watcher script and its five systemd units; `internal/update` and the five update routes, with the reply-in-
+flight refusal; the Updates and Services screens and the Settings rows that lead to them, with the panel's eight
+states as a pure function; `sepia doctor`; and `docs/INSTALL.md` with the Meridian tile, the health-check line and
+the scratch-copy recipe for gate G5.
+
+**What is true now.** A deployment is `docker compose up -d` from a checkout whose `.env` pins an image digest. The
+container has no Docker socket and a read-only root; it writes a request into the mounted signal directory and the
+host watcher does the pull, the fast-forward, the pin, the recreate, the health poll and the rollback. The panel
+shows every one of those states, refuses an update while a reply is streaming, and reloads itself when the update
+it started finishes. A failed check is not reported as up to date, a result without a live heartbeat is not shown,
+and a result older than the request that produced it is ignored. The watcher's routes are tested against scripted
+fakes of Docker, git, the registry and the health endpoint, including the rollback that also fails.
+
+**Learned, for the next agent.**
+
+- **A failed update exited zero.** The script wrote its `failed` result and then `|| true` swallowed the status, so
+  systemd would have recorded every failed deploy as a success and the hourly backstop would have hidden it. A run
+  now exits non-zero and still clears the request and refreshes the heartbeat. The watcher's tests found it on
+  their first run; a shell script needs the same watching as Go.
+- **S04 created a world-readable database.** `sql.Open` creates the file `0666&umask`, which is `0644` on the potato
+  and on this machine, and `store.Doctor` said the database it had just created was unhealthy. The store now creates
+  the file `0600`, tightens an existing loose one, and does the same for a leftover `-wal`. S13's doctor is what
+  caught it, which is the kind of thing a check that runs only at install time is for.
+- **Compose's `.env` is for interpolation, not for `env_file`.** `SEPIA_IMAGE`, `SEPIA_UID` and `SEPIA_GID` are
+  compose's business, and `config.Load` refuses an unknown `SEPIA_` key at startup, so passing the file whole would
+  have stopped the container at boot. The compose file lists the five the service reads, and a test feeds that list
+  back to `config.Load` so a typo cannot ship.
+- **A 202 with no body breaks the typed client.** The contract said "the watcher was signalled" and the client
+  expects JSON for anything but a 204. The 202 now carries `{pending: true}`, and the client's success type learned
+  202 so the body is not `never` at the type level.
+- **A horizontally scrolling code block is an axe violation.** The command in the no-helper state used
+  `white-space: nowrap; overflow-x: auto` with nothing focusable inside it, which fails `scrollable-region-focusable`
+  on Safari's rule set. It wraps now. The thirteen new gallery states are axe-clean.
+- **The watcher's detail repeated the panel's sentence.** The script's failure text ends with "The previous version
+  is running again", and the panel's error box says the same thing, so the screen read as two failures. The view
+  strips that closing sentence and shows the technical reason under the box.
+
+**Live checks left for Autumn.** None of the following can happen in CI, and each is the operator's:
+
+- run `docker-publish` on main and read the digest out of its summary; paste it into `~/Sepia/.env`;
+- `docker compose up -d` on the potato, then `sepia doctor`, then one real update from Settings;
+- gate G5: the update and the deliberately failed one with rollback on the scratch copy (`docs/INSTALL.md` 7), and
+  the secrets plan already staged in `~/Sepia/.env`;
+- the Linux screenshot baselines for the thirteen update states and the two new screens, made by the `baselines`
+  workflow;
+- the Meridian tile and the `service-healthcheck.sh` line, in those repositories;
+- `tailscale serve --bg 8893`.
+
+**Pending, not in a slice.** Meridian's "reviews this month" vital has no endpoint to read: `/healthz` is two fields
+by design and the library has no month filter, so the tile carries the build version instead. A vital would be a new
+route with its own contract entry and tests.

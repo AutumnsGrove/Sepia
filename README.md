@@ -61,6 +61,7 @@ built. `PLAN.md` is the source of truth; `README.md` is the pitch.
 - [`PRODUCT.md`](PRODUCT.md) and [`DESIGN.md`](DESIGN.md) — who it is for and how it looks
 - [`docs/`](docs/) — the entry card, the session protocol, updating, testing and CI, the question banks
 - [`docs/BUILD.md`](docs/BUILD.md) and [`docs/slices/`](docs/slices/README.md) — how it gets built, in slices another agent can pick up
+- [`docs/INSTALL.md`](docs/INSTALL.md) — the potato: compose, `.env`, the update units, `tailscale serve` and the doctor
 
 ## Non-negotiables, early
 

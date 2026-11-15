@@ -22,9 +22,10 @@ import (
 
 const usage = `sepia: a private review journal.
 
-  sepia serve     run the service on 127.0.0.1:8893 (override with SEPIA_ADDR)
-  sepia version   print the version
-  sepia help      this text
+  sepia serve                            run the service on 127.0.0.1:8893 (override with SEPIA_ADDR)
+  sepia doctor [--env-file path]         check the install: .env mode and owner, loopback, database protections
+  sepia version                          print the version
+  sepia help                             this text
 `
 
 func main() {
@@ -56,6 +57,19 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			return 1
 		}
 		return 0
+
+	case "doctor":
+		cfg, err := config.Load(environ)
+		if err != nil {
+			fmt.Fprintf(stderr, "sepia: %v\n", err)
+			return 1
+		}
+		envFile, err := doctorArgs(args[1:])
+		if err != nil {
+			fmt.Fprintf(stderr, "sepia: doctor: %v\n\n%s", err, usage)
+			return 2
+		}
+		return runDoctor(ctx, cfg, envFile, stdout)
 
 	case "version":
 		fmt.Fprintln(stdout, version.Version)

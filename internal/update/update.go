@@ -171,7 +171,7 @@ func (s *Signal) Available() AvailableView {
 		return view
 	}
 	var file availableFile
-	if err := json.Unmarshal(body, &file); err != nil {
+	if decodeErr := json.Unmarshal(body, &file); decodeErr != nil {
 		view.Available.Error = "The update helper wrote something Sepia could not read."
 		return view
 	}
@@ -229,7 +229,7 @@ func (s *Signal) Status() StatusView {
 		return view
 	}
 	var file resultFile
-	if err := json.Unmarshal(body, &file); err != nil {
+	if decodeErr := json.Unmarshal(body, &file); decodeErr != nil {
 		return view
 	}
 	finished, err := time.Parse(time.RFC3339, file.FinishedAt)
