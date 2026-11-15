@@ -48,6 +48,15 @@ describe('the update view', () => {
     });
   });
 
+  it('does not render a queued check as an update', () => {
+    // The server sets both flags for a check; the view must read the specific one, or the panel promises a reload
+    // that will never happen.
+    const snapshot = updateFixture('upd-checking');
+    expect(snapshot.available?.check_pending).toBe(true);
+    expect(snapshot.status?.pending).toBe(true);
+    expect(deriveUpdateView(snapshot).kind).toBe('checking');
+  });
+
   it('reports up to date with when it was checked', () => {
     const view = deriveUpdateView(updateFixture('upd-up-to-date'));
     expect(view.kind).toBe('up_to_date');
@@ -105,6 +114,16 @@ describe('the update view', () => {
       kind: 'done',
       version: 'r214.a1b2c3d',
     });
+  });
+
+  it('does not show "done" to a page that did not ask for the update', () => {
+    // The result file outlives the request. Without this rule a fresh visit sits on "Reloading..." with no button
+    // until the quiet check ten minutes later.
+    const done = updateFixture('upd-done');
+    const fresh = deriveUpdateView({ ...done, startedAt: null });
+    expect(fresh.kind).toBe('up_to_date');
+    if (fresh.kind !== 'up_to_date') return;
+    expect(fresh.checkError).toBe('');
   });
 
   it('shows a failed update with the reason and a retry when the old version is back', () => {

@@ -158,7 +158,9 @@ type availableFile struct {
 // Available reads the last check. A missing file is "no check yet", which is not an error; a file that cannot be
 // read is reported in Error, because the panel must not say "up to date" when it could not look.
 func (s *Signal) Available() AvailableView {
-	view := AvailableView{Available: Available{Current: s.version}, CheckPending: s.pending()}
+	// check_pending is specifically a queued check. Status.Pending is any request, so the panel can tell the two
+	// apart: a check must not say "Updating" (found by the S13 review, which saw the checking view was unreachable).
+	view := AvailableView{Available: Available{Current: s.version}, CheckPending: s.pendingAction() == "check"}
 	if !s.Installed() {
 		return view
 	}
@@ -338,6 +340,21 @@ func (s *Signal) pending() bool {
 	}
 	_, err := os.Stat(filepath.Join(s.dir, requestedName))
 	return err == nil
+}
+
+// pendingAction is the action in the waiting request, or "" when nothing is waiting or the file cannot be read. It
+// is what tells a queued check from a queued update, which the two views need to say different things.
+func (s *Signal) pendingAction() string {
+	body, err := s.read(requestedName)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		if action, ok := strings.CutPrefix(line, "action="); ok {
+			return strings.TrimSpace(action)
+		}
+	}
+	return ""
 }
 
 func (s *Signal) read(name string) ([]byte, error) {
