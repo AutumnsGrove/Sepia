@@ -1033,7 +1033,8 @@ Using the live app on a phone turned up two silent data losses and a control tha
   the chip in `answers`. The question form's Skip sends `{answers: []}`, which the agent records as skipped.
 - **A selection did not survive a remount.** A phone's swipe-back remounts the session route while the interaction is
   still open; the chosen chips and the tab lived only in the component. They are kept in `sessionStorage` per
-  interaction (`answerDrafts.ts`), restored on mount and cleared when the answer is sent. The e2e goes back and
+  interaction (`answerDrafts.ts`), restored on mount and kept after a send: the send is fire-and-forget, so a refused
+  or dropped answer must not take her taps with it. A draft untouched for a day is ignored. The e2e goes back and
   forward and asserts the tab, the chip and `aria-pressed`.
 - **The why control was 26x18 px, had no hover, and opened a block below the fold.** Tapping it did open the details,
   but a thousand pixels below, so it read as dead. It is a 44px row with its own hover and focus, and the readings

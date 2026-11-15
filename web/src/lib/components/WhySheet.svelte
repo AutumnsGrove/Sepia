@@ -82,7 +82,16 @@
   <ChevronRight size={14} aria-hidden="true" />
 </button>
 
-<dialog bind:this={dialog} class="sheet" aria-label={uiCopy.whyTitle} onclose={closed}>
+<dialog
+  bind:this={dialog}
+  class="sheet"
+  aria-label={uiCopy.whyTitle}
+  onclose={closed}
+  onclick={(event) => {
+    // A click on the backdrop targets the dialog itself; the sheet's content stops at .sheet-inner.
+    if (event.target === dialog) hide();
+  }}
+>
   <div class="sheet-inner">
     <header>
       <h2>{uiCopy.whyTitle}</h2>

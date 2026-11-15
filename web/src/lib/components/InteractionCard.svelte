@@ -9,7 +9,7 @@
   import { lookupSentence } from '../session/copy';
   import { describeAnswer, questionAnswer, skippedQuestions } from '../session/answers';
   import { untrack } from 'svelte';
-  import { browserStorage, clearDraft, loadDraft, saveDraft } from '../session/answerDrafts';
+  import { browserStorage, loadDraft, saveDraft } from '../session/answerDrafts';
 
   /**
    * Every kind of question the agent can ask is one card, because a person should not have to learn a new
@@ -68,17 +68,11 @@
   // mutable reactive instance to reason about.
   let chosen = $state<Record<string, string[]>>(draft.chosen ?? {});
   let answers = $state<Record<string, string>>(draft.answers ?? {});
-  let rating = $state(0);
+  let rating = $state(draft.rating ?? 0);
 
   $effect(() => {
-    saveDraft(storage, id, { picked: picked ?? undefined, chosen, answers });
+    saveDraft(storage, id, { picked: picked ?? undefined, chosen, answers, rating });
   });
-
-  /** An answer is leaving: the draft is done with, and a stale one would restore after the next remount. */
-  function answered(value: unknown) {
-    clearDraft(storage, id);
-    onanswer(value);
-  }
 
   const tab = $derived(picked ?? categories[0]?.id ?? '');
   const activeCategory = $derived(
@@ -111,11 +105,11 @@
   }
 
   function submitDescribe() {
-    answered(describeAnswer(chosen));
+    onanswer(describeAnswer(chosen));
   }
 
   function submitQuestions() {
-    answered(questionAnswer(answers));
+    onanswer(questionAnswer(answers));
   }
 
   function previousMeta(): string {
@@ -236,7 +230,7 @@
       {/each}
     </div>
     <div class="formfoot">
-      <Button variant="ghost" {disabled} onclick={() => answered(skippedQuestions())}>Skip</Button>
+      <Button variant="ghost" {disabled} onclick={() => onanswer(skippedQuestions())}>Skip</Button>
       <Button variant="primary" grow {disabled} onclick={submitQuestions}>Done</Button>
     </div>
   {:else if kind === 'revisit_choice'}
