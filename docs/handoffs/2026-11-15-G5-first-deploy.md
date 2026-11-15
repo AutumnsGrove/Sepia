@@ -44,10 +44,15 @@ and `tailscale serve` are in place, the keys went into `~/Sepia/.env` through ss
 digest re-pinned, and a failed health check rolled back to the previous version, which came back healthy. Both are
 in `docs/BUILD-LOG.md`, and the two bugs the live run found are fixed and merged.
 
-## What is left from the list below
+## Closed, 2026-11-15
 
-Items 1 to 3 are done, and the baseline artifact was committed before the merge. Only item 4, the Meridian tile
-and the health-check line in their repositories, remains, plus your own look at the panel.
+The Meridian tile was added and reports Sepia healthy with its build vital, and `service-healthcheck.sh` carries the
+container and HTTP checks. S13's "Done when" is met and the slice is marked done.
+
+## What was left from the list below
+
+Items 1 to 4 are done: the tile and the health-check line are in place, and the baseline artifact was committed
+before the merge.
 
 ## The original ask
 
@@ -71,7 +76,7 @@ and the health-check line in their repositories, remains, plus your own look at 
    honestly; or remove the override while the health poll runs, and the old version comes back, which is the
    successful rollback. Do both if the gate is to be shown in full.
 
-4. **The two lines in other repositories (left).** `service-healthcheck.sh` gains the Sepia block in `docs/INSTALL.md` 6;
+4. **The two lines in other repositories (done).** `service-healthcheck.sh` gains the Sepia block in `docs/INSTALL.md` 6;
    Meridian's live config gains the tile. I did not edit either repository.
 
 ## One thing the spec did not settle (answered 2026-11-15)
