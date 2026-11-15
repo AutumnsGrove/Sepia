@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -377,4 +378,184 @@ func FuzzParse(f *testing.F) {
 			}
 		}
 	})
+}
+
+// Last is the Services row's read: the newest receipt, without the screen. It imports first, so the row is not
+// yesterday's answer because nobody opened the Backups page.
+func TestLastReturnsTheNewestReceipt(t *testing.T) {
+	now := time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
+	tree := newTree(t)
+	tree.receipts(t, []string{
+		line("run-1", "r2sepia:sepia-backups/db", "ok", now.Add(-48*time.Hour), 4_000_000, ""),
+		line("run-2", "r2sepia:sepia-backups/db", "failed", now.Add(-time.Hour), 4_200_000, "AccessDenied"),
+	})
+	service := New(tree.data, tree.signal, newFakeStore(), func() time.Time { return now })
+
+	last, err := service.Last(context.Background())
+	if err != nil {
+		t.Fatalf("Last: %v", err)
+	}
+	if last == nil || last.ID != "run-2:r2sepia:sepia-backups/db" || last.Status != domain.MirrorFailed {
+		t.Fatalf("last = %+v, want the newest receipt", last)
+	}
+
+	empty := New(t.TempDir(), "", newFakeStore(), func() time.Time { return now })
+	none, err := empty.Last(context.Background())
+	if err != nil {
+		t.Fatalf("Last on an empty tree: %v", err)
+	}
+	if none != nil {
+		t.Errorf("last = %+v, want nil when nothing has run", none)
+	}
+
+	broken := newFakeStore()
+	broken.fail = errors.New("database is locked")
+	if _, err := New(tree.data, tree.signal, broken, func() time.Time { return now }).Last(context.Background()); err == nil {
+		t.Error("a failing store was reported as no receipts")
+	}
+}
+
+// New with no clock uses the real one, which is what every caller in the binary does.
+func TestNewDefaultsToTheRealClock(t *testing.T) {
+	if New(t.TempDir(), "", newFakeStore(), nil).now == nil {
+		t.Fatal("New left the clock nil")
+	}
+}
+
+// clean is the last line of defence for a hand-edited receipt: a NUL or a broken byte must not reach a screen.
+func TestCleanStripsControlBytes(t *testing.T) {
+	got := clean("a\x00b\x07c\nd\te\xff", 100)
+	for _, bad := range []string{"\x00", "\x07", "\n", "\t"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("clean kept %q: %q", bad, got)
+		}
+	}
+	if !strings.Contains(got, "?") {
+		t.Errorf("clean did not mark the invalid byte: %q", got)
+	}
+	if got := clean("  padded  ", 100); got != "padded" {
+		t.Errorf("clean = %q, want it trimmed", got)
+	}
+	if got := clean(strings.Repeat("y", 20), 5); got != "yyyyy" {
+		t.Errorf("clean = %q, want it cut to the limit", got)
+	}
+}
+
+// A signal directory that is a file is not a helper, and the screen must say "not installed" rather than "pending".
+func TestRequestNeedsADirectory(t *testing.T) {
+	now := time.Date(2026, 11, 15, 4, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "not-a-dir")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	service := New(dir, file, newFakeStore(), func() time.Time { return now })
+	if err := service.Request(); !errors.Is(err, ErrNotInstalled) {
+		t.Errorf("err = %v, want ErrNotInstalled", err)
+	}
+}
+
+// A restore into a directory it cannot write must fail with a sentence, not leave a half database behind.
+func TestRestoreReportsAnUnwritableTarget(t *testing.T) {
+	dir := t.TempDir()
+	snapshot := filepath.Join(dir, "sepia.db")
+	makeDB(t, snapshot, 1, 0)
+	out := filepath.Join(dir, "scratch")
+	if err := os.MkdirAll(out, 0o500); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(out, 0o750) })
+
+	if _, err := Restore(context.Background(), RestoreRequest{Snapshot: snapshot, Into: out}); err == nil {
+		t.Fatal("a restore into a read-only directory succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(out, "sepia.db")); !os.IsNotExist(err) {
+		t.Error("a failed restore left a database behind")
+	}
+}
+
+// A snapshot whose foreign keys point at rows that are not there is refused: it would restore into a library that
+// cannot be read, and the failure belongs at the restore, not on the screen a week later.
+func TestRestoreRefusesABrokenForeignKey(t *testing.T) {
+	dir := t.TempDir()
+	snapshot := filepath.Join(dir, "broken.db")
+	db, err := sql.Open("sqlite", snapshot)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	for _, statement := range []string{
+		"PRAGMA foreign_keys = OFF",
+		"CREATE TABLE entries (id TEXT PRIMARY KEY, work_id TEXT NOT NULL REFERENCES works (id))",
+		"CREATE TABLE works (id TEXT PRIMARY KEY)",
+		"CREATE TABLE entry_revisions (id TEXT PRIMARY KEY)",
+		"CREATE TABLE media (id TEXT PRIMARY KEY)",
+		"CREATE TABLE sessions (id TEXT PRIMARY KEY)",
+		"INSERT INTO entries (id, work_id) VALUES ('e1', 'missing')",
+	} {
+		if _, err := db.ExecContext(context.Background(), statement); err != nil {
+			t.Fatalf("exec %q: %v", statement, err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	if _, err := Restore(context.Background(), RestoreRequest{Snapshot: snapshot, Into: filepath.Join(dir, "scratch")}); !errors.Is(err, ErrSnapshotUnusable) {
+		t.Fatalf("err = %v, want ErrSnapshotUnusable", err)
+	}
+}
+
+// A compare database that is not there is an error about the drill, not a silent pass.
+func TestRestoreReportsAMissingCompare(t *testing.T) {
+	dir := t.TempDir()
+	snapshot := filepath.Join(dir, "sepia.db")
+	makeDB(t, snapshot, 1, 0)
+	out := filepath.Join(dir, "scratch")
+
+	_, err := Restore(context.Background(), RestoreRequest{
+		Snapshot: snapshot, Into: out, Compare: filepath.Join(dir, "nowhere.db"),
+	})
+	if err == nil {
+		t.Fatal("a restore with a missing compare target succeeded")
+	}
+	if !strings.Contains(err.Error(), "compare") {
+		t.Errorf("err = %v, want it to name the compare step", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(out, "sepia.db")); !os.IsNotExist(statErr) {
+		t.Error("a failed compare left a database behind")
+	}
+}
+
+// A signal directory the app cannot write is a failure with a reason, not a request that looks sent.
+func TestRequestReportsAnUnwritableSignalDirectory(t *testing.T) {
+	now := time.Date(2026, 11, 15, 4, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	signal := filepath.Join(dir, "signal")
+	if err := os.MkdirAll(signal, 0o500); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(signal, 0o750) })
+
+	service := New(dir, signal, newFakeStore(), func() time.Time { return now })
+	err := service.Request()
+	if err == nil {
+		t.Fatal("a request into a read-only directory succeeded")
+	}
+	if errors.Is(err, ErrNotInstalled) || errors.Is(err, ErrPending) {
+		t.Errorf("err = %v, want a write failure rather than a state", err)
+	}
+}
+
+// A receipts path whose parent is not a directory is an error, not "no receipts": the difference is a lie on the
+// screen.
+func TestParseReportsABrokenReceiptsPath(t *testing.T) {
+	now := time.Date(2026, 11, 15, 4, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, backupsDir), []byte("a file where a directory belongs"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	service := New(dir, "", newFakeStore(), func() time.Time { return now })
+	if _, err := service.View(context.Background()); err == nil {
+		t.Fatal("a receipts path that cannot be opened was reported as no receipts")
+	}
 }
