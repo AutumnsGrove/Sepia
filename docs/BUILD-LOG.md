@@ -1076,6 +1076,13 @@ The first real review finally has something behind it. What was built, in the or
   fixtures, so the states are tested rather than photographed.
 - The Services row now reads the newest receipt instead of saying "not configured", and never calls R2.
 
-**What is left: G6, the live drill on the potato.** The units are not installed there yet. The gate needs a backup
+**The live drill found a bug, which is what a drill is for.** The snapshot inherited the source's WAL journal mode,
+so SQLite left `-wal` and `-shm` sidecars beside it and rclone mirrored them as if they were backups: four objects in
+R2 for two snapshots. The script now collapses the journal into the file, checks it read-only and sweeps a killed
+run's leftovers, and `TestBackupSnapshotWithRealSQLite` asserts that only `.db` files sit in the backup directory. It
+was seen failing before the fix. The drill then passed: a verified snapshot and weekly on the board, both objects in
+R2, and a restore into a scratch directory that matched the live library row for row, with a truncated copy refused.
+
+**What is left: G6's last step, the receipts screen on the deployed app.** The units are not installed there yet. The gate needs a backup
 that reached R2, a restore on a scratch copy and the receipts screen working, and installing units on the board is
 the operator's call, not an agent's.
