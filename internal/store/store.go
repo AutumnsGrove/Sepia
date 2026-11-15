@@ -60,6 +60,19 @@ func Open(ctx context.Context, opts Options) (*Store, error) {
 		opts.NewID = randomID
 	}
 
+	// The file holds her reviews, so its mode may not depend on whatever umask the container or her shell happens to
+	// have. SQLite would create it 0666&umask, which is 0644 under the usual 022; S13's doctor refused exactly that
+	// on a fresh install. Create it private, and tighten a file an earlier version already made loose.
+	file, err := os.OpenFile(opts.Path, os.O_CREATE|os.O_EXCL, 0o600)
+	if err == nil {
+		_ = file.Close()
+	} else if !errors.Is(err, os.ErrExist) {
+		return nil, fmt.Errorf("store: create %s: %w", opts.Path, err)
+	}
+	if chmodErr := os.Chmod(opts.Path, 0o600); chmodErr != nil {
+		return nil, fmt.Errorf("store: make %s private: %w", opts.Path, chmodErr)
+	}
+
 	writer, err := sql.Open("sqlite", dsn(opts.Path, false))
 	if err != nil {
 		return nil, fmt.Errorf("store: open writer: %w", err)
@@ -86,6 +99,16 @@ func Open(ctx context.Context, opts Options) (*Store, error) {
 	if err := s.Migrate(ctx); err != nil {
 		_ = s.Close()
 		return nil, err
+	}
+	// A WAL and its shared-memory file appear beside the database on the first write. SQLite copies the database's
+	// mode, but an older file from a looser install is tightened here too, so every file in the tree is private.
+	for _, sibling := range []string{opts.Path + "-wal", opts.Path + "-shm"} {
+		if _, statErr := os.Stat(sibling); statErr == nil {
+			if chmodErr := os.Chmod(sibling, 0o600); chmodErr != nil {
+				_ = s.Close()
+				return nil, fmt.Errorf("store: make %s private: %w", sibling, chmodErr)
+			}
+		}
 	}
 	return s, nil
 }

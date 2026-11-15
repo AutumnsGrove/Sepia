@@ -43,6 +43,9 @@ services:
       # The signal directory the app writes requests into and the host watcher reads (docs/UPDATE.md). The
       # container never touches Docker; this file handshake is the whole interface.
       - ./update-signal:/update-signal
+      # The doctor's own check: presence, mode and owner of the file the keys live in. Read-only, and the app
+      # never loads it as configuration; the values arrive through the environment above.
+      - ./.env:/run/sepia/env:ro
     # A turn in flight is drained by the service's SIGTERM path; the watcher waits for the container to stop
     # before it decides an update failed.
     stop_grace_period: 30s
