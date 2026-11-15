@@ -59,8 +59,10 @@ jobs:
           # web and Go stages to $BUILDPLATFORM, so only the final stage is per-architecture.
           platforms: linux/amd64,linux/arm64
           push: true
+          # The moving tag is deliberately not set here. It is moved after Trivy passes, because the watcher
+          # resolves :latest and would otherwise install an image that failed the scan. The version tag is
+          # immutable and not what an update resolves.
           tags: |
-            ghcr.io/autumnsgrove/sepia:latest
             ghcr.io/autumnsgrove/sepia:${{ steps.vars.outputs.version }}
           # The watcher reads this index annotation to name the version it found without pulling the image.
           annotations: |
@@ -88,15 +90,35 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
 
+      # Only now does the moving tag point at this build. A failed scan leaves :latest on the last image that
+      # passed, so the watcher's hourly check cannot report an unscanned digest as an update.
+      - name: Point latest at the scanned image
+        id: latest
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.version=${{ steps.vars.outputs.version }}" \
+            --tag ghcr.io/autumnsgrove/sepia:latest \
+            "ghcr.io/autumnsgrove/sepia@${{ steps.build.outputs.digest }}"
+          # Moving the tag writes a new index manifest, so its digest is not the build's. This is the digest the
+          # watcher will resolve from :latest, and therefore the one .env must pin; a different one would look like
+          # an update forever.
+          digest="$(docker buildx imagetools inspect ghcr.io/autumnsgrove/sepia:latest |
+            awk '/^Digest:/{print $2; exit}')"
+          test -n "$digest"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
       - name: Summary
         run: |
           set -euo pipefail
           {
             echo "### Sepia ${{ steps.vars.outputs.version }}"
             echo
-            echo "Pinned reference for .env:"
+            echo "Pinned reference for .env (the digest :latest resolves to):"
             echo
             echo '```'
-            echo "ghcr.io/autumnsgrove/sepia@${{ steps.build.outputs.digest }}"
+            echo "ghcr.io/autumnsgrove/sepia@${{ steps.latest.outputs.digest }}"
             echo '```'
+            echo
+            echo "The immutable version tag for this build is ghcr.io/autumnsgrove/sepia:${{ steps.vars.outputs.version }}."
           } >> "$GITHUB_STEP_SUMMARY"

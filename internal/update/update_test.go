@@ -281,3 +281,32 @@ func TestJSONShapes(t *testing.T) {
 		t.Errorf("version = %s", version)
 	}
 }
+
+// check_pending means a check, not just any request. The panel branches on it, and the whole point of the distinction
+// is that a queued update must not render as "Checking" or a queued check as "Updating" (S13 review).
+func TestCheckPendingIsOnlyACheck(t *testing.T) {
+	s := newTestSignal(t)
+	digest := "ghcr.io/autumnsgrove/sepia@sha256:" + strings.Repeat("b", 64)
+	writeSignal(t, s.Dir(), "available", `{"latest_digest":"`+digest+`","update_available":true}`)
+	if err := s.Start(""); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if s.Available().CheckPending {
+		t.Error("check_pending = true for a queued update")
+	}
+	if !s.Status().Pending {
+		t.Error("status.pending = false for a queued update")
+	}
+
+	// And a queued check is both pending and a check.
+	other := newTestSignal(t)
+	if err := other.Check(); err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !other.Available().CheckPending {
+		t.Error("check_pending = false for a queued check")
+	}
+	if !other.Status().Pending {
+		t.Error("status.pending = false for a queued check")
+	}
+}
