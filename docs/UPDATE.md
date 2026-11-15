@@ -34,6 +34,7 @@ half way through.
 | `available` | watcher | `{latest, latest_digest, checked_at, update_available}`, or `{checked_at, update_available: false, error}` when the check could not finish |
 | `result` | watcher | `{status: ok\|failed\|skipped, detail, target, finished_at}` |
 | `heartbeat` | watcher | One RFC 3339 instant, every minute and at the start and end of every run |
+| `backup-requested` | app | `action=backup`; the host's `sepia-backup.path` fires the backup script, which removes the file when the run is done (S14) |
 
 Three rules follow from that, and each is a test in `internal/update`:
 

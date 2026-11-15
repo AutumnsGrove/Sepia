@@ -10,6 +10,9 @@ container.
 | `systemd/sepia-update.service` | One run of the watcher, as the operator, bounded at 900 s |
 | `systemd/sepia-update.timer` | Hourly backstop: retries a leftover request, otherwise refreshes `available.json` |
 | `systemd/sepia-heartbeat.timer` / `.service` | Writes the heartbeat every minute, so the app can tell "not installed" from "gone quiet" |
+| `backup/backup.sh` | The nightly backup: SQLite's online snapshot, its integrity check, rotation, `rclone sync` to `r2sepia:sepia-backups`, and one receipt per target in `data/backups/receipts.jsonl` |
+| `systemd/sepia-backup.timer` / `.service` | 03:30 daily, `Persistent=true` so a night the board was off is caught up, one bounded run as the operator |
+| `systemd/sepia-backup.path` | Fires the same script when the app writes `update-signal/backup-requested` (the Back up now button) |
 
 ## The handshake
 
@@ -23,6 +26,7 @@ The app writes, the watcher reads.
 | `available` | watcher | `{latest, latest_digest, checked_at, update_available}` or `{checked_at, update_available: false, error}` |
 | `result` | watcher | `{status: ok\|failed\|skipped, detail, target, finished_at}` |
 | `heartbeat` | watcher | One RFC 3339 instant, refreshed every minute and at the start of every run |
+| `backup-requested` | app | `action=backup`; `sepia-backup.path` fires the backup script, which removes the file when it is done |
 
 Every write on both sides is a temp file plus a rename, so neither side can read the other half way through.
 
@@ -62,4 +66,6 @@ journalctl -u sepia-update.service -n 50 --no-pager
 ```
 
 The script is tested against scripted fakes of Docker, git and the registry in `internal/archtest/watcher_test.go`,
-so a failure in the field can be reproduced without a board.
+so a failure in the field can be reproduced without a board. The backup script is tested the same way, with fakes of
+`sqlite3` and `rclone`, in `internal/archtest/backup_test.go`; the backup directory itself is
+`~/.config/rclone/rclone.conf` on the host, never inside the container.

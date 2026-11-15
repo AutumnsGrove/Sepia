@@ -1,0 +1,13 @@
+[Unit]
+Description=Sepia's nightly backup
+
+[Timer]
+# 03:30 on the board's own clock, the time the plan settled on: late enough that a review written at midnight is in
+# the snapshot, early enough that the board is idle.
+OnCalendar=*-*-* 03:30:00
+# A night the board was off is caught up at the next boot rather than silently skipped.
+Persistent=true
+Unit=sepia-backup.service
+
+[Install]
+WantedBy=timers.target
