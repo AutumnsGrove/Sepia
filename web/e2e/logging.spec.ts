@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 /**
@@ -69,6 +70,18 @@ test.describe('logging a review', () => {
     await expect(hint).toBeVisible({ timeout: 20_000 });
     await expect(hint).toHaveAttribute('aria-pressed', 'false');
     await hint.click();
+    // A swipe-back remounts the card while the interaction is still open. The tab and the picked chip come back
+    // from the session draft, not from a component that no longer exists.
+    await page.goBack();
+    await page.goForward();
+    await expect(page.getByRole('tab', { name: /Setting/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('button', { name: 'lived-in' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await page.getByRole('button', { name: 'Done', exact: true }).click();
 
     // 4. The single questions, skipped: skipping is always allowed and the entry still saves. The world carries
@@ -81,12 +94,55 @@ test.describe('logging a review', () => {
     await expect(save).toBeEnabled({ timeout: 20_000 });
     await expect(page.getByRole('button', { name: /Edit your words/ })).toBeVisible();
     await expect(page.getByText('Left out (1)')).toBeVisible();
+
+    // A Describe pick is in the entry's answers, not silently dropped: the client's shape is the one the agent
+    // decodes. This is the regression test for the old `{tags}` payload.
     await save.click();
 
     // 6. Saved, quiet and final. The card is read-only and the session offers Edit and Log another.
     await expect(page.getByText('Saved to your library')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole('button', { name: 'Log another' })).toBeVisible();
     await expect(page.getByLabel('Say what you thought')).toHaveCount(0);
+
+    const list = await page.request.get('/api/entries?limit=1');
+    const library = (await list.json()) as {
+      items: { answers: { category?: string; values: string[] }[] }[];
+    };
+    const setting = library.items[0]?.answers.find((answer) => answer.category === 'setting');
+    expect(setting?.values).toContain('lived_in');
+  });
+
+  test('the why sheet opens as a dialog from the card and from an activity row', async ({
+    page,
+  }) => {
+    await startEntry(page);
+    await send(page, SENTENCE);
+    await page.getByRole('button', { name: /The book/ }).click();
+    await pickBook(page);
+    await page.getByRole('tab', { name: /Setting/ }).click();
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await finishQuestions(page);
+    await expect(page.getByRole('button', { name: 'Save entry' })).toBeEnabled({
+      timeout: 20_000,
+    });
+
+    // The card's own trigger, then the activity row's, both open the same modal sheet. The row's "why" used to be
+    // 26x18px and opened a block below the fold, so it looked dead.
+    await page.getByRole('button', { name: 'How this was read' }).click();
+    const sheet = page.getByRole('dialog', { name: 'How this was read' });
+    await expect(sheet).toBeVisible();
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+
+    const why = page.locator('.act .why').first();
+    const box = await why.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await why.click();
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
   });
 
   test('renders a hostile title as plain text', async ({ page }) => {

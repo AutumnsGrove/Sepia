@@ -194,6 +194,7 @@
       {:else if row.kind === 'interaction'}
         <InteractionCard
           kind={row.interaction.kind}
+          id={row.interaction.id}
           payload={row.interaction.payload}
           onanswer={(value) => handlers.onanswer(row.interaction.id, value)}
         />
@@ -237,6 +238,7 @@
         {versions}
         preread={session.preread}
         {whyOpen}
+        onwhyclose={() => (whyOpen = false)}
         onedit={handlers.onedit}
         oninclude={handlers.oninclude}
         onaccept={handlers.onaccept}
@@ -409,16 +411,30 @@
   .act.live {
     color: var(--text-2);
   }
+  /* The old link was 26x18px with no hover: on a phone it was a miss more often than a tap, and there was no sign
+   * that it did anything. It is a 44px row now, with a hover and focus state of its own. */
   .act .why {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin: -0.55rem -0.55rem -0.55rem 0.1rem;
+    padding: 0 0.55rem;
     background: none;
     border: 0;
-    padding: 0;
+    border-radius: var(--r-sm);
     line-height: inherit;
     color: var(--text-2);
     text-decoration: underline;
     text-underline-offset: 3px;
     text-decoration-color: var(--line);
+    cursor: pointer;
     font-size: 0.8125rem;
+  }
+  .act .why:hover,
+  .act .why:focus-visible {
+    background: var(--raised);
+    color: var(--text);
+    text-decoration-color: var(--text-3);
   }
   .dot {
     width: 8px;
