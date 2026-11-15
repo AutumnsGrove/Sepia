@@ -942,6 +942,6 @@ fakes of Docker, git, the registry and the health endpoint, including the rollba
 - the Meridian tile and the `service-healthcheck.sh` line, in those repositories;
 - `tailscale serve --bg 8893`.
 
-**Pending, not in a slice.** Meridian's "reviews this month" vital has no endpoint to read: `/healthz` is two fields
-by design and the library has no month filter, so the tile carries the build version instead. A vital would be a new
-route with its own contract entry and tests.
+**Settled after the handoff.** Meridian's vital is the build version, as it is for Warbler, Ivy and Polaris.
+`/healthz` stays two fields by design, so no endpoint was added; a "reviews this month" count, if it is ever wanted,
+is a new route with its own contract entry, tests and limits row in a later slice.

@@ -139,8 +139,8 @@ Meridian's tile (`examples/homelab.yaml` here, the live config on the board):
 ```
 
 Meridian's `update` action writes `action=update` into `~/Sepia/update-signal/requested`, which the watcher already
-watches. A "reviews this month" vital is **not** available: `/healthz` is two fields by design and the entries list
-has no month filter, so a vital would need a new endpoint (see the slice's handoff).
+watches. The vital is the build version, the same as Warbler, Ivy and Polaris: `/healthz` carries exactly two fields
+by design, and a "reviews this month" count would need a new endpoint, which this slice does not add.
 
 ## 7. The gate: a failed update on a scratch copy
 

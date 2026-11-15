@@ -69,6 +69,9 @@ implies for this slice is in Decisions.
   potato with mode 0600 and owner `autumn:autumn`, holding `SEPIA_IMAGE`, `SEPIA_UID`, `SEPIA_GID` and two
   empty key lines. **Autumn pastes the values; no agent reads them.** The doctor command in S13.6 checks only
   presence, mode and owner, and never echoes a value.
+- **The Meridian vital is the build version.** Same as Warbler, Ivy and Polaris: it reads `/healthz`'s `version`,
+  because that route carries exactly two fields by design. A "reviews this month" count would need a new endpoint
+  with its own contract entry, tests and limits row, and it belongs in a later slice rather than a deploy change.
 - **G5 is demonstrated on the potato, not locally.** A second compose project, `~/Sepia-scratch`, on port
   8897 (verified free) with its own `sepia-scratch-update.path` and a deliberately broken image. A local Docker
   run would prove the script's logic; the scratch project proves the units, the Docker on that board and the
