@@ -154,6 +154,51 @@ func TestRestoreRefusesAnOccupiedTarget(t *testing.T) {
 	}
 }
 
+// TestRestoreIntoADirectoryWithOtherFiles is the real recovery: the target is the data directory the board already
+// uses, which holds covers and the backups themselves. Only a database of its own blocks a restore.
+func TestRestoreIntoADirectoryWithOtherFiles(t *testing.T) {
+	dir := t.TempDir()
+	snapshot := filepath.Join(dir, "sepia-2026-11-15.db")
+	makeDB(t, snapshot, 2, 1)
+	out := filepath.Join(dir, "data")
+	for _, sub := range []string{"covers", "backups/db"} {
+		if err := os.MkdirAll(filepath.Join(out, sub), 0o750); err != nil {
+			t.Fatalf("mkdir %s: %v", sub, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(out, "covers", "cover-1.jpg"), []byte("jpeg"), 0o600); err != nil {
+		t.Fatalf("write cover: %v", err)
+	}
+
+	result, err := Restore(context.Background(), RestoreRequest{Snapshot: snapshot, Into: out})
+	if err != nil {
+		t.Fatalf("restore into a data directory: %v", err)
+	}
+	if result.Counts.Entries != 2 {
+		t.Errorf("counts = %+v", result.Counts)
+	}
+	if _, err := os.Stat(filepath.Join(out, "covers", "cover-1.jpg")); err != nil {
+		t.Errorf("the restore disturbed the covers: %v", err)
+	}
+}
+
+// A half-written restore from a previous attempt counts as a database in the way: the caller has to look.
+func TestRestoreRefusesALeftoverTempDatabase(t *testing.T) {
+	dir := t.TempDir()
+	snapshot := filepath.Join(dir, "sepia.db.bak")
+	makeDB(t, snapshot, 1, 0)
+	out := filepath.Join(dir, "data")
+	if err := os.MkdirAll(out, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(out, "sepia.db.tmp"), []byte("half a database"), 0o600); err != nil {
+		t.Fatalf("write temp: %v", err)
+	}
+	if _, err := Restore(context.Background(), RestoreRequest{Snapshot: snapshot, Into: out}); !errors.Is(err, ErrTargetOccupied) {
+		t.Fatalf("err = %v, want ErrTargetOccupied", err)
+	}
+}
+
 // TestRestoreComparesTheLibrary is the drill's assertion: restore then compare equals the source, and a difference is
 // named rather than rounded away.
 func TestRestoreComparesTheLibrary(t *testing.T) {
