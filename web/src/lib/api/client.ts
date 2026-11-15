@@ -9,13 +9,15 @@ import { errorCodes, type ErrorCode } from '../contract/codes';
 
 type Operation<P extends keyof paths, M extends keyof paths[P]> = paths[P][M];
 
-/** The success body of an operation: a 200 or a 201 with a JSON content type. */
+/** The success body of an operation: a 200, 201 or 202 with a JSON content type. */
 type Ok<T> = T extends { responses: infer R }
   ? R extends { 200: { content: { 'application/json': infer B } } }
     ? B
     : R extends { 201: { content: { 'application/json': infer B } } }
       ? B
-      : never
+      : R extends { 202: { content: { 'application/json': infer B } } }
+        ? B
+        : never
   : never;
 
 export type Session = components['schemas']['Session'];
@@ -30,6 +32,9 @@ export type SearchResults = Ok<Operation<'/api/search', 'get'>>;
 export type VersionInfo = Ok<Operation<'/api/version', 'get'>>;
 export type ServicesInfo = Ok<Operation<'/api/services', 'get'>>;
 export type Settings = Ok<Operation<'/api/settings', 'get'>>;
+export type UpdateAvailable = Ok<Operation<'/api/update/available', 'get'>>;
+export type UpdateStatus = Ok<Operation<'/api/update/status', 'get'>>;
+export type UpdateAccepted = Ok<Operation<'/api/update/start', 'post'>>;
 
 /** The error body every failing route answers with. */
 interface ErrorEnvelope {
@@ -100,6 +105,11 @@ export interface Client {
   search(q: string): Promise<SearchResults>;
   getVersion(): Promise<VersionInfo>;
   getServices(): Promise<ServicesInfo>;
+  getUpdateAvailable(): Promise<UpdateAvailable>;
+  getUpdateStatus(): Promise<UpdateStatus>;
+  checkForUpdates(): Promise<UpdateAccepted>;
+  startUpdate(): Promise<UpdateAccepted>;
+  restart(): Promise<UpdateAccepted>;
 }
 
 type QueryValue = string | number | boolean | undefined;
@@ -181,5 +191,10 @@ export function createClient(options: ClientOptions = {}): Client {
     search: (q) => request('GET', `/api/search${queryString({ q })}`),
     getVersion: () => request('GET', '/api/version'),
     getServices: () => request('GET', '/api/services'),
+    getUpdateAvailable: () => request('GET', '/api/update/available'),
+    getUpdateStatus: () => request('GET', '/api/update/status'),
+    checkForUpdates: () => request('POST', '/api/update/check'),
+    startUpdate: () => request('POST', '/api/update/start'),
+    restart: () => request('POST', '/api/restart'),
   };
 }

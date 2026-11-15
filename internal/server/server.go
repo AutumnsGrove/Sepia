@@ -26,6 +26,7 @@ import (
 	"github.com/AutumnsGrove/sepia/internal/config"
 	"github.com/AutumnsGrove/sepia/internal/providers"
 	"github.com/AutumnsGrove/sepia/internal/session"
+	"github.com/AutumnsGrove/sepia/internal/update"
 	"github.com/AutumnsGrove/sepia/internal/version"
 )
 
@@ -86,7 +87,7 @@ func newServer(cfg config.Config, deps Deps, log *slog.Logger, assets fs.FS) *Se
 	}
 	s := &Server{
 		cfg: cfg, log: log, assets: assets, engine: deps.Engine, model: deps.Agent, now: now, base: base,
-		responder: deps.Responder,
+		responder: deps.Responder, update: update.New(cfg.UpdateDir, versionString(), now),
 	}
 	s.hub = newHub(s)
 	if deps.Live != nil {
@@ -106,6 +107,9 @@ type Server struct {
 	now       func() time.Time
 	base      context.Context
 	responder *Responder
+	// update is the app's half of the host watcher handshake. A bare deployment has no directory, and every
+	// action on it is refused with a plain "no helper" rather than writing into the working tree.
+	update *update.Signal
 }
 
 // routes assembles the chain. Order matters: recover, then the access log, then headers, then the Host check on
@@ -130,11 +134,11 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("/api/version", getOnly(s.serveVersion))
 	mux.Handle("/api/services", getOnly(s.serveServices))
 	mux.Handle("/api/settings", http.HandlerFunc(s.settings))
-	mux.Handle("/api/update/check", postOnly(s.notBuilt))
-	mux.Handle("/api/update/available", getOnly(s.notBuilt))
-	mux.Handle("/api/update/start", postOnly(s.notBuilt))
-	mux.Handle("/api/update/status", getOnly(s.notBuilt))
-	mux.Handle("/api/restart", postOnly(s.notBuilt))
+	mux.Handle("/api/update/check", postOnly(s.updateCheck))
+	mux.Handle("/api/update/available", getOnly(s.serveUpdateAvailable))
+	mux.Handle("/api/update/start", postOnly(s.updateStart))
+	mux.Handle("/api/update/status", getOnly(s.serveUpdateStatus))
+	mux.Handle("/api/restart", postOnly(s.restart))
 	mux.Handle("/media/{id}", getOnly(s.notBuilt))
 	mux.Handle("/covers/", getOnly(s.serveCover))
 
@@ -257,7 +261,7 @@ func (s *Server) apiNotFound(w http.ResponseWriter, r *http.Request) {
 }
 
 // notBuilt answers a route whose slice has not been built yet with a stable code, so the frontend can say one
-// plain sentence (S13, S16, S18, S19).
+// plain sentence (S16, S18, S19).
 func (s *Server) notBuilt(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotImplemented, "not_implemented", "This part of Sepia is not built yet.")
 }

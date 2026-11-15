@@ -285,11 +285,6 @@ func TestWorksSearchAndTheNotBuiltStubs(t *testing.T) {
 	}
 	for _, route := range []struct{ method, path string }{
 		{http.MethodPost, "/api/export"},
-		{http.MethodPost, "/api/update/check"},
-		{http.MethodGet, "/api/update/available"},
-		{http.MethodPost, "/api/update/start"},
-		{http.MethodGet, "/api/update/status"},
-		{http.MethodPost, "/api/restart"},
 	} {
 		if rec := doJSON(t, h, route.method, route.path, nil); rec.Code != http.StatusNotImplemented {
 			t.Errorf("%s %s = %d, want not built", route.method, route.path, rec.Code)
