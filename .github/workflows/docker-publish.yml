@@ -102,9 +102,11 @@ jobs:
             "ghcr.io/autumnsgrove/sepia@${{ steps.build.outputs.digest }}"
           # Moving the tag writes a new index manifest, so its digest is not the build's. This is the digest the
           # watcher will resolve from :latest, and therefore the one .env must pin; a different one would look like
-          # an update forever.
-          digest="$(docker buildx imagetools inspect ghcr.io/autumnsgrove/sepia:latest |
-            awk '/^Digest:/{print $2; exit}')"
+          # an update forever. The hash of the raw manifest is the digest by definition, and it avoids parsing the
+          # human output. Never let awk exit early here: closing the pipe while inspect is still writing is a
+          # SIGPIPE, and pipefail turns that into a failed publish after the tag has already moved.
+          digest="sha256:$(docker buildx imagetools inspect ghcr.io/autumnsgrove/sepia:latest --raw |
+            sha256sum | awk '{print $1}')"
           test -n "$digest"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
