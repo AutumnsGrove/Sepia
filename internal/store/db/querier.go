@@ -89,6 +89,8 @@ type Querier interface {
 	ListSessions(ctx context.Context, arg ListSessionsParams) ([]Session, error)
 	ListTurnCalls(ctx context.Context, sessionID *string) ([]TurnCall, error)
 	ListWorkSources(ctx context.Context, workID string) ([]WorkSource, error)
+	// OR IGNORE is what makes the import idempotent: the host script appends receipts to a file, the app imports them,
+	// and a crash between the two means the same run is imported twice. The id is the run plus the target.
 	RecordMirror(ctx context.Context, arg RecordMirrorParams) error
 	RememberClientMessage(ctx context.Context, arg RememberClientMessageParams) error
 	// Resolving is the one update an interaction allows, and only while it is open. The trigger is the backstop.

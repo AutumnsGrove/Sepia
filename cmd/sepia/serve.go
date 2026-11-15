@@ -11,6 +11,7 @@ import (
 	decideor "github.com/AutumnsGrove/nova/decide/openrouter"
 
 	"github.com/AutumnsGrove/sepia/internal/agent"
+	"github.com/AutumnsGrove/sepia/internal/backup"
 	"github.com/AutumnsGrove/sepia/internal/banks"
 	"github.com/AutumnsGrove/sepia/internal/config"
 	"github.com/AutumnsGrove/sepia/internal/decisions"
@@ -35,6 +36,9 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, assets fs.F
 	}
 
 	engine := session.New(session.Config{Store: db, Now: db.Now, NewID: db.NewID, ServerVersion: version.Version})
+	// The backup service is the app's half of the host flow: it imports the receipts the nightly script writes and
+	// writes the request file for "Back up now". The snapshot and the rclone mirror run on the host.
+	backups := backup.New(cfg.DataDir, cfg.UpdateDir, db, db.Now)
 
 	finder := providers.NewFinder(providers.Config{
 		TMDBKey: cfg.TMDBKey, DataDir: cfg.DataDir, Clock: clockFunc(db.Now),
@@ -69,7 +73,7 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger, assets fs.F
 	}
 
 	return server.Run(ctx, cfg, server.Deps{
-		Engine: engine, Agent: a, Responder: responder, Live: live, Now: db.Now,
+		Engine: engine, Agent: a, Responder: responder, Live: live, Now: db.Now, Backups: backups,
 	}, log, assets)
 }
 

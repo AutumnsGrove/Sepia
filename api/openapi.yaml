@@ -262,6 +262,39 @@ paths:
                 properties:
                   services: { type: array, items: { $ref: "#/components/schemas/ServiceStatus" } }
 
+  /api/backups:
+    get:
+      summary: The backup receipts and whether the host helper is alive
+      operationId: getBackups
+      responses:
+        "200":
+          description: The newest receipts, most recent first, and the helper's state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Backups" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /api/backups/run:
+    post:
+      summary: Ask the host helper to run a backup now
+      operationId: runBackup
+      description: >-
+        Writes one request file for the host unit and answers immediately. It never runs a snapshot or rclone itself,
+        and it never holds the R2 token.
+      responses:
+        "202":
+          description: The host was asked. The screen polls the receipts until a new one appears.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pending]
+                properties:
+                  pending: { type: boolean }
+                additionalProperties: false
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
   /api/settings:
     get:
       summary: The few things she can change from the Settings screen
@@ -673,6 +706,37 @@ components:
       required: [pending]
       properties:
         pending: { const: true }
+      additionalProperties: false
+
+    Backups:
+      type: object
+      required: [helper, pending, last, runs]
+      properties:
+        helper:
+          type: object
+          required: [state]
+          properties:
+            state: { enum: [ready, not_installed, stale] }
+            heartbeat_at: { type: string, format: date-time }
+          additionalProperties: false
+        pending: { type: boolean }
+        last:
+          oneOf:
+            - { $ref: "#/components/schemas/Mirror" }
+            - { type: "null" }
+        runs: { type: array, items: { $ref: "#/components/schemas/Mirror" }, maxItems: 500 }
+      additionalProperties: false
+
+    Mirror:
+      type: object
+      required: [id, ran_at, target, status, bytes, detail]
+      properties:
+        id: { type: string, maxLength: 340 }
+        ran_at: { type: string, format: date-time }
+        target: { type: string, maxLength: 200 }
+        status: { enum: [ok, failed, skipped] }
+        bytes: { type: integer, minimum: 0 }
+        detail: { type: string, maxLength: 1000 }
       additionalProperties: false
 
     UpdateStatus:

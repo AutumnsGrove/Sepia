@@ -197,6 +197,96 @@
       </div>
     </div>
 
+    <!-- 8: backups -->
+    <div class="step">
+      <h2>8. Backups and export</h2>
+      <p>A snapshot every night at 03:30, mirrored to Cloudflare R2. The snapshot lands on the potato before anything leaves it, and a failed mirror is a warning, never a lost review.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Backups and export</div>
+          <span style="width:44px"></span>
+        </div>
+        <div class="scroll">
+          <dl class="kv" style="margin-top:.5rem">
+            <dt>Last run</dt><dd>Today, 03:30</dd>
+            <dt>Snapshot</dt><dd>4.2 MB</dd>
+            <dt>On R2</dt><dd><span class="tag v"><svg class="mk"><use href="#i-check"/></svg><span style="color:var(--text)">Mirrored</span></span></dd>
+            <dt>Helper</dt><dd>Running</dd>
+          </dl>
+          <div class="btnrow">
+            <button class="btn primary grow">Back up now</button>
+          </div>
+          <p class="note">Keeps seven nights and four weeks, on the potato and on R2. Nothing is ever deleted from your library, so a backup holds every copy.</p>
+          <p class="lbl" style="margin-top:1.6rem">Recent runs</p>
+          <button class="srow"><span>Today, 03:30</span><span class="v" style="color:var(--accent)">4.2 MB</span></button>
+          <button class="srow"><span>Yesterday, 03:30</span><span class="v">4.1 MB</span></button>
+          <button class="srow"><span>Nov 13, 03:30</span><span class="v">4.1 MB</span></button>
+          <button class="srow"><span>Nov 12, 03:30</span><span class="v">4.0 MB</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 9: a failed mirror -->
+    <div class="step">
+      <h2>9. A mirror failed</h2>
+      <p>The snapshot is still taken and the review is still saved: only the copy to R2 did not finish. The screen says which part failed and offers the run again.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Backups and export</div>
+          <span style="width:44px"></span>
+        </div>
+        <div class="scroll">
+          <dl class="kv" style="margin-top:.5rem">
+            <dt>Last run</dt><dd>Today, 03:30</dd>
+            <dt>Snapshot</dt><dd>4.2 MB, checked</dd>
+            <dt>On R2</dt><dd><span class="tag u"><svg class="mk"><use href="#i-alert"/></svg><span style="color:var(--text)">Not copied</span></span></dd>
+            <dt>Helper</dt><dd>Running</dd>
+          </dl>
+          <div class="upd" style="margin-top:1rem">
+            <p>The copy to R2 did not finish. Your review is on the potato and nothing is lost. The next run tries again.</p>
+            <p class="detail mono cmd">AccessDenied: the R2 token was refused</p>
+          </div>
+          <div class="btnrow">
+            <button class="btn primary grow">Back up now</button>
+          </div>
+          <p class="lbl" style="margin-top:1.6rem">Recent runs</p>
+          <button class="srow"><span>Today, 03:30 &middot; R2 refused the copy</span><span class="v" style="color:var(--danger)">Failed</span></button>
+          <button class="srow"><span>Yesterday, 03:30</span><span class="v">4.1 MB</span></button>
+          <button class="srow"><span>Nov 13, 03:30</span><span class="v">4.1 MB</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 10: no helper -->
+    <div class="step">
+      <h2>10. No backup helper</h2>
+      <p>A bare deployment has no timer and no rclone. The screen says so in plain words instead of pretending a backup ran.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Backups and export</div>
+          <span style="width:44px"></span>
+        </div>
+        <div class="scroll">
+          <dl class="kv" style="margin-top:.5rem">
+            <dt>Last run</dt><dd>Never</dd>
+            <dt>On R2</dt><dd>Not set up</dd>
+            <dt>Helper</dt><dd><span class="tag u"><svg class="mk"><use href="#i-dash"/></svg><span style="color:var(--text)">Not installed</span></span></dd>
+          </dl>
+          <div class="upd" style="margin-top:1rem">
+            <p>Backups are not set up on this server. Everything is still in the database on this machine.</p>
+            <p class="detail mono cmd">systemctl status sepia-backup.timer</p>
+            <p class="small" style="margin-top:0">Run that on the potato to see if the timer is installed. See docs/INSTALL.md for the install steps.</p>
+          </div>
+          <div class="btnrow">
+            <button class="btn grow" disabled>Back up now</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </main>
 <script src="icons.js"></script>

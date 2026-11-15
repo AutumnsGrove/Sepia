@@ -4,6 +4,7 @@
 
 export const errorCodes = {
   'already_accepted': { status: 409, copy: 'That field was already accepted.' },
+  'backup_in_progress': { status: 409, copy: 'A backup is already running.' },
   'bad_content_type': { status: 415, copy: 'Send that as JSON.' },
   'bad_host': { status: 400, copy: 'This address is not Sepia.' },
   'bad_origin': { status: 403, copy: 'That request did not come from Sepia.' },
