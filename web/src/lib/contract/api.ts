@@ -529,15 +529,22 @@ export interface components {
             detail?: string;
         };
         UpdateAvailable: {
-            available?: {
+            available: {
                 current: string;
                 latest?: string;
                 latest_digest?: string;
                 /** Format: date-time */
                 checked_at?: string;
                 update_available: boolean;
+                /** @description Why the last check did not finish. Present only when it did not. */
+                error?: string;
             };
             check_pending: boolean;
+        };
+        /** @description The request is on disk for the host watcher to pick up. It has not done the work yet. */
+        UpdateAccepted: {
+            /** @constant */
+            pending: true;
         };
         UpdateStatus: {
             pending: boolean;
@@ -572,6 +579,15 @@ export interface components {
         };
         /** @description The action cannot happen now, and the reason says why. */
         Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The thing this needs is not installed or not answering. */
+        Unavailable: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1027,14 +1043,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The watcher was signalled */
+            /** @description The watcher was signalled. It writes its answer to available, and the page polls. */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UpdateAccepted"];
+                };
             };
             409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
         };
     };
     updateAvailable: {
@@ -1066,14 +1085,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The watcher was signalled */
+            /** @description The watcher was signalled to install the digest the page was shown. */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UpdateAccepted"];
+                };
             };
             409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
         };
     };
     updateStatus: {
@@ -1105,14 +1127,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The watcher was signalled */
+            /** @description The watcher was signalled to recreate the container with the image already pinned. */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UpdateAccepted"];
+                };
             };
             409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
         };
     };
 }

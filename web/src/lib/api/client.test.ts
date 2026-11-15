@@ -129,3 +129,30 @@ describe('the API client', () => {
     expect(calls[1].init.body).toBe('{"preread":true}');
   });
 });
+
+describe('the update client', () => {
+  it('accepts the 202 body the update actions answer with', async () => {
+    const { calls, fetch } = fakeFetch(202, { pending: true });
+    const client = createClient({ fetch });
+
+    const accepted = await client.startUpdate();
+
+    expect(accepted.pending).toBe(true);
+    expect(calls[0].url).toBe('/api/update/start');
+    expect(calls[0].init.method).toBe('POST');
+    expect(calls[0].init.credentials).toBe('same-origin');
+  });
+
+  it('turns "finish the reply first" into the code the panel checks for', async () => {
+    const { fetch } = fakeFetch(409, {
+      code: 'reply_in_progress',
+      message: 'Finish the reply first.',
+    });
+    const client = createClient({ fetch });
+
+    await expect(client.startUpdate()).rejects.toMatchObject({
+      code: 'reply_in_progress',
+      copy: 'Finish the reply first.',
+    });
+  });
+});

@@ -593,11 +593,7 @@ func (s *Server) exportStub(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveVersion(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"version":    versionString(),
-		"deployment": "bare",
-		"updater":    map[string]any{"state": "not_installed", "heartbeat_at": nil},
-	})
+	writeJSON(w, http.StatusOK, s.update.VersionInfo(s.cfg.Deployment()))
 }
 
 // serveServices reports what is configured. It never makes a live call: a screen that needs one answers slowly,
