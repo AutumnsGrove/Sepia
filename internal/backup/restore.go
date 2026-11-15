@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite" // the pure-Go driver, the only one this build has
 )
@@ -62,8 +63,10 @@ type RestoreResult struct {
 // it rather than publishing a database that only looks like hers.
 var ErrSnapshotUnusable = errors.New("backup: the snapshot is not usable")
 
-// ErrTargetOccupied is a restore that would write over something. It is a refusal, not an overwrite.
-var ErrTargetOccupied = errors.New("backup: the restore target is not empty")
+// ErrTargetOccupied is a restore that would write over a database. It is a refusal, not an overwrite. Other files in
+// the directory are not in the way: a real recovery restores into data/, which always holds covers and the backups
+// directory itself.
+var ErrTargetOccupied = errors.New("backup: the restore target already holds a database")
 
 // Restore copies a verified snapshot into an empty directory and proves the copy. It returns the counts it wrote.
 func Restore(ctx context.Context, req RestoreRequest) (RestoreResult, error) {
@@ -126,15 +129,20 @@ func Restore(ctx context.Context, req RestoreRequest) (RestoreResult, error) {
 	return RestoreResult{Path: target, Bytes: info.Size(), Counts: copyCounts}, nil
 }
 
-// prepareTarget makes sure the directory exists and holds nothing of hers. A missing directory is created; a
-// directory with anything in it is refused, because the one thing a restore must never do is overwrite a database
-// that might be the only copy left.
+// prepareTarget makes sure the directory exists and holds no database of its own. A missing directory is created, and
+// other files are fine, because a real recovery restores into the data directory the board already uses. The one thing
+// a restore must never do is overwrite a database that might be the only copy left, so an existing sepia.db is a
+// refusal and a caller who means it has to move it aside first.
 func prepareTarget(dir string) error {
 	entries, err := os.ReadDir(dir)
 	switch {
-	case err == nil && len(entries) > 0:
-		return ErrTargetOccupied
-	case err != nil && !errors.Is(err, os.ErrNotExist):
+	case err == nil:
+		for _, entry := range entries {
+			if entry.Name() == "sepia.db" || strings.HasPrefix(entry.Name(), "sepia.db.tmp") {
+				return ErrTargetOccupied
+			}
+		}
+	case !errors.Is(err, os.ErrNotExist):
 		return fmt.Errorf("backup: restore target: %w", err)
 	}
 	if err := os.MkdirAll(dir, 0o750); err != nil {

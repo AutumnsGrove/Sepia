@@ -337,6 +337,23 @@ func pinnedAction(uses string) bool {
 	return true
 }
 
+// TestHostScriptsAreExecutable: both units run their script by path, so a checkout where the file is mode 644 fails
+// at the first tick with 203/EXEC and no backup ever runs. Git records the mode, so this is the deployed mode.
+func TestHostScriptsAreExecutable(t *testing.T) {
+	for _, path := range []string{
+		filepath.Join("..", "..", "compose", "backup", "backup.sh"),
+		filepath.Join("..", "..", "compose", "watcher", "update.sh"),
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if info.Mode().Perm()&0o111 == 0 {
+			t.Errorf("%s is mode %o; systemd runs it directly and would fail with 203/EXEC", path, info.Mode().Perm())
+		}
+	}
+}
+
 // TestSystemdUnits: installing the watcher and the backup means copying these eight files and substituting two
 // placeholders. A unit that runs as root, has no bound, or points at a service that no longer exists is a silent
 // outage on the board.
