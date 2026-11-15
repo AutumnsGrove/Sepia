@@ -3,7 +3,7 @@
 Sepia is built as **vertical slices**, one plan file each, so any agent can pick one up cold, build it test
 first, and leave the app working and releasable. Standing rules, invariants, gates and the definition of done
 are in [`../BUILD.md`](../BUILD.md). **Read it first**, then [`../STANDARDS.md`](../STANDARDS.md). The status column
-is the truth: S00 and S02 to S12 are built, and S13 is next.
+is the truth: S00 and S02 to S12 are built, and S13 is in progress.
 
 ## How to read a slice plan
 
@@ -68,7 +68,7 @@ S09 needs S02, S07 and S08. S13 needs a working app (S09 and S12).
 | S10 | [Frontend foundation](S10-frontend-foundation.md) | 1 | done |
 | S11 | [Logging flow UI](S11-logging-ui.md) | 1 | done |
 | S12 | [Reading UI](S12-reading-ui.md) | 1 | done |
-| S13 | [Deploy and update](S13-deploy-and-update.md) | 1 | planned |
+| S13 | [Deploy and update](S13-deploy-and-update.md) | 1 | in progress |
 | S14 | [Backups](S14-backups.md) | 1 | planned |
 | S15 | [Web fallback](S15-web-fallback.md) | 2 | planned |
 | S16 | [Library search and chat](S16-search-and-chat.md) | 2 | planned |

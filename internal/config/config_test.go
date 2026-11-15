@@ -236,3 +236,38 @@ func TestLoadRejectsUnusableProviderSettings(t *testing.T) {
 		})
 	}
 }
+
+// The update signal directory is the one setting that makes a deployment a container. Unset is the bare, offline
+// story: the panel says there is no updater rather than pointing at a directory nobody mounted.
+func TestLoadUpdateDir(t *testing.T) {
+	bare, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load(nil): %v", err)
+	}
+	if bare.UpdateDir != "" {
+		t.Errorf("UpdateDir = %q, want empty for a bare deployment", bare.UpdateDir)
+	}
+	if got := bare.Deployment(); got != "bare" {
+		t.Errorf("Deployment() = %q, want bare", got)
+	}
+
+	got, err := Load([]string{"SEPIA_UPDATE_DIR=/update-signal"})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.UpdateDir != "/update-signal" {
+		t.Errorf("UpdateDir = %q", got.UpdateDir)
+	}
+	if dep := got.Deployment(); dep != "docker" {
+		t.Errorf("Deployment() = %q, want docker", dep)
+	}
+
+	// Bad: an empty value is a typo, not "bare". Otherwise a mis-mounted container looks like a bare install.
+	if _, err := Load([]string{"SEPIA_UPDATE_DIR="}); err == nil {
+		t.Fatal("Load accepted an empty SEPIA_UPDATE_DIR")
+	}
+	// Bad: a NUL byte would cut the path short somewhere below us.
+	if _, err := Load([]string{"SEPIA_UPDATE_DIR=/sign\x00al"}); err == nil {
+		t.Fatal("Load accepted a NUL byte in SEPIA_UPDATE_DIR")
+	}
+}
