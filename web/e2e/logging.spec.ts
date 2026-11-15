@@ -104,12 +104,21 @@ test.describe('logging a review', () => {
     await expect(page.getByRole('button', { name: 'Log another' })).toBeVisible();
     await expect(page.getByLabel('Say what you thought')).toHaveCount(0);
 
-    const list = await page.request.get('/api/entries?limit=1');
-    const library = (await list.json()) as {
-      items: { answers: { category?: string; values: string[] }[] }[];
-    };
-    const setting = library.items[0]?.answers.find((answer) => answer.category === 'setting');
-    expect(setting?.values).toContain('lived_in');
+    // Poll rather than read once: the saved ack and the list can cross, and WebKit is where they did.
+    await expect
+      .poll(
+        async () => {
+          const list = await page.request.get('/api/entries?limit=1');
+          const library = (await list.json()) as {
+            items: { answers: { category?: string; values: string[] }[] }[];
+          };
+          return (
+            library.items[0]?.answers.find((answer) => answer.category === 'setting')?.values ?? []
+          );
+        },
+        { timeout: 10_000 },
+      )
+      .toContain('lived_in');
   });
 
   test('the why sheet opens as a dialog from the card and from an activity row', async ({
