@@ -171,7 +171,9 @@ resolve_latest() {
 		-H "Authorization: Bearer $token" \
 		-H 'Accept: application/vnd.oci.image.index.v1+json' \
 		"https://ghcr.io/v2/${slug}/manifests/latest" 2>/dev/null || true)"
-	version="$(printf '%s' "$body" | sed -n 's/.*"org\.opencontainers\.image\.version":"\([^"]*\)".*/\1/p' | head -1)"
+# GHCR serves the index pretty-printed, with a space after the colon. Both shapes are accepted; the fallback already
+	# names the build by its short digest if neither matches.
+	version="$(printf '%s' "$body" | sed -n 's/.*"org\.opencontainers\.image\.version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
 
 	RESOLVED_REF="${repo}@${digest}"
 	RESOLVED_VERSION="${version:-sha256:${digest#sha256:}}"
