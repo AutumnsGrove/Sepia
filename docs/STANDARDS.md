@@ -115,6 +115,14 @@ in the commit that introduces it, with its outcome above the limit.
 | WebSocket outbound queue | 256 frames per connection | A persisted event that cannot be queued closes the socket so the client replays from its `last_seq`; live-only events are shed oldest first |
 | List page size | 50 default, 100 max | Capped |
 | Search query | 200 characters | Refused |
+| Backup receipt file read | 256 KiB, newest end first | Older receipts are outside the window; the newest still import. A file read never exceeds the bound |
+| Receipts imported per read | 500 lines, 8 KiB a line | Extras are skipped; the screen lists the newest runs |
+| Receipt field lengths | target 200, detail 1,000, run id 128 characters | Cut at a rune boundary; a receipt that still cannot be trusted is counted and skipped, never guessed at |
+| Backup snapshot | found by name in `data/backups/db`, 7 dailies and 4 weeklies kept | Older files are pruned oldest first; the file just written is never pruned |
+| Snapshot and mirror deadlines | sqlite3 120 s, each rclone sync and read-back 600 s | Recorded as a failed receipt with what the command printed; the next target still runs |
+| rclone deletions per sync | 20 objects | The sync is refused with a failure receipt rather than obeyed: a bigger number means the local directory was lost, not that retention changed |
+| Restore snapshot size | 10 GiB | Refused as unusable before anything is written |
+| Restore target | must be empty or absent | Refused; a restore never overwrites a database that is there |
 
 ## 4. API standards
 
