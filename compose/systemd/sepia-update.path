@@ -1,0 +1,11 @@
+[Unit]
+Description=Trigger Sepia's update watcher when a request appears
+
+[Path]
+# The app writes update-signal/requested atomically; this fires the moment the rename makes it appear. The
+# script clears the file when it is done, so this is an edge trigger rather than a condition that refires.
+PathExists=@INSTALL_DIR@/update-signal/requested
+Unit=sepia-update.service
+
+[Install]
+WantedBy=multi-user.target
