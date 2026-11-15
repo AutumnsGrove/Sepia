@@ -45,6 +45,19 @@ const states = [
   'screen-lookup-failed',
   'screen-hostile',
   'screen-stale',
+  'upd-loading',
+  'upd-no-helper',
+  'upd-helper-quiet',
+  'upd-checking',
+  'upd-up-to-date',
+  'upd-check-failed',
+  'upd-available',
+  'upd-blocked',
+  'upd-updating',
+  'upd-slow',
+  'upd-done',
+  'upd-failed',
+  'upd-rollback-failed',
 ];
 
 test.describe('the gallery', () => {

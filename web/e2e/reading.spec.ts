@@ -249,6 +249,36 @@ test('the pre-read switch is real: it is stored and it stays', async ({ page }) 
   );
 });
 
+test('updates reports a missing helper rather than pretending to update', async ({ page }) => {
+  await openReading(page, '/settings/updates');
+
+  await expect(page.getByRole('heading', { level: 1, name: 'Updates' })).toBeVisible();
+  // This stack runs the real binary with no signal directory, which is the code's own "bare" deployment: the panel
+  // must say so and where to look, not show a button that could never work.
+  await expect(page.getByText('Updates are not working on this server.')).toBeVisible();
+  await expect(page.getByText('systemctl status sepia-update.path')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Check for updates' })).toHaveCount(0);
+
+  await noViolations(page);
+  await expect(page).toHaveScreenshot('reading-updates-no-helper.png', { fullPage: true });
+});
+
+test('services names every dependency and what an outage costs', async ({ page }) => {
+  await openReading(page, '/settings/services');
+
+  await expect(page.getByRole('heading', { level: 1, name: 'Services' })).toBeVisible();
+  for (const name of ['Main model', 'Decisions', 'TMDB', 'Open Library', 'Polaris', 'Database']) {
+    await expect(page.getByText(name, { exact: true })).toBeVisible();
+  }
+  // The seeded stack has no keys and no update helper, so the state is words rather than a colour.
+  await expect(page.getByText('Not set up').first()).toBeVisible();
+  await expect(page.getByText('Ready').first()).toBeVisible();
+  await expect(page.getByText('Web lookups are off. Everything else still works')).toBeVisible();
+
+  await noViolations(page);
+  await expect(page).toHaveScreenshot('reading-services.png', { fullPage: true });
+});
+
 test('the first run teaches by example and a tap fills the composer', async ({ page }) => {
   // An empty library is answered for instead of a real one, because the seeded stack never is empty.
   await page.route('**/api/entries*', (route) =>
