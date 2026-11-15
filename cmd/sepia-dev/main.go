@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/agent"
+	"github.com/AutumnsGrove/sepia/internal/backup"
 	"github.com/AutumnsGrove/sepia/internal/banks"
 	"github.com/AutumnsGrove/sepia/internal/config"
 	"github.com/AutumnsGrove/sepia/internal/decisions"
@@ -236,13 +237,17 @@ func run(ctx context.Context, environ []string, stderr io.Writer) error {
 		return err
 	}
 
+	// The backup screens read receipts a host script would write. The dev stack has no host, so the directory is
+	// empty unless a scenario seeded it, and the screen says "Never" rather than pretending a backup ran.
+	backups := backup.New(cfg.DataDir, cfg.UpdateDir, db, db.Now)
+
 	log.Info("dev stack up", "addr", cfg.Addr, "scenario", scenario, "note", "offline: every outside service is a fake")
 	log.Info("dev sentence", "type", world.SampleMessage)
 
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- server.Run(ctx, cfg, server.Deps{
-			Engine: engine, Agent: a, Responder: responder, Live: live, Now: db.Now,
+			Engine: engine, Agent: a, Responder: responder, Live: live, Now: db.Now, Backups: backups,
 		}, log, webui.FS())
 	}()
 

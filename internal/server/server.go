@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/agent"
+	"github.com/AutumnsGrove/sepia/internal/backup"
 	"github.com/AutumnsGrove/sepia/internal/config"
 	"github.com/AutumnsGrove/sepia/internal/providers"
 	"github.com/AutumnsGrove/sepia/internal/session"
@@ -61,6 +62,9 @@ type Deps struct {
 	// Live carries the agent's live-only events to the sockets. Nil means there is no bus, which a test may not
 	// care about.
 	Live *LiveBus
+	// Backups is the app's half of the backup flow: receipts the host script wrote, and the request file for
+	// "Back up now". Nil means a build with no database behind it, and the routes answer "not set up".
+	Backups *backup.Service
 }
 
 // New builds the whole HTTP surface. assets is the built frontend, rooted at the directory that holds
@@ -87,7 +91,7 @@ func newServer(cfg config.Config, deps Deps, log *slog.Logger, assets fs.FS) *Se
 	}
 	s := &Server{
 		cfg: cfg, log: log, assets: assets, engine: deps.Engine, model: deps.Agent, now: now, base: base,
-		responder: deps.Responder, update: update.New(cfg.UpdateDir, versionString(), now),
+		responder: deps.Responder, update: update.New(cfg.UpdateDir, versionString(), now), backups: deps.Backups,
 	}
 	s.hub = newHub(s)
 	if deps.Live != nil {
@@ -110,6 +114,9 @@ type Server struct {
 	// update is the app's half of the host watcher handshake. A bare deployment has no directory, and every
 	// action on it is refused with a plain "no helper" rather than writing into the working tree.
 	update *update.Signal
+	// backups is the app's half of the backup flow (S14). It reads the host script's receipts and writes the
+	// on-demand request; it never takes a snapshot itself.
+	backups *backup.Service
 }
 
 // routes assembles the chain. Order matters: recover, then the access log, then headers, then the Host check on
@@ -133,6 +140,8 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("/api/export", postOnly(s.exportStub))
 	mux.Handle("/api/version", getOnly(s.serveVersion))
 	mux.Handle("/api/services", getOnly(s.serveServices))
+	mux.Handle("/api/backups", getOnly(s.serveBackups))
+	mux.Handle("/api/backups/run", postOnly(s.backupRun))
 	mux.Handle("/api/settings", http.HandlerFunc(s.settings))
 	mux.Handle("/api/update/check", postOnly(s.updateCheck))
 	mux.Handle("/api/update/available", getOnly(s.serveUpdateAvailable))

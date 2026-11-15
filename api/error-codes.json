@@ -7,6 +7,11 @@
       "copy": "That field was already accepted."
     },
     {
+      "code": "backup_in_progress",
+      "status": 409,
+      "copy": "A backup is already running."
+    },
+    {
       "code": "bad_content_type",
       "status": 415,
       "copy": "Send that as JSON."

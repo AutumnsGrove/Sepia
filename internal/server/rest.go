@@ -615,7 +615,7 @@ func (s *Server) serveServices(w http.ResponseWriter, r *http.Request) {
 		{"name": "open_library", "state": "ok", "detail": "Books"},
 		{"name": "polaris", "state": "not_configured", "detail": "Web lookups"},
 		{"name": "database", "state": state(s.engine != nil), "detail": "Your entries and drafts"},
-		{"name": "r2", "state": "not_configured", "detail": "Backups"},
+		s.backupsService(r.Context()),
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"services": services})
 }

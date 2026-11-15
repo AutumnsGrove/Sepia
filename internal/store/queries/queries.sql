@@ -171,7 +171,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?);
 SELECT * FROM media WHERE entry_id = ? ORDER BY created_at;
 
 -- name: RecordMirror :exec
-INSERT INTO mirrors (id, ran_at, target, status, bytes, detail) VALUES (?, ?, ?, ?, ?, ?);
+-- OR IGNORE is what makes the import idempotent: the host script appends receipts to a file, the app imports them,
+-- and a crash between the two means the same run is imported twice. The id is the run plus the target.
+INSERT OR IGNORE INTO mirrors (id, ran_at, target, status, bytes, detail) VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: ListMirrors :many
 SELECT * FROM mirrors ORDER BY ran_at DESC LIMIT ?;

@@ -4,6 +4,7 @@
   import {
     ApiError,
     createClient,
+    type BackupsInfo,
     type ServicesInfo,
     type Settings,
     type UpdateAvailable,
@@ -14,6 +15,7 @@
   import SkeletonRows from '../../lib/components/SkeletonRows.svelte';
   import Switch from '../../lib/components/Switch.svelte';
   import TopBar from '../../lib/components/TopBar.svelte';
+  import { backupsSummary, deriveBackupsView } from '../../lib/backup/view';
   import { countText } from '../../lib/state/reading';
   import { serviceRows, servicesSummary } from '../../lib/update/services';
 
@@ -29,6 +31,7 @@
   let version = $state<VersionInfo | null>(null);
   let services = $state<ServicesInfo | null>(null);
   let update = $state<UpdateAvailable | null>(null);
+  let backups = $state<BackupsInfo | null>(null);
   let loading = $state(true);
   let problem = $state('');
   let writeProblem = $state('');
@@ -46,10 +49,11 @@
         .catch(() => null);
       // The two summary rows are the answer the screens behind them would give; a failure leaves the row quiet
       // rather than making the whole Settings screen an error.
-      [version, services, update] = await Promise.all([
+      [version, services, update, backups] = await Promise.all([
         client.getVersion().catch(() => null),
         client.getServices().catch(() => null),
         client.getUpdateAvailable().catch(() => null),
+        client.getBackups().catch(() => null),
       ]);
     } catch (error) {
       problem = error instanceof ApiError ? error.copy : 'Sepia could not read your settings.';
@@ -148,6 +152,13 @@
 
       <div class="group">
         <p class="lbl"><span>Your data</span></p>
+        <a class="srow link" href={resolve('/settings/backups')}>
+          <span>Backups and export</span>
+          <span class="v">
+            {backups ? backupsSummary(deriveBackupsView(backups, Date.now())) : ''}
+            <ChevronRight size={18} aria-hidden="true" />
+          </span>
+        </a>
         <a class="srow link" href={resolve('/deleted')}>
           <span>Deleted entries</span>
           <span class="v">
@@ -158,7 +169,8 @@
       </div>
 
       <Banner
-        >Backups and export arrive with your data screens. Everything else here is set in config.</Banner
+        >Export arrives with your data screens. Backups run on the potato every night. Everything
+        else here is set in config.</Banner
       >
     {/if}
   </div>

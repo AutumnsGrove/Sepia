@@ -243,6 +243,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The backup receipts and whether the host helper is alive */
+        get: operations["getBackups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/backups/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the host helper to run a backup now
+         * @description Writes one request file for the host unit and answers immediately. It never runs a snapshot or rclone itself, and it never holds the R2 token.
+         */
+        post: operations["runBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -545,6 +582,27 @@ export interface components {
         UpdateAccepted: {
             /** @constant */
             pending: true;
+        };
+        Backups: {
+            helper: {
+                /** @enum {unknown} */
+                state: "ready" | "not_installed" | "stale";
+                /** Format: date-time */
+                heartbeat_at?: string;
+            };
+            pending: boolean;
+            last: components["schemas"]["Mirror"] | null;
+            runs: components["schemas"]["Mirror"][];
+        };
+        Mirror: {
+            id: string;
+            /** Format: date-time */
+            ran_at: string;
+            target: string;
+            /** @enum {unknown} */
+            status: "ok" | "failed" | "skipped";
+            bytes: number;
+            detail: string;
         };
         UpdateStatus: {
             pending: boolean;
@@ -986,6 +1044,51 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    getBackups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest receipts, most recent first, and the helper's state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backups"];
+                };
+            };
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    runBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The host was asked. The screen polls the receipts until a new one appears. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        pending: boolean;
+                    };
+                };
+            };
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
         };
     };
     getSettings: {
