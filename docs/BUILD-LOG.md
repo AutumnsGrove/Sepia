@@ -972,6 +972,12 @@ The review's UI findings came from reading the derivation rather than a rendered
 pure view function pays: all three were Vitest-sized fixes. The pi-review app is installed on the repository now;
 the 2026-11-14 note that it was not is out of date.
 
+**The first live publish found a sixth.** `docker buildx imagetools inspect :latest | awk '/^Digest:/{print $2;
+exit}'` closed the pipe while inspect was still writing, and `set -o pipefail` turned the SIGPIPE into a failed
+step after `latest` had already moved. The digest is now the hash of the raw index, which is the digest by
+definition and reads the whole stream. The tag had moved and the image was scanned, so the artifact was good; only
+the run and its summary were red.
+
 **The first live check found a fifth.** On the potato, a check resolved the digest correctly but named the build by
 its short digest instead of its version. GHCR serves the index pretty-printed, with a space after the colon, and the
 watcher's `sed` matched only the compact `"version":"..."` shape. It now accepts either, and the watcher's fake
