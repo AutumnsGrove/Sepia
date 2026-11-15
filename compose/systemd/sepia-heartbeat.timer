@@ -1,0 +1,12 @@
+[Unit]
+Description=Keep Sepia's update watcher heartbeat fresh
+
+[Timer]
+# Every minute: the app calls the helper stale after three missed beats, which is long enough to survive a busy
+# board and short enough that a broken watcher is visible while she is still looking at the screen.
+OnBootSec=20s
+OnUnitActiveSec=1min
+Unit=sepia-heartbeat.service
+
+[Install]
+WantedBy=timers.target

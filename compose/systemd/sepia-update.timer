@@ -1,0 +1,12 @@
+[Unit]
+Description=Backstop for Sepia's update watcher, in case a path event is missed
+
+[Timer]
+# With no request waiting the script refreshes available.json and installs nothing, so an hourly tick costs one
+# registry lookup and keeps the panel's "last checked" honest after a missed inotify edge.
+OnBootSec=5min
+OnUnitActiveSec=1h
+Unit=sepia-update.service
+
+[Install]
+WantedBy=timers.target

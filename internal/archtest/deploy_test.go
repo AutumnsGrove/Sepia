@@ -306,3 +306,53 @@ func pinnedAction(uses string) bool {
 	}
 	return true
 }
+
+// TestSystemdUnits: installing the watcher means copying these five files and substituting two placeholders. A unit
+// that runs as root, has no bound, or points at a service that no longer exists is a silent outage on the board.
+func TestSystemdUnits(t *testing.T) {
+	dir := filepath.Join("..", "..", "compose", "systemd")
+	update := repoFile(t, filepath.Join("compose", "systemd", "sepia-update.service"))
+	path := repoFile(t, filepath.Join("compose", "systemd", "sepia-update.path"))
+	updateTimer := repoFile(t, filepath.Join("compose", "systemd", "sepia-update.timer"))
+	beatService := repoFile(t, filepath.Join("compose", "systemd", "sepia-heartbeat.service"))
+	beatTimer := repoFile(t, filepath.Join("compose", "systemd", "sepia-heartbeat.timer"))
+
+	if !strings.Contains(update, "User=@USER@") {
+		t.Error("the update service does not name a user; systemd would run it as root")
+	}
+	if strings.Contains(update, "User=root") {
+		t.Error("the update service runs as root")
+	}
+	if !strings.Contains(update, "TimeoutStartSec=") {
+		t.Error("the update service has no start timeout")
+	}
+	// The script's own worst case is git 60 + pull 300 + up 60 + health 120 + rollback 60 + health 60 = 660s.
+	if !strings.Contains(update, "TimeoutStartSec=900") {
+		t.Error("TimeoutStartSec is not the 900s the script's own bounds need")
+	}
+	if !strings.Contains(update, "update.sh") || !strings.Contains(update, "@INSTALL_DIR@") {
+		t.Error("the update service does not run the installed script")
+	}
+	if !strings.Contains(path, "PathExists=@INSTALL_DIR@/update-signal/requested") ||
+		!strings.Contains(path, "Unit=sepia-update.service") {
+		t.Error("the path unit does not watch the request file or does not name the update service")
+	}
+	if !strings.Contains(updateTimer, "Unit=sepia-update.service") {
+		t.Error("the backstop timer does not name the update service")
+	}
+	if !strings.Contains(beatService, "update.sh --heartbeat") {
+		t.Error("the heartbeat service does not run the heartbeat subcommand")
+	}
+	if !strings.Contains(beatTimer, "OnUnitActiveSec=1min") {
+		t.Error("the heartbeat is not refreshed every minute")
+	}
+	// Every one of the five files is an installed artifact; a missing one is an install that half happened.
+	for _, name := range []string{
+		"sepia-update.path", "sepia-update.service", "sepia-update.timer",
+		"sepia-heartbeat.service", "sepia-heartbeat.timer",
+	} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("compose/systemd is missing %s: %v", name, err)
+		}
+	}
+}
