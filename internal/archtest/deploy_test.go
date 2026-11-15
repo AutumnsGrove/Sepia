@@ -204,3 +204,105 @@ func TestSignalFilesAreNeverCommitted(t *testing.T) {
 		}
 	}
 }
+
+// TestPublishWorkflow: the workflow that puts an image on GHCR is the supply chain the watcher installs. Its
+// trigger, permissions and pinning are promises docs/CI.md 2 and 4 make, so they are checked here rather than
+// trusted to review.
+func TestPublishWorkflow(t *testing.T) {
+	var doc struct {
+		On struct {
+			Push struct {
+				Branches []string `yaml:"branches"`
+			} `yaml:"push"`
+			PullRequest any `yaml:"pull_request"`
+		} `yaml:"on"`
+		Permissions map[string]string `yaml:"permissions"`
+		Concurrency struct {
+			CancelInProgress bool `yaml:"cancel-in-progress"`
+		} `yaml:"concurrency"`
+		Jobs map[string]struct {
+			Permissions map[string]string `yaml:"permissions"`
+			Steps       []struct {
+				Uses string         `yaml:"uses"`
+				With map[string]any `yaml:"with"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal([]byte(repoFile(t, ".github/workflows/docker-publish.yml")), &doc); err != nil {
+		t.Fatalf("docker-publish.yml is not YAML: %v", err)
+	}
+
+	// Happy: main only. A pull request must never be able to push an image, because a fork's code would be in it.
+	if want := []string{"main"}; !slices.Equal(doc.On.Push.Branches, want) {
+		t.Errorf("push branches = %v, want %v", doc.On.Push.Branches, want)
+	}
+	if doc.On.PullRequest != nil {
+		t.Error("the publish workflow also runs on pull_request")
+	}
+	// Bad: an interrupted multi-arch push can leave a partial manifest, so a later run queues instead of winning.
+	if doc.Concurrency.CancelInProgress {
+		t.Error("concurrency cancels in progress; an interrupted push can leave a partial manifest")
+	}
+
+	var packages, contents bool
+	var platforms string
+	var sbom bool
+	var trivy bool
+	for name, job := range doc.Jobs {
+		perms := job.Permissions
+		if perms == nil {
+			perms = doc.Permissions
+		}
+		packages = packages || perms["packages"] == "write"
+		contents = contents || perms["contents"] == "read"
+		for _, step := range job.Steps {
+			action, _, _ := strings.Cut(step.Uses, "@")
+			if step.Uses != "" && !pinnedAction(step.Uses) {
+				t.Errorf("job %s uses %s; every action is pinned by a full commit sha", name, step.Uses)
+			}
+			switch action {
+			case "docker/build-push-action":
+				if got, _ := step.With["platforms"].(string); !strings.Contains(got, "linux/arm64") {
+					t.Errorf("build platforms = %q, want linux/arm64 for the potato", got)
+				} else {
+					platforms = got
+				}
+				sbom, _ = step.With["sbom"].(bool)
+			case "aquasecurity/trivy-action":
+				trivy = true
+				if got, _ := step.With["severity"].(string); !strings.Contains(got, "CRITICAL") {
+					t.Errorf("trivy severity = %q, want CRITICAL", got)
+				}
+				if got, _ := step.With["exit-code"].(string); got != "1" {
+					t.Errorf("trivy exit-code = %q, want 1", got)
+				}
+			}
+		}
+	}
+	if !packages || !contents {
+		t.Errorf("permissions = %v, want contents read and packages write", doc.Permissions)
+	}
+	if platforms == "" {
+		t.Error("nothing builds an image")
+	}
+	if !sbom {
+		t.Error("the build does not generate an SBOM")
+	}
+	if !trivy {
+		t.Error("the image is not scanned before it is used")
+	}
+}
+
+// pinnedAction reports whether uses is name@<40 hex>. A tag can move; a commit cannot.
+func pinnedAction(uses string) bool {
+	_, ref, ok := strings.Cut(uses, "@")
+	if !ok || len(ref) != 40 {
+		return false
+	}
+	for _, r := range ref {
+		if !strings.ContainsRune("0123456789abcdef", r) {
+			return false
+		}
+	}
+	return true
+}
