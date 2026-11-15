@@ -7,6 +7,9 @@
   import Rating from './Rating.svelte';
   import Tabs from './Tabs.svelte';
   import { lookupSentence } from '../session/copy';
+  import { describeAnswer, questionAnswer, skippedQuestions } from '../session/answers';
+  import { untrack } from 'svelte';
+  import { browserStorage, clearDraft, loadDraft, saveDraft } from '../session/answerDrafts';
 
   /**
    * Every kind of question the agent can ask is one card, because a person should not have to learn a new
@@ -32,10 +35,12 @@
   interface Props {
     kind: string;
     payload: Record<string, unknown>;
+    /** The interaction's id, which keys the in-progress draft so a remount can restore it. */
+    id?: string;
     disabled?: boolean;
     onanswer: (value: unknown) => void;
   }
-  let { kind, payload, disabled = false, onanswer }: Props = $props();
+  let { kind, payload, id = '', disabled = false, onanswer }: Props = $props();
 
   const options = $derived((payload.options as Option[] | undefined) ?? []);
   const candidates = $derived((payload.candidates as Candidate[] | undefined) ?? []);
@@ -51,12 +56,29 @@
 
   // The tab she picked, or the first category until she picks one. Deriving it keeps the component honest when
   // a new interaction replaces the categories under it.
-  let picked = $state<string | null>(null);
+  // The draft is restored from sessionStorage: a swipe-back remounts this component while the interaction is still
+  // open, and losing the taps made the card look like it had forgotten her answers.
+  const storage = browserStorage();
+  const draft = loadDraft(
+    storage,
+    untrack(() => id),
+  );
+  let picked = $state<string | null>(draft.picked ?? null);
   // Arrays rather than Sets: they are copied on every change, so Svelte sees the update and there is no
   // mutable reactive instance to reason about.
-  let chosen = $state<Record<string, string[]>>({});
-  let answers = $state<Record<string, string>>({});
+  let chosen = $state<Record<string, string[]>>(draft.chosen ?? {});
+  let answers = $state<Record<string, string>>(draft.answers ?? {});
   let rating = $state(0);
+
+  $effect(() => {
+    saveDraft(storage, id, { picked: picked ?? undefined, chosen, answers });
+  });
+
+  /** An answer is leaving: the draft is done with, and a stale one would restore after the next remount. */
+  function answered(value: unknown) {
+    clearDraft(storage, id);
+    onanswer(value);
+  }
 
   const tab = $derived(picked ?? categories[0]?.id ?? '');
   const activeCategory = $derived(
@@ -89,11 +111,11 @@
   }
 
   function submitDescribe() {
-    onanswer({ tags: allTags() });
+    answered(describeAnswer(chosen));
   }
 
   function submitQuestions() {
-    onanswer({ answers });
+    answered(questionAnswer(answers));
   }
 
   function previousMeta(): string {
@@ -214,7 +236,7 @@
       {/each}
     </div>
     <div class="formfoot">
-      <Button variant="ghost" {disabled} onclick={() => onanswer({ answers: {} })}>Skip</Button>
+      <Button variant="ghost" {disabled} onclick={() => answered(skippedQuestions())}>Skip</Button>
       <Button variant="primary" grow {disabled} onclick={submitQuestions}>Done</Button>
     </div>
   {:else if kind === 'revisit_choice'}
