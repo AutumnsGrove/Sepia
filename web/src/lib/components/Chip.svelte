@@ -52,8 +52,14 @@
     background: var(--bg);
     color: var(--text);
   }
-  .chip.pick:hover {
+  /* Only an unselected chip lifts on hover. Without the :not(.on), hover outranked the selected fill (three
+   * classes against two), so a chip she had just tapped looked unselected while the pointer was on it. */
+  .chip.pick:hover:not(.on) {
     background: var(--raised);
+  }
+  .chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .chip.sug {
     border: 1.5px dashed var(--text-3);

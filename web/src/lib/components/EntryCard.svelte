@@ -36,6 +36,7 @@
     versions?: number;
     preread?: Preread | null;
     whyOpen?: boolean;
+    onwhyclose?: () => void;
     disabled?: boolean;
     onedit?: (set: Record<string, string | number | boolean>) => void;
     oninclude?: (segmentID: string) => void;
@@ -50,6 +51,7 @@
     versions = 0,
     preread = null,
     whyOpen = false,
+    onwhyclose,
     disabled = false,
     onedit,
     oninclude,
@@ -403,7 +405,7 @@
   {/if}
 
   {#if !saved}
-    <WhySheet why={draft.why} {preread} open={whyOpen} />
+    <WhySheet why={draft.why} {preread} open={whyOpen} onclose={onwhyclose} />
   {/if}
 </article>
 
