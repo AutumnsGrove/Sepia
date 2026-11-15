@@ -8,6 +8,7 @@ type ErrorCode string
 // Every error code Sepia can answer with.
 const (
 	CodeAlreadyAccepted     ErrorCode = "already_accepted"
+	CodeBackupInProgress    ErrorCode = "backup_in_progress"
 	CodeBadContentType      ErrorCode = "bad_content_type"
 	CodeBadHost             ErrorCode = "bad_host"
 	CodeBadOrigin           ErrorCode = "bad_origin"
@@ -49,6 +50,7 @@ var errorInfo = map[ErrorCode]struct {
 	Copy   string
 }{
 	CodeAlreadyAccepted:     {Status: 409, Copy: "That field was already accepted."},
+	CodeBackupInProgress:    {Status: 409, Copy: "A backup is already running."},
 	CodeBadContentType:      {Status: 415, Copy: "Send that as JSON."},
 	CodeBadHost:             {Status: 400, Copy: "This address is not Sepia."},
 	CodeBadOrigin:           {Status: 403, Copy: "That request did not come from Sepia."},

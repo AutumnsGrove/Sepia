@@ -51,7 +51,7 @@ var allow = map[string][]string{
 	"contract":  {},
 	"session":   {"domain", "store", "banks"},
 	"agent":     {"domain", "store", "banks", "session", "decisions", "providers"},
-	"server":    {"domain", "session", "agent", "contract", "providers", "update", "config", "webui", "version"},
+	"server":    {"domain", "session", "agent", "backup", "contract", "providers", "update", "config", "webui", "version"},
 	"update":    {"domain", "config"},
 	"backup":    {"domain", "store", "config"},
 	"webui":     {},

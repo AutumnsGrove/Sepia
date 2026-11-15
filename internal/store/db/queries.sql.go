@@ -1702,7 +1702,7 @@ func (q *Queries) ListWorkSources(ctx context.Context, workID string) ([]WorkSou
 }
 
 const recordMirror = `-- name: RecordMirror :exec
-INSERT INTO mirrors (id, ran_at, target, status, bytes, detail) VALUES (?, ?, ?, ?, ?, ?)
+INSERT OR IGNORE INTO mirrors (id, ran_at, target, status, bytes, detail) VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type RecordMirrorParams struct {
@@ -1714,6 +1714,8 @@ type RecordMirrorParams struct {
 	Detail string `json:"detail"`
 }
 
+// OR IGNORE is what makes the import idempotent: the host script appends receipts to a file, the app imports them,
+// and a crash between the two means the same run is imported twice. The id is the run plus the target.
 func (q *Queries) RecordMirror(ctx context.Context, arg RecordMirrorParams) error {
 	_, err := q.db.ExecContext(ctx, recordMirror,
 		arg.ID,

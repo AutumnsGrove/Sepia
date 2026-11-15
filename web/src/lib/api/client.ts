@@ -31,6 +31,8 @@ export type WorkDetail = Ok<Operation<'/api/works/{id}', 'get'>>;
 export type SearchResults = Ok<Operation<'/api/search', 'get'>>;
 export type VersionInfo = Ok<Operation<'/api/version', 'get'>>;
 export type ServicesInfo = Ok<Operation<'/api/services', 'get'>>;
+export type BackupsInfo = Ok<Operation<'/api/backups', 'get'>>;
+export type BackupAccepted = Ok<Operation<'/api/backups/run', 'post'>>;
 export type Settings = Ok<Operation<'/api/settings', 'get'>>;
 export type UpdateAvailable = Ok<Operation<'/api/update/available', 'get'>>;
 export type UpdateStatus = Ok<Operation<'/api/update/status', 'get'>>;
@@ -105,6 +107,8 @@ export interface Client {
   search(q: string): Promise<SearchResults>;
   getVersion(): Promise<VersionInfo>;
   getServices(): Promise<ServicesInfo>;
+  getBackups(): Promise<BackupsInfo>;
+  runBackup(): Promise<BackupAccepted>;
   getUpdateAvailable(): Promise<UpdateAvailable>;
   getUpdateStatus(): Promise<UpdateStatus>;
   checkForUpdates(): Promise<UpdateAccepted>;
@@ -191,6 +195,8 @@ export function createClient(options: ClientOptions = {}): Client {
     search: (q) => request('GET', `/api/search${queryString({ q })}`),
     getVersion: () => request('GET', '/api/version'),
     getServices: () => request('GET', '/api/services'),
+    getBackups: () => request('GET', '/api/backups'),
+    runBackup: () => request('POST', '/api/backups/run'),
     getUpdateAvailable: () => request('GET', '/api/update/available'),
     getUpdateStatus: () => request('GET', '/api/update/status'),
     checkForUpdates: () => request('POST', '/api/update/check'),
