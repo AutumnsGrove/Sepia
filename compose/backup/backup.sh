@@ -118,17 +118,28 @@ take_snapshot() {
 		return 1
 	fi
 
+	# A killed run leaves its temp snapshot and sidecars behind; they are ours and nothing else names them.
+	find "$DAILY_DIR" -maxdepth 1 -name '*.tmp.*' -mmin +60 -delete 2>/dev/null || true
+	rm -f "$DAILY_DIR"/*.tmp.*-wal "$DAILY_DIR"/*.tmp.*-shm 2>/dev/null || true
+
 	# .backup is the online backup API: one consistent read transaction against a database another process is
 	# writing to, which a plain file copy cannot promise under WAL.
 	if ! timeout "$SQLITE_TIMEOUT" sqlite3 "$DB_FILE" ".backup '$tmp'" 2>/dev/null; then
-		rm -f "$tmp"
+		rm -f "$tmp" "$tmp-wal" "$tmp-shm"
 		record "local:snapshot" failed 0 "the online snapshot did not finish inside ${SQLITE_TIMEOUT}s"
 		return 1
 	fi
 
-	check="$(timeout "$SQLITE_TIMEOUT" sqlite3 "$tmp" 'PRAGMA integrity_check;' 2>/dev/null || true)"
+	# The backup inherits the source's WAL journal mode, and an open of a WAL database creates -wal and -shm beside it.
+	# A snapshot must be one file, or rclone mirrors the sidecars as if they were backups (found on the potato,
+	# 2026-11-15), so collapse the journal into the file before anything checks or copies it.
+	timeout "$SQLITE_TIMEOUT" sqlite3 "$tmp" 'PRAGMA journal_mode=DELETE;' >/dev/null 2>&1 || true
+	rm -f "$tmp-wal" "$tmp-shm"
+
+	# Read-only, so the check cannot create the sidecars it just got rid of.
+	check="$(timeout "$SQLITE_TIMEOUT" sqlite3 -readonly "$tmp" 'PRAGMA integrity_check;' 2>/dev/null || true)"
 	if [ "$check" != "ok" ]; then
-		rm -f "$tmp"
+		rm -f "$tmp" "$tmp-wal" "$tmp-shm"
 		record "local:snapshot" failed 0 "a snapshot failed its integrity check and was thrown away"
 		return 1
 	fi
@@ -146,12 +157,13 @@ take_snapshot() {
 			for (i = 1; i <= n; i++) { if (s[i] + 0 > l[i] + 0) { exit 1 } }
 			exit 0
 		}'; then
-		rm -f "$tmp"
+		rm -f "$tmp" "$tmp-wal" "$tmp-shm"
 		record "local:snapshot" failed 0 "a snapshot held more rows than the database and was thrown away"
 		return 1
 	fi
 
 	mv -f "$tmp" "$today"
+	rm -f "$today-wal" "$today-shm"
 	chmod 600 "$today"
 	log "snapshot $today ($(wc -c <"$today") bytes, $snapshot_counts)"
 	return 0
