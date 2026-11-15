@@ -50,6 +50,7 @@ the one `go test -cover` prints for that package, so a log line always means wha
 | `internal/providers` | 85% | Every provider response is untrusted input turned into a card |
 | `internal/store` | 84% | The transactions that make a confirm atomic and a draft change one write (S04, S07) |
 | `internal/server` | 80% | The Host and Origin guard, the socket and the REST surface (S09) |
+| `internal/backup` | 80% | Parses the receipts the host writes, and decides whether a restore is allowed to publish a database (S14) |
 | `internal/config` | 80% | The allowed hosts and the data directory, which the guard depends on |
 | `internal/world` | 80% | The fake world every later test drives Sepia against (S08) |
 
