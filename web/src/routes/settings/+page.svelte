@@ -1,23 +1,34 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
   import { ChevronRight } from '@lucide/svelte';
-  import { ApiError, createClient, type Settings } from '../../lib/api/client';
+  import {
+    ApiError,
+    createClient,
+    type ServicesInfo,
+    type Settings,
+    type UpdateAvailable,
+    type VersionInfo,
+  } from '../../lib/api/client';
   import Banner from '../../lib/components/Banner.svelte';
   import Errbox from '../../lib/components/Errbox.svelte';
   import SkeletonRows from '../../lib/components/SkeletonRows.svelte';
   import Switch from '../../lib/components/Switch.svelte';
   import TopBar from '../../lib/components/TopBar.svelte';
   import { countText } from '../../lib/state/reading';
+  import { serviceRows, servicesSummary } from '../../lib/update/services';
 
   /**
-   * Settings: the few things worth changing, because most are decided in config. Today that is the quick pre-read
-   * switch and the way into the Deleted list; Updates and Services arrive with S13, and neither is shown as a row that
-   * does nothing.
+   * Settings: the few things worth changing, because most are decided in config. The updates and services rows carry
+   * the one-line answer the screens behind them give; a row that led to a page saying nothing would be worse than no
+   * row at all.
    */
   const client = createClient();
 
   let settings = $state<Settings | null>(null);
   let deletedCount = $state<number | null>(null);
+  let version = $state<VersionInfo | null>(null);
+  let services = $state<ServicesInfo | null>(null);
+  let update = $state<UpdateAvailable | null>(null);
   let loading = $state(true);
   let problem = $state('');
   let writeProblem = $state('');
@@ -33,6 +44,13 @@
         .listEntries({ deleted: true, limit: 100 })
         .then((page) => page.items.length)
         .catch(() => null);
+      // The two summary rows are the answer the screens behind them would give; a failure leaves the row quiet
+      // rather than making the whole Settings screen an error.
+      [version, services, update] = await Promise.all([
+        client.getVersion().catch(() => null),
+        client.getServices().catch(() => null),
+        client.getUpdateAvailable().catch(() => null),
+      ]);
     } catch (error) {
       problem = error instanceof ApiError ? error.copy : 'Sepia could not read your settings.';
     } finally {
@@ -43,6 +61,14 @@
   $effect(() => {
     void load();
   });
+
+  /** The updates row's value: what the watcher and the running version say, in one phrase. */
+  function updatesText(info: VersionInfo | null, checked: UpdateAvailable | null): string {
+    if (!info) return '';
+    if (info.updater.state !== 'ready') return 'Not set up';
+    if (checked?.available.update_available) return 'Update ready';
+    return 'Up to date';
+  }
 
   async function setPreread(on: boolean) {
     if (!settings || saving) return;
@@ -84,6 +110,24 @@
       {/if}
 
       <div class="group">
+        <p class="lbl"><span>Sepia</span></p>
+        <a class="srow link" href={resolve('/settings/updates')}>
+          <span>Updates</span>
+          <span class="v">
+            {updatesText(version, update)}
+            <ChevronRight size={18} aria-hidden="true" />
+          </span>
+        </a>
+        <a class="srow link" href={resolve('/settings/services')}>
+          <span>Services</span>
+          <span class="v">
+            {servicesSummary(serviceRows(services))}
+            <ChevronRight size={18} aria-hidden="true" />
+          </span>
+        </a>
+      </div>
+
+      <div class="group">
         <p class="lbl"><span>Behaviour</span></p>
         <div class="srow">
           <span class="lblcol">
@@ -114,7 +158,7 @@
       </div>
 
       <Banner
-        >Updates and services arrive with the updates screen. Backups arrive with your data screens.</Banner
+        >Backups and export arrive with your data screens. Everything else here is set in config.</Banner
       >
     {/if}
   </div>

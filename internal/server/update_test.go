@@ -266,3 +266,35 @@ func TestUpdateRoutesRefuseAHostileOrigin(t *testing.T) {
 		t.Error("a hostile request wrote a signal")
 	}
 }
+
+// The services screen is told what is configured and what it costs when it is not. It is never told "reachable",
+// because this route makes no live call.
+func TestServicesReportConfiguration(t *testing.T) {
+	cfg, _ := updateConfig(t)
+	cfg.OpenRouterKey = "test-key"
+	cfg.Model = "vendor/model-pinned"
+	h := newTestServer(t, cfg, assets())
+
+	rec := do(t, h, http.MethodGet, "/api/services", "localhost:8893", "", nil)
+	var got struct {
+		Services []struct {
+			Name   string `json:"name"`
+			State  string `json:"state"`
+			Detail string `json:"detail"`
+		} `json:"services"`
+	}
+	decode(t, rec, &got)
+	byName := map[string]struct{ State, Detail string }{}
+	for _, svc := range got.Services {
+		byName[svc.Name] = struct{ State, Detail string }{svc.State, svc.Detail}
+	}
+	if got, ok := byName["main_model"]; !ok || got.State != "ok" || got.Detail != "vendor/model-pinned" {
+		t.Errorf("main_model = %+v", got)
+	}
+	if got, ok := byName["tmdb"]; !ok || got.State != "not_configured" {
+		t.Errorf("tmdb = %+v, want not_configured without a key", got)
+	}
+	if got, ok := byName["polaris"]; !ok || got.State != "not_configured" {
+		t.Errorf("polaris = %+v", got)
+	}
+}

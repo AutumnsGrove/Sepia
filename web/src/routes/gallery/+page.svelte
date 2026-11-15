@@ -18,6 +18,9 @@
   import Switch from '../../lib/components/Switch.svelte';
   import Tabs from '../../lib/components/Tabs.svelte';
   import { fixtureHandlers, screenFixture, screenNames } from '../../lib/session/fixtures';
+  import { updateFixture, updateNames } from '../../lib/update/fixtures';
+  import { deriveUpdateView } from '../../lib/update/view';
+  import UpdatePanel from '../../lib/components/UpdatePanel.svelte';
 
   /**
    * The gallery: every base component in every state the mockups draw, in one column, addressable one state at
@@ -50,6 +53,7 @@
     'ix-lookup',
     'socket',
     ...screenNames,
+    ...updateNames,
   ] as const;
   type State = (typeof states)[number];
 
@@ -224,6 +228,13 @@
       machine.stop();
     };
   });
+
+  function deriveUpdateFixture(name: Parameters<typeof updateFixture>[0]) {
+    const snapshot = updateFixture(name);
+    // The gallery shows the panel, not the page: it imports the same pure function the page uses, so a fixture that
+    // drifts from the real derivation fails a Vitest test rather than a screenshot.
+    return deriveUpdateView(snapshot);
+  }
 
   function reconnect() {
     socket?.stop();
@@ -554,6 +565,17 @@
     {/if}
   {/each}
 
+  {#each updateNames as name (name)}
+    {#if shown === name}
+      <section class="updstate">
+        <h2>{name.replace('upd-', '').replaceAll('-', ' ')}</h2>
+        <div class="phoneish">
+          <UpdatePanel view={deriveUpdateFixture(name)} now={updateFixture(name).now} />
+        </div>
+      </section>
+    {/if}
+  {/each}
+
   {#if answer}
     <p class="answer" role="status">Answer: {answer}</p>
   {/if}
@@ -605,6 +627,11 @@
   }
   section {
     margin-bottom: 2rem;
+  }
+  .phoneish {
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 0 1rem 1rem;
   }
   h2 {
     font:

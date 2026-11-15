@@ -523,7 +523,7 @@ export interface components {
         };
         ServiceStatus: {
             /** @enum {unknown} */
-            name: "database" | "decisions" | "polaris" | "tmdb" | "open_library" | "r2";
+            name: "main_model" | "database" | "decisions" | "polaris" | "tmdb" | "open_library" | "r2";
             /** @enum {unknown} */
             state: "ok" | "degraded" | "down" | "not_configured";
             detail?: string;
