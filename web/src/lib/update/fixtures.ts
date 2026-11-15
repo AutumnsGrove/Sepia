@@ -71,7 +71,13 @@ export function updateFixture(name: UpdateName): Snapshot {
     case 'upd-helper-quiet':
       return { ...base(), version: version('stale') };
     case 'upd-checking':
-      return { ...base(), available: available({ latest: undefined }, true) };
+      // The real server pairing: a waiting request is both check_pending and status.pending. The view has to
+      // prefer the check.
+      return {
+        ...base(),
+        available: available({ latest: undefined }, true),
+        status: status({ pending: true }),
+      };
     case 'upd-up-to-date':
       return base();
     case 'upd-check-failed':
@@ -110,6 +116,8 @@ export function updateFixture(name: UpdateName): Snapshot {
     case 'upd-done':
       return {
         ...base(),
+        // The page that asked for it, which is the only page that may show "done".
+        startedAt: NOW - 20_000,
         status: status({
           result: {
             status: 'ok',

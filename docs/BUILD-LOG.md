@@ -945,3 +945,29 @@ fakes of Docker, git, the registry and the health endpoint, including the rollba
 **Settled after the handoff.** Meridian's vital is the build version, as it is for Warbler, Ivy and Polaris.
 `/healthz` stays two fields by design, so no endpoint was added; a "reviews this month" count, if it is ever wanted,
 is a new route with its own contract entry, tests and limits row in a later slice.
+
+## 2026-11-15, the S13 review found four
+
+pi-review reviewed PR #9 and found four real things. All four are fixed on `s13-review-fixes`, each with a test.
+
+- **The image became `latest` before Trivy scanned it.** The scan gated the summary, not the artifact: a critical
+  finding failed the run and left the unscanned index as `latest`, which the watcher resolves. The build now pushes
+  only the immutable version tag, the scan runs against that digest, and `latest` is moved afterwards with
+  `imagetools create`. If the scan fails, `latest` still points at the last image that passed.
+  - Moving a tag writes a new index manifest, so its digest is not the build's. The pinned reference in the run
+    summary is now the digest `:latest` resolves to; pinning the build digest would have looked like an update
+    forever. A test asserts the summary prints the former and not the latter.
+- **A queued check rendered as "Updating".** `check_pending` and `status.pending` were both the existence of
+  `requested`, so the `checking` view was only reachable in a millisecond race, and its fixture paired flags the
+  server never produces. `check_pending` now means specifically a queued check (it reads the request's action), the
+  view reads it before `pending`, and the fixture uses the real pairing.
+- **"Done" never expired.** The result file outlives the request, so a fresh visit sat on "Updated to X / Reloading
+  the page..." with no controls until the ten-minute quiet check. Only the page that started the update shows
+  `done`; a fresh page shows up to date with its buttons.
+- **systemd's bound was below the script's worst case.** Two 40-try health polls at up to 9 s each put the update
+  path at about 1280 s, not 900 s, so systemd could SIGKILL the script during the rollback wait and skip the result
+  write it exists for. `TimeoutStartSec` is 1800, and the comment now does the arithmetic out loud.
+
+The review's UI findings came from reading the derivation rather than a rendered page, which is exactly where the
+pure view function pays: all three were Vitest-sized fixes. The pi-review app is installed on the repository now;
+the 2026-11-14 note that it was not is out of date.

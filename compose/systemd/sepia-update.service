@@ -10,6 +10,8 @@ Type=oneshot
 User=@USER@
 WorkingDirectory=@INSTALL_DIR@
 ExecStart=@INSTALL_DIR@/compose/watcher/update.sh
-# Above the script's own bounded steps summed (git 60s, pull 300s, up 60s, health 120s, rollback 60s + 60s), so
-# systemd never SIGKILLs the script between a failed start and its rollback.
-TimeoutStartSec=900
+# Above the script's real worst case, so systemd never SIGKILLs it between a failed start and its rollback and
+# leaves requested behind: resolve 60s + git 60s + pull 300s + up 60s + health 40x(6+3)s = 360s + logs 20s +
+# rollback up 60s + rollback health 360s, which is 1280s. The health poll is the expensive one because a container
+# that accepts connections but never answers costs a full curl timeout on every try.
+TimeoutStartSec=1800

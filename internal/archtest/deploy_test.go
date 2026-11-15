@@ -224,6 +224,7 @@ func TestPublishWorkflow(t *testing.T) {
 			Permissions map[string]string `yaml:"permissions"`
 			Steps       []struct {
 				Uses string         `yaml:"uses"`
+				Run  string         `yaml:"run"`
 				With map[string]any `yaml:"with"`
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
@@ -248,6 +249,8 @@ func TestPublishWorkflow(t *testing.T) {
 	var platforms string
 	var sbom bool
 	var trivy bool
+	trivyAt, latestAt := -1, -1
+	var stepNo int
 	for name, job := range doc.Jobs {
 		perms := job.Permissions
 		if perms == nil {
@@ -256,6 +259,7 @@ func TestPublishWorkflow(t *testing.T) {
 		packages = packages || perms["packages"] == "write"
 		contents = contents || perms["contents"] == "read"
 		for _, step := range job.Steps {
+			stepNo++
 			action, _, _ := strings.Cut(step.Uses, "@")
 			if step.Uses != "" && !pinnedAction(step.Uses) {
 				t.Errorf("job %s uses %s; every action is pinned by a full commit sha", name, step.Uses)
@@ -268,8 +272,14 @@ func TestPublishWorkflow(t *testing.T) {
 					platforms = got
 				}
 				sbom, _ = step.With["sbom"].(bool)
+				// The moving tag must not exist until Trivy has passed: the watcher resolves it, and an
+				// unscanned image behind it would be installable by one tap.
+				if tags, _ := step.With["tags"].(string); strings.Contains(tags, ":latest") {
+					t.Errorf("the build pushes :latest before the scan; tags = %q", tags)
+				}
 			case "aquasecurity/trivy-action":
 				trivy = true
+				trivyAt = stepNo
 				if got, _ := step.With["severity"].(string); !strings.Contains(got, "CRITICAL") {
 					t.Errorf("trivy severity = %q, want CRITICAL", got)
 				}
@@ -277,7 +287,27 @@ func TestPublishWorkflow(t *testing.T) {
 					t.Errorf("trivy exit-code = %q, want 1", got)
 				}
 			}
+			if strings.Contains(step.Run, "imagetools create") && strings.Contains(step.Run, ":latest") {
+				latestAt = stepNo
+			}
+			// The pinned reference must be the digest :latest resolves to, not the build's: moving the tag
+			// writes a new index, and a .env pinned to the old digest would look like an update forever.
+			if strings.Contains(step.Run, "GITHUB_STEP_SUMMARY") {
+				if !strings.Contains(step.Run, "steps.latest.outputs.digest") {
+					t.Error("the summary does not print the digest :latest resolves to")
+				}
+				if strings.Contains(step.Run, "steps.build.outputs.digest") {
+					t.Error("the summary prints the build digest, which is not the one :latest will resolve to")
+				}
+			}
 		}
+	}
+	if latestAt < 0 {
+		t.Error("nothing moves :latest, so the moving tag would never point at a new build")
+	}
+	// The scan gates the moving tag, not just the summary.
+	if trivyAt < 0 || latestAt < trivyAt {
+		t.Errorf(":latest is moved at step %d but Trivy runs at step %d; the scan must come first", latestAt, trivyAt)
 	}
 	if !packages || !contents {
 		t.Errorf("permissions = %v, want contents read and packages write", doc.Permissions)
@@ -326,9 +356,10 @@ func TestSystemdUnits(t *testing.T) {
 	if !strings.Contains(update, "TimeoutStartSec=") {
 		t.Error("the update service has no start timeout")
 	}
-	// The script's own worst case is git 60 + pull 300 + up 60 + health 120 + rollback 60 + health 60 = 660s.
-	if !strings.Contains(update, "TimeoutStartSec=900") {
-		t.Error("TimeoutStartSec is not the 900s the script's own bounds need")
+	// resolve 60 + git 60 + pull 300 + up 60 + two health polls at 40x(6+3) = 720 + logs 20 = 1280s. The bound
+	// must stay above that, or systemd kills the script mid-rollback and the result is never written.
+	if !strings.Contains(update, "TimeoutStartSec=1800") {
+		t.Error("TimeoutStartSec is not the 1800s the script's own bounds need")
 	}
 	if !strings.Contains(update, "update.sh") || !strings.Contains(update, "@INSTALL_DIR@") {
 		t.Error("the update service does not run the installed script")

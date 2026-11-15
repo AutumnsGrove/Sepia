@@ -51,6 +51,10 @@ export function deriveUpdateView(snapshot: Snapshot): UpdateView {
   }
 
   const current = version.version;
+  // A queued check is not an update. check_pending is specifically a check, and it has to be read before
+  // status.pending (any request), or the panel promises a reload that will never happen (S13 review).
+  if (available.check_pending) return { kind: 'checking', version: current };
+
   if (status?.pending) {
     return {
       kind: 'updating',
@@ -63,7 +67,16 @@ export function deriveUpdateView(snapshot: Snapshot): UpdateView {
   if (status?.result) {
     switch (status.result.status) {
       case 'ok':
-        return { kind: 'done', version: current };
+        // The result file is never cleared, so "done" belongs only to the page that asked for the update. A fresh
+        // visit would otherwise sit on "Reloading..." forever, with no button, after the reload it already did.
+        return startedAt !== null
+          ? { kind: 'done', version: current }
+          : {
+              kind: 'up_to_date',
+              version: current,
+              checkedAt: available.available.checked_at ?? null,
+              checkError: '',
+            };
       case 'skipped':
         return {
           kind: 'up_to_date',
@@ -87,7 +100,6 @@ export function deriveUpdateView(snapshot: Snapshot): UpdateView {
     }
   }
 
-  if (available.check_pending) return { kind: 'checking', version: current };
   if (available.available.update_available) {
     return {
       kind: 'available',
