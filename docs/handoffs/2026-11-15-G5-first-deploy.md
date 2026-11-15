@@ -63,13 +63,13 @@ systemd would have recorded every failed deploy as a success), and every fresh S
 5. **The two lines in other repositories.** `service-healthcheck.sh` gains the Sepia block in `docs/INSTALL.md` 6;
    Meridian's live config gains the tile. I did not edit either repository.
 
-## One thing the spec did not settle
+## One thing the spec did not settle (answered 2026-11-15)
 
 Meridian's vital is specified as "reviews this month". There is no endpoint that answers it: `/healthz` is two fields
 by design and `GET /api/entries` has no month filter. The tile in `docs/INSTALL.md` carries the build version instead,
 which is what Warbler does. A "reviews this month" vital needs a small new route with its own contract entry, tests
-and a limits table row, and it belongs in a slice rather than in a deploy change. **Do you want that route, or is the
-build version enough for the tile?**
+and a limits table row, and it belongs in a slice rather than in a deploy change. **Answered: the build version, the
+same as the siblings.** The tile in `docs/INSTALL.md` is the settled one; no route was added.
 
 ## Where the detail is
 
