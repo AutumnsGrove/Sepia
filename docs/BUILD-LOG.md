@@ -988,7 +988,7 @@ could show: the fake had been written in the shape the code expected.
 
 **Deployed, by the operator's instruction, in one session.** The first image (`r113.8c7d673`) was published by
 `docker-publish` and pulled by the board; `docker compose up -d` came up healthy on 127.0.0.1:8893; the five units
-were installed and enabled; `tailscale serve --bg 8893` added the tailnet route; the keys were moved into
+were installed and enabled; `tailscale serve --bg --https=8893 http://127.0.0.1:8893` added the tailnet route; the keys were moved into
 `~/Sepia/.env` through ssh stdin, never printed and never read by an agent; and `sepia doctor` was all green,
 including the mounted `.env` at mode 0600, owner 1000:1000, and the database protections refusing a forbidden write.
 
@@ -1011,6 +1011,12 @@ port 8897, its own units and signal directory, never touching production):
 **Two more bugs the live run found** (both already recorded above): the annotation's whitespace, and the SIGPIPE in
 the digest extraction. Neither could have been found by the fakes as they were written; both fakes and tests now
 carry the shape the real registry produces.
+
+**And one more, in the install command itself.** The first attempt was `tailscale serve --bg 8893`, which tailscale
+reads as *target 8893 on 443*: it took over the root route, which had been proxying vaultwarden, and served Sepia on
+`https://…` instead of `https://…:8893`. Nothing was down for long, but it was the wrong route on a shared board.
+`--https=8893 http://127.0.0.1:8893` is the correct form, 443 was pointed back at vaultwarden, and `docs/INSTALL.md`
+now carries the warning. Every sibling's port line uses `--https=`; the shorthand looked harmless and was not.
 
 **What is left.** Meridian's tile and the `service-healthcheck.sh` line, in those repositories, and the operator's
 own look at the panel from her phone. The first is the only reason S13 is not marked done.
