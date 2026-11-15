@@ -118,9 +118,11 @@ take_snapshot() {
 		return 1
 	fi
 
-	# A killed run leaves its temp snapshot and sidecars behind; they are ours and nothing else names them.
+	# A killed run leaves its temp snapshot behind; they are ours and nothing else names them.
 	find "$DAILY_DIR" -maxdepth 1 -name '*.tmp.*' -mmin +60 -delete 2>/dev/null || true
-	rm -f "$DAILY_DIR"/*.tmp.*-wal "$DAILY_DIR"/*.tmp.*-shm 2>/dev/null || true
+	# A snapshot is one file. A -wal or -shm beside one is always the remains of somebody opening it, never part of
+	# the snapshot itself: the live database lives in data/, not here, so anything in this directory is ours to clear.
+	find "$DAILY_DIR" -maxdepth 1 \( -name '*-wal' -o -name '*-shm' \) -delete 2>/dev/null || true
 
 	# .backup is the online backup API: one consistent read transaction against a database another process is
 	# writing to, which a plain file copy cannot promise under WAL.
@@ -132,12 +134,20 @@ take_snapshot() {
 
 	# The backup inherits the source's WAL journal mode, and an open of a WAL database creates -wal and -shm beside it.
 	# A snapshot must be one file, or rclone mirrors the sidecars as if they were backups (found on the potato,
-	# 2026-11-15), so collapse the journal into the file before anything checks or copies it.
-	timeout "$SQLITE_TIMEOUT" sqlite3 "$tmp" 'PRAGMA journal_mode=DELETE;' >/dev/null 2>&1 || true
+	# 2026-11-15). Collapse the journal into the file, and refuse the snapshot if it did not take: sqlite3 prints the
+	# mode it ended in, so this is the check rather than a hope.
+	mode="$(timeout "$SQLITE_TIMEOUT" sqlite3 "$tmp" 'PRAGMA journal_mode=DELETE;' 2>/dev/null || true)"
+	if [ "$mode" != "delete" ]; then
+		rm -f "$tmp" "$tmp-wal" "$tmp-shm"
+		record "local:snapshot" failed 0 "a snapshot would not collapse into one file and was thrown away"
+		return 1
+	fi
 	rm -f "$tmp-wal" "$tmp-shm"
 
-	# Read-only, so the check cannot create the sidecars it just got rid of.
+	# Read-only, so the check cannot create the sidecars it just got rid of. A read-only open of a WAL-header database
+	# still creates them in a writable directory, so the sweep repeats after it rather than trusting the header.
 	check="$(timeout "$SQLITE_TIMEOUT" sqlite3 -readonly "$tmp" 'PRAGMA integrity_check;' 2>/dev/null || true)"
+	rm -f "$tmp-wal" "$tmp-shm"
 	if [ "$check" != "ok" ]; then
 		rm -f "$tmp" "$tmp-wal" "$tmp-shm"
 		record "local:snapshot" failed 0 "a snapshot failed its integrity check and was thrown away"
@@ -163,7 +173,6 @@ take_snapshot() {
 	fi
 
 	mv -f "$tmp" "$today"
-	rm -f "$today-wal" "$today-shm"
 	chmod 600 "$today"
 	log "snapshot $today ($(wc -c <"$today") bytes, $snapshot_counts)"
 	return 0

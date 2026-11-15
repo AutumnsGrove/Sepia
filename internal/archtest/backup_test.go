@@ -92,6 +92,9 @@ case "$last" in
 	"PRAGMA integrity_check;")
 		printf '%s\n' "${FAKE_SQLITE_INTEGRITY:-ok}"
 		;;
+	"PRAGMA journal_mode=DELETE;")
+		printf '%s\n' "${FAKE_SQLITE_JOURNAL_MODE:-delete}"
+		;;
 	*)
 		if [ "${FAKE_SQLITE_COUNTS_NO_SESSIONS:-0}" = "1" ]; then
 			printf '0 0 0 0\n'
@@ -351,6 +354,29 @@ func TestBackupRefusesASnapshotWithTooManyRows(t *testing.T) {
 	}
 }
 
+// TestBackupRefusesASnapshotThatStaysInWAL: a snapshot whose journal will not collapse would leave -wal and -shm
+// beside it on the next open, and rclone would mirror those as if they were backups. It is thrown away instead.
+func TestBackupRefusesASnapshotThatStaysInWAL(t *testing.T) {
+	b := newBackupTree(t, true)
+
+	out, err := b.run(t, map[string]string{"FAKE_SQLITE_JOURNAL_MODE": "wal"})
+	if err == nil {
+		t.Fatalf("a snapshot stuck in WAL mode did not fail the run:\n%s", out)
+	}
+	snap := findReceipt(t, b.receipts(t), "local:snapshot")
+	if snap.Status != "failed" || !strings.Contains(snap.Detail, "collapse") {
+		t.Errorf("snapshot receipt = %q (%s), want failed and naming the collapse", snap.Status, snap.Detail)
+	}
+	if _, statErr := os.Stat(filepath.Join(b.data, "backups", "db", todaySnapshot())); !os.IsNotExist(statErr) {
+		t.Errorf("a WAL-mode snapshot was published: %v", statErr)
+	}
+	for _, name := range b.names(t, filepath.Join(b.data, "backups", "db")) {
+		if strings.Contains(name, ".tmp.") {
+			t.Errorf("a refused snapshot left %s behind", name)
+		}
+	}
+}
+
 // TestBackupSnapshotFailureStillMirrors is the local-first rule: when the snapshot cannot be taken, the verified
 // snapshots already on disk are still copied, and the failure is recorded rather than thrown away.
 func TestBackupSnapshotFailureStillMirrors(t *testing.T) {
@@ -552,6 +578,9 @@ VALUES ('s1', 'general', '2026-11-15T00:00:00Z', '2026-11-15T00:00:00Z');
 	}
 	if db := findReceipt(t, b.receipts(t), "r2sepia:sepia-backups/db"); db.Status != "ok" {
 		t.Errorf("db receipt = %q (%s), want ok", db.Status, db.Detail)
+	}
+	if body, err := exec.CommandContext(context.Background(), sqlite, snapshot, "PRAGMA journal_mode;").CombinedOutput(); err != nil || strings.TrimSpace(string(body)) != "delete" {
+		t.Errorf("the published snapshot is not a single file: %v %q", err, body)
 	}
 	// A snapshot is one file. The backup inherits the source's WAL mode, so an open of it creates -wal and -shm
 	// beside it, and rclone would copy those as if they were backups. Nothing but the snapshots belongs in the dir.
