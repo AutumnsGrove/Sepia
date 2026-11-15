@@ -69,7 +69,7 @@ S09 needs S02, S07 and S08. S13 needs a working app (S09 and S12).
 | S11 | [Logging flow UI](S11-logging-ui.md) | 1 | done |
 | S12 | [Reading UI](S12-reading-ui.md) | 1 | done |
 | S13 | [Deploy and update](S13-deploy-and-update.md) | 1 | done |
-| S14 | [Backups](S14-backups.md) | 1 | waiting at G6 |
+| S14 | [Backups](S14-backups.md) | 1 | done |
 | S15 | [Web fallback](S15-web-fallback.md) | 2 | planned |
 | S16 | [Library search and chat](S16-search-and-chat.md) | 2 | planned |
 | S17 | [More media](S17-more-media.md) | 2 | planned (template) |
@@ -104,10 +104,10 @@ Drafts, the Library with its groups, chips and sort, a saved entry with its vers
 delete that never erases with the Deleted list and Restore, and the Settings shell with its switches. S13 is built and
 live: the image, the compose file, the publish workflow, the host watcher, the update API and the Updates and Services
 screens, deployed on the potato; the gate was demonstrated on a scratch copy, the Meridian tile reports its build and
-the health check includes it. S14 is built and waiting at G6: the host backup script and its three units, the
-receipts import, the REST routes, the Backups screen and `sepia restore`. The bucket exists and the scoped rclone
-remote is on the potato; what is left is the operator's live drill (a backup that reached R2, a restore on a scratch
-copy, and the screen showing the receipts). Everything from S15 on is still plan, spec and mockup. The decisions
+the health check includes it. S14 is built and live: the host script and its three units run at 03:30 on the board,
+the receipts import, the REST routes and the Backups screen are deployed, and `sepia restore` passed the drill
+(a snapshot and its weekly in R2, a restore on a scratch copy that matched the live library, and the screen showing
+both). Everything from S15 on is still plan, spec and mockup. The decisions
 backend, the two metadata providers, Polaris and R2 are reachable only through the fakes in `internal/world`;
 `sepia-dev` runs the real service against them, offline, with no keys. The live calls against the real providers are
 the operator's.
