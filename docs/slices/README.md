@@ -68,7 +68,7 @@ S09 needs S02, S07 and S08. S13 needs a working app (S09 and S12).
 | S10 | [Frontend foundation](S10-frontend-foundation.md) | 1 | done |
 | S11 | [Logging flow UI](S11-logging-ui.md) | 1 | done |
 | S12 | [Reading UI](S12-reading-ui.md) | 1 | done |
-| S13 | [Deploy and update](S13-deploy-and-update.md) | 1 | waiting at G5 |
+| S13 | [Deploy and update](S13-deploy-and-update.md) | 1 | live checks left |
 | S14 | [Backups](S14-backups.md) | 1 | planned |
 | S15 | [Web fallback](S15-web-fallback.md) | 2 | planned |
 | S16 | [Library search and chat](S16-search-and-chat.md) | 2 | planned |

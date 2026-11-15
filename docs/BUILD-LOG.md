@@ -983,3 +983,34 @@ its short digest instead of its version. GHCR serves the index pretty-printed, w
 watcher's `sed` matched only the compact `"version":"..."` shape. It now accepts either, and the watcher's fake
 registry writes the pretty shape so the test fails without the fix. This is the class of bug only the real registry
 could show: the fake had been written in the shape the code expected.
+
+## 2026-11-15, S13 live: the potato
+
+**Deployed, by the operator's instruction, in one session.** The first image (`r113.8c7d673`) was published by
+`docker-publish` and pulled by the board; `docker compose up -d` came up healthy on 127.0.0.1:8893; the five units
+were installed and enabled; `tailscale serve --bg 8893` added the tailnet route; the keys were moved into
+`~/Sepia/.env` through ssh stdin, never printed and never read by an agent; and `sepia doctor` was all green,
+including the mounted `.env` at mode 0600, owner 1000:1000, and the database protections refusing a forbidden write.
+
+**A real update succeeded.** `POST /api/update/check` resolved `r115.7bd5e13`, `POST /api/update/start` wrote the
+request, and the watcher fast-forwarded the checkout, pinned the digest, pulled, recreated, health-checked and wrote
+`{"status":"ok"}`. The running version moved from `r113.8c7d673` to `r115.7bd5e13` and `SEPIA_IMAGE` moved with it.
+
+**G5 was demonstrated on the scratch copy** (`~/Sepia-scratch`, project `sepia-scratch`, container `sepia-scratch`,
+port 8897, its own units and signal directory, never touching production):
+
+- **A failed recreate with a failed rollback.** An override made the next container's entrypoint a path the
+  distroless image does not have, so it failed at OCI create. The watcher rolled back, the rollback also failed, and
+  the result said "The previous version did not come back either; Sepia may be down" with no retry button. The
+  `.env` was re-pinned to the previous digest, and removing the override and `docker compose up -d` recovered it.
+- **A failed health check with a successful rollback.** An override made the binary print its usage and exit, so
+  `up` succeeded and the health check failed. The override was removed while the watcher was polling; the rollback
+  recreated the previous image healthy. The result said “The previous version is running again”, the scratch health
+  answered `r113.8c7d673`, and `.env` was back on the previous digest.
+
+**Two more bugs the live run found** (both already recorded above): the annotation's whitespace, and the SIGPIPE in
+the digest extraction. Neither could have been found by the fakes as they were written; both fakes and tests now
+carry the shape the real registry produces.
+
+**What is left.** Meridian's tile and the `service-healthcheck.sh` line, in those repositories, and the operator's
+own look at the panel from her phone. The first is the only reason S13 is not marked done.
