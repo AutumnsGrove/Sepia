@@ -3,7 +3,7 @@
 Sepia is built as **vertical slices**, one plan file each, so any agent can pick one up cold, build it test
 first, and leave the app working and releasable. Standing rules, invariants, gates and the definition of done
 are in [`../BUILD.md`](../BUILD.md). **Read it first**, then [`../STANDARDS.md`](../STANDARDS.md). The status column
-is the truth: S00 and S02 to S12 are built, and S13 is waiting at its gate for the live install.
+is the truth: S00 and S02 to S13 are built, and S13 is live on the potato.
 
 ## How to read a slice plan
 
@@ -68,7 +68,7 @@ S09 needs S02, S07 and S08. S13 needs a working app (S09 and S12).
 | S10 | [Frontend foundation](S10-frontend-foundation.md) | 1 | done |
 | S11 | [Logging flow UI](S11-logging-ui.md) | 1 | done |
 | S12 | [Reading UI](S12-reading-ui.md) | 1 | done |
-| S13 | [Deploy and update](S13-deploy-and-update.md) | 1 | live checks left |
+| S13 | [Deploy and update](S13-deploy-and-update.md) | 1 | done |
 | S14 | [Backups](S14-backups.md) | 1 | planned |
 | S15 | [Web fallback](S15-web-fallback.md) | 2 | planned |
 | S16 | [Library search and chat](S16-search-and-chat.md) | 2 | planned |
@@ -102,8 +102,8 @@ editing and saved states, the why sheet, the composer with its queue and limit, 
 pages 01, 02, 06 and 07 (except import), each with a baseline and an axe pass. The reading screens are built too: Home,
 Drafts, the Library with its groups, chips and sort, a saved entry with its versions and the other entries on its work,
 delete that never erases with the Deleted list and Restore, and the Settings shell with its switches. S13 is built and
-waiting at G5 for the live install: the image, the compose file, the publish workflow, the host watcher, the update API
-and the Updates and Services screens are in the repository, and the potato, the publish and the failed-update
-demonstration are the operator's checks. Everything from S14 on is still plan, spec and mockup. The decisions backend, the two metadata providers, Polaris and R2 are reachable only through the fakes in
+live: the image, the compose file, the publish workflow, the host watcher, the update API and the Updates and Services
+screens, deployed on the potato; the gate was demonstrated on a scratch copy, the Meridian tile reports its build and
+the health check includes it. S14, backups, is next. Everything from S14 on is still plan, spec and mockup. The decisions backend, the two metadata providers, Polaris and R2 are reachable only through the fakes in
 `internal/world`; `sepia-dev` runs the real service against them, offline, with no keys. The live calls against
 the real providers are the operator's.

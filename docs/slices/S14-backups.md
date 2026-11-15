@@ -23,7 +23,9 @@ precedent). The bucket `r2:sepia-backups` does not exist yet.
   the eighth day; two weeks of dailies buys little over one plus the weeklies.
 - **The existing `r2:` remote is tested first.** If its token is account-wide, `r2:sepia-backups` is created with
   it; if it is scoped to the Vaultwarden bucket, Autumn makes a token for the Sepia bucket and no agent handles the
-  secret.
+  secret. **Tested 2026-11-15: the token is scoped to `vaultwarden-backups`.** It cannot list buckets, create
+  `sepia-backups` or read it. A token scoped to the Sepia bucket (or an account-wide one) is a prerequisite for this
+  slice; the bucket itself can then be created with that token.
 
 ## Settled
 
