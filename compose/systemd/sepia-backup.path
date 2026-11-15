@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Sepia's backup when the Back up now button asks
+
+[Path]
+# The app writes update-signal/backup-requested atomically; this fires the moment the rename makes it appear. The
+# script removes the file when the run is done, so this is an edge trigger rather than a condition that refires.
+# The same directory carries the update requests; docs/UPDATE.md says so.
+PathExists=@INSTALL_DIR@/update-signal/backup-requested
+Unit=sepia-backup.service
+
+[Install]
+WantedBy=multi-user.target
