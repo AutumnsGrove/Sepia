@@ -83,9 +83,9 @@ implies for this slice is in Decisions.
   `GET /api/update/status`, `POST /api/restart`, `GET /api/services`.
 - The panel's eight states derive from a pure function; Update is refused while a reply is being written; the
   new frontend is picked up by the `hello` version check.
-- Compose project at `~/Sepia`, published `127.0.0.1:8893` only, non-root, read-only root filesystem, port 8893
-  (verified free), `tailscale serve`, `/healthz` with two fields, a Meridian tile, and one line in
-  `service-healthcheck.sh`.
+- Compose project at `~/Sepia` with `network_mode: host` (see Decisions: this supersedes the published-port
+  wording in earlier drafts), non-root, read-only root filesystem, port 8893 (verified free), `tailscale serve`,
+  `/healthz` with two fields, a Meridian tile, and one line in `service-healthcheck.sh`.
 
 ## Scope
 

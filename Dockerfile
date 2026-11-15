@@ -14,7 +14,9 @@ RUN pnpm run build
 
 FROM --platform=$BUILDPLATFORM golang:1.27.4-trixie AS build
 WORKDIR /src
-COPY go.mod ./
+# The module files first, so a source-only change reuses the downloaded modules.
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
 # The frontend the web stage built replaces the placeholder the repository carries.
 COPY --from=web /src/web/build ./internal/webui/dist
@@ -27,6 +29,12 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
       -o /out/sepia ./cmd/sepia
 
 FROM gcr.io/distroless/static-debian12:nonroot
+# The release identity, so `docker inspect` can say which build is running without asking the process.
+ARG VERSION=dev
+LABEL org.opencontainers.image.title="Sepia" \
+      org.opencontainers.image.description="A private review journal" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/AutumnsGrove/sepia"
 COPY --from=build /out/sepia /sepia
 # The service is loopback only; `tailscale serve` on the host is the way in (docs/STANDARDS.md 6).
 EXPOSE 8893

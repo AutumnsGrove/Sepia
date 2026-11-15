@@ -61,13 +61,26 @@ type Config struct {
 	// ConfigDir holds the question banks and the decisions wording and policy. It is read at startup; a broken
 	// file degrades one feature with a logged warning and the service still starts (docs/BUILD.md invariant 13).
 	ConfigDir string
+	// UpdateDir is the directory the host watcher and the container share for signal files (docs/UPDATE.md).
+	// Empty is a bare deployment: there is no watcher to signal, and the panel says so rather than pointing at a
+	// directory nobody mounted. It is set by docker-compose.yml to /update-signal.
+	UpdateDir string
+}
+
+// Deployment names the shape this process is installed in, for GET /api/version. A shared signal directory is
+// what a container has and a bare run does not, so it is the honest test rather than a guess from the hostname.
+func (c Config) Deployment() string {
+	if c.UpdateDir != "" {
+		return "docker"
+	}
+	return "bare"
 }
 
 // knownKeys is the closed set of environment keys this package reads. Anything else that starts with
 // SEPIA_ is a typo.
 var knownKeys = []string{
 	"SEPIA_ADDR", "SEPIA_ALLOWED_HOSTS", "SEPIA_DEV", "SEPIA_DATA_DIR", "SEPIA_CONFIG_DIR",
-	"SEPIA_TMDB_API_KEY", "SEPIA_OPENROUTER_API_KEY", "SEPIA_MODEL",
+	"SEPIA_TMDB_API_KEY", "SEPIA_OPENROUTER_API_KEY", "SEPIA_MODEL", "SEPIA_UPDATE_DIR",
 }
 
 // Load reads settings from environ, in os.Environ() form. Passing the environment in rather than calling
@@ -131,6 +144,16 @@ func Load(environ []string) (Config, error) {
 			return Config{}, errors.New("config: SEPIA_CONFIG_DIR contains a NUL byte")
 		}
 		cfg.ConfigDir = v
+	}
+
+	if v, ok := values["SEPIA_UPDATE_DIR"]; ok {
+		if strings.TrimSpace(v) == "" {
+			return Config{}, errors.New("config: SEPIA_UPDATE_DIR is empty; omit it for a bare deployment")
+		}
+		if strings.ContainsRune(v, 0) {
+			return Config{}, errors.New("config: SEPIA_UPDATE_DIR contains a NUL byte")
+		}
+		cfg.UpdateDir = v
 	}
 
 	if v, ok := values["SEPIA_TMDB_API_KEY"]; ok {
