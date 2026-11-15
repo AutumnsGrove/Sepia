@@ -971,3 +971,9 @@ pi-review reviewed PR #9 and found four real things. All four are fixed on `s13-
 The review's UI findings came from reading the derivation rather than a rendered page, which is exactly where the
 pure view function pays: all three were Vitest-sized fixes. The pi-review app is installed on the repository now;
 the 2026-11-14 note that it was not is out of date.
+
+**The first live check found a fifth.** On the potato, a check resolved the digest correctly but named the build by
+its short digest instead of its version. GHCR serves the index pretty-printed, with a space after the colon, and the
+watcher's `sed` matched only the compact `"version":"..."` shape. It now accepts either, and the watcher's fake
+registry writes the pretty shape so the test fails without the fix. This is the class of bug only the real registry
+could show: the fake had been written in the shape the code expected.

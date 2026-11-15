@@ -488,7 +488,8 @@ case "$url" in
     if [ "$head" = 1 ]; then
       printf 'HTTP/2 200\r\ndocker-content-digest: %s\r\n\r\n' "${FAKE_DIGEST:?}"
     else
-      printf '{"annotations":{"org.opencontainers.image.version":"%s"}}' "${FAKE_VERSION:-r219.e4f5a6b}"
+      # GHCR writes pretty-printed JSON, with a space after the colon. The watcher has to read that shape.
+      printf '{\n  "annotations": {\n    "org.opencontainers.image.version": "%s"\n  }\n}' "${FAKE_VERSION:-r219.e4f5a6b}"
     fi
     ;;
   *"/healthz"*)
