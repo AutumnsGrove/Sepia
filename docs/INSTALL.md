@@ -58,11 +58,14 @@ key that is wrong: `docker compose logs --tail=50 sepia`.
 `tailscale serve` is the only way in:
 
 ```bash
-sudo tailscale serve --bg 8893
+# --https=8893 is the port served; the URL after it is the target. Do not write `--bg 8893` alone: tailscale
+# reads that as the target and serves it on 443, taking over whatever the root already proxies.
+sudo tailscale serve --bg --https=8893 http://127.0.0.1:8893
 tailscale serve status | grep 8893
 ```
 
-The address is `https://lepotato.taild95077.ts.net:8893`.
+The address is `https://lepotato.taild95077.ts.net:8893`. If 443 already proxies something else on the board, check
+`tailscale serve status` after this: 443 should still name the old target, and 8893 should name Sepia.
 
 ## 4. The update watcher
 
