@@ -1,0 +1,9 @@
+[Unit]
+Description=Sepia update watcher heartbeat (one shot)
+
+[Service]
+Type=oneshot
+User=@USER@
+WorkingDirectory=@INSTALL_DIR@
+ExecStart=@INSTALL_DIR@/compose/watcher/update.sh --heartbeat
+TimeoutStartSec=30

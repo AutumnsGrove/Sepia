@@ -1,0 +1,15 @@
+[Unit]
+Description=Sepia update watcher (one shot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# The operator account, never root: the script runs one fixed sequence (git pull, one compose pull and one compose
+# up, a health check) and root would add blast radius without adding a capability it needs.
+User=@USER@
+WorkingDirectory=@INSTALL_DIR@
+ExecStart=@INSTALL_DIR@/compose/watcher/update.sh
+# Above the script's own bounded steps summed (git 60s, pull 300s, up 60s, health 120s, rollback 60s + 60s), so
+# systemd never SIGKILLs the script between a failed start and its rollback.
+TimeoutStartSec=900
