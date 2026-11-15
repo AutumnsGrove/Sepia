@@ -553,6 +553,13 @@ VALUES ('s1', 'general', '2026-11-15T00:00:00Z', '2026-11-15T00:00:00Z');
 	if db := findReceipt(t, b.receipts(t), "r2sepia:sepia-backups/db"); db.Status != "ok" {
 		t.Errorf("db receipt = %q (%s), want ok", db.Status, db.Detail)
 	}
+	// A snapshot is one file. The backup inherits the source's WAL mode, so an open of it creates -wal and -shm
+	// beside it, and rclone would copy those as if they were backups. Nothing but the snapshots belongs in the dir.
+	for _, name := range b.names(t, filepath.Join(b.data, "backups", "db")) {
+		if !strings.HasSuffix(name, ".db") {
+			t.Errorf("%s is not a snapshot and must not be in the backup directory", name)
+		}
+	}
 }
 
 func contains(list []string, want string) bool {
