@@ -38,6 +38,7 @@ var floors = []floor{
 	{pkg: "internal/providers", percent: 85},
 	{pkg: "internal/store", percent: 84},
 	{pkg: "internal/server", percent: 80},
+	{pkg: "internal/backup", percent: 80},
 	{pkg: "internal/config", percent: 80},
 	{pkg: "internal/world", percent: 80},
 }
