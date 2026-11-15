@@ -10,24 +10,49 @@ work, and a failed update rolls back on its own. The state machine below is mode
 1. **The container never controls Docker.** There is no socket mount. The panel calls Sepia's own REST API,
    and Sepia writes a signal file that a **host-side watcher** (a systemd path unit, `sepia-update.path`)
    picks up.
-2. **The watcher updates.** It resolves the latest published image digest from GHCR (waiting out an
-   in-progress CI build first), fast-forwards the host checkout so `docker-compose.yml` and the
-   bind-mounted config land with the image, pins the new digest in `.env`, recreates the container, and
-   checks `GET http://localhost:8893/healthz` (port 8893, loopback only — see `PLAN.md` section 8).
-3. **A failed health check rolls back** to the previous digest and records a result of `failed`.
+2. **The watcher updates.** It resolves the latest published image digest from GHCR, fast-forwards the host
+   checkout so `docker-compose.yml` and the bind-mounted config land with the image, pins the new digest in
+   `.env`, recreates the container, and checks `GET http://localhost:8893/healthz` (port 8893, loopback only —
+   see `PLAN.md` section 8). Every external step is bounded, and systemd's start timeout is above their sum, so
+   the script always gets to write its result.
+3. **A failed health check rolls back** to the previous digest and records a result of `failed`, in one of two
+   sentences: the previous version is running again, or it did not come back either and the board may be down.
 4. **The watcher keeps a heartbeat**, so the app can tell "no updater installed" from "the updater has gone
-   quiet".
+   quiet". Three missed minutes is quiet; a heartbeat from more than a minute in the future is treated the same
+   way, because two clocks that disagree that much are not both telling the truth.
+
+## The handshake, exactly
+
+Everything is a file in the signal directory (`/update-signal` in the container, `./update-signal` on the host,
+mounted from the same place). Both sides write through a temp file and a rename, so neither can read the other
+half way through.
+
+| File | Written by | Content |
+|---|---|---|
+| `requested` | app | `action=check`, `action=update` with `target=<digest reference>`, or `action=restart` |
+| `last-request` | app | The same lines plus `at=<RFC 3339>`; kept after the request is cleared so a result can be judged against it |
+| `available` | watcher | `{latest, latest_digest, checked_at, update_available}`, or `{checked_at, update_available: false, error}` when the check could not finish |
+| `result` | watcher | `{status: ok\|failed\|skipped, detail, target, finished_at}` |
+| `heartbeat` | watcher | One RFC 3339 instant, every minute and at the start and end of every run |
+
+Three rules follow from that, and each is a test in `internal/update`:
+
+- **A result belongs to a request.** It is shown only when the helper is alive, a request is on record, nothing
+  new is pending, and `finished_at` is not more than a minute older than the request's `at`. That allowance is
+  the phone's clock and the potato's; anything further apart is a leftover file, not this update's answer.
+- **A result without a heartbeat is not trusted.** A write in the directory is not proof that a watcher ran.
+- **A failed check is not "up to date".** It reports an error, and the panel says it could not look.
 
 ## REST
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/version` | `{version, deployment, updater: {state: ready, not_installed, stale; heartbeat_at}}` |
-| `POST /api/update/check` | Ask the watcher to look for a newer image |
-| `GET /api/update/available` | `{available: {current, latest, latest_digest, checked_at, update_available}, check_pending}` |
-| `POST /api/update/start` | Ask the watcher to install the latest. Refused while a reply is being written |
+| `GET /api/version` | `{version, deployment: docker\|bare, updater: {state: ready, not_installed, stale; heartbeat_at}}` |
+| `POST /api/update/check` | Ask the watcher to look for a newer image. Answers `202 {pending: true}` |
+| `GET /api/update/available` | `{available: {current, latest, latest_digest, checked_at, update_available, error?}, check_pending}` |
+| `POST /api/update/start` | Install the digest the page was shown. Answers `202 {pending: true}`. Refused with `reply_in_progress` while a reply is being written |
 | `GET /api/update/status` | `{pending, result: {status: ok, failed, skipped; detail; target; finished_at}}` |
-| `POST /api/restart` | Restart only: no pull, no rebuild |
+| `POST /api/restart` | Restart only: no pull, no rebuild. Refused while a reply is being written |
 | `GET /api/services` | Reachability of each dependency, for the Services screen |
 
 All state-changing requests go through the same Origin check as everything else

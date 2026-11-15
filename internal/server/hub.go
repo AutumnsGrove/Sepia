@@ -240,6 +240,14 @@ func (h *hub) runTurn(ctx context.Context, sessionID string, msg queuedMessage) 
 	go h.runTurn(nextCtx, sessionID, *next)
 }
 
+// busy reports whether any session has a turn running. It is what refuses an update or a restart mid-reply: the
+// watcher recreates the container, and a turn that is being written would die with it.
+func (h *hub) busy() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.turns) > 0
+}
+
 // stop cancels the turn in flight. It is explicit: nothing else ever stops a reply.
 func (h *hub) stop(sessionID string) {
 	h.mu.Lock()

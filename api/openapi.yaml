@@ -294,8 +294,13 @@ paths:
       summary: Ask the host watcher to look for a newer image
       operationId: updateCheck
       responses:
-        "202": { description: The watcher was signalled }
+        "202":
+          description: The watcher was signalled. It writes its answer to available, and the page polls.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpdateAccepted" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/Unavailable" }
 
   /api/update/available:
     get:
@@ -313,8 +318,13 @@ paths:
       summary: Ask the watcher to install the latest image. Refused while a reply is being written
       operationId: updateStart
       responses:
-        "202": { description: The watcher was signalled }
+        "202":
+          description: The watcher was signalled to install the digest the page was shown.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpdateAccepted" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/Unavailable" }
 
   /api/update/status:
     get:
@@ -332,8 +342,13 @@ paths:
       summary: "Restart only: no pull, no rebuild"
       operationId: restart
       responses:
-        "202": { description: The watcher was signalled }
+        "202":
+          description: The watcher was signalled to recreate the container with the image already pinned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpdateAccepted" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/Unavailable" }
 
 components:
   parameters:
@@ -367,6 +382,11 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     Conflict:
       description: The action cannot happen now, and the reason says why.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unavailable:
+      description: The thing this needs is not installed or not answering.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -628,7 +648,7 @@ components:
 
     UpdateAvailable:
       type: object
-      required: [check_pending]
+      required: [check_pending, available]
       properties:
         available:
           type: object
@@ -639,8 +659,20 @@ components:
             latest_digest: { type: string }
             checked_at: { type: string, format: date-time }
             update_available: { type: boolean }
+            error:
+              type: string
+              maxLength: 300
+              description: Why the last check did not finish. Present only when it did not.
           additionalProperties: false
         check_pending: { type: boolean }
+      additionalProperties: false
+
+    UpdateAccepted:
+      description: The request is on disk for the host watcher to pick up. It has not done the work yet.
+      type: object
+      required: [pending]
+      properties:
+        pending: { const: true }
       additionalProperties: false
 
     UpdateStatus:
