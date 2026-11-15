@@ -15,6 +15,16 @@ S13 (it runs where Sepia runs) and S04 (the `mirrors` table). It is the last sli
 The `rclone` remote `r2:` is configured for Vaultwarden (`vaultwarden-setup/vaultwarden-backup.sh` is the
 precedent). The bucket `r2:sepia-backups` does not exist yet.
 
+## Decisions (answered 2026-11-15, before starting)
+
+- **A host timer schedules the backup**, not an in-app scheduler. It is the Vaultwarden precedent: a wedged
+  container must not be able to stop backups silently, and the host already has the pattern for a nightly job.
+- **Retention is seven daily and four weekly**, both kept in R2. A week of dailies alone loses a mistake found on
+  the eighth day; two weeks of dailies buys little over one plus the weeklies.
+- **The existing `r2:` remote is tested first.** If its token is account-wide, `r2:sepia-backups` is created with
+  it; if it is scoped to the Vaultwarden bucket, Autumn makes a token for the Sepia bucket and no agent handles the
+  secret.
+
 ## Settled
 
 - Nightly at 03:30: a SQLite snapshot into `data/backups/` (rotating), then `rclone sync` to `r2:sepia-backups/`.
@@ -54,8 +64,8 @@ scratch copy, and the receipts screen working.
 
 ## Open questions
 
-- Host timer versus in-app scheduler (proposed: host timer).
-- Retention (proposed: seven daily, four weekly, kept in R2).
+None. The scheduler and retention questions were answered on 2026-11-15 and are recorded under Decisions. The R2
+access question is answered the same day: test the existing remote before asking for a new token.
 
 ## Done when
 
