@@ -67,9 +67,9 @@ tailscale serve status | grep 8893
 The address is `https://lepotato.taild95077.ts.net:8893`. If 443 already proxies something else on the board, check
 `tailscale serve status` after this: 443 should still name the old target, and 8893 should name Sepia.
 
-## 4. The update watcher
+## 4. The update watcher and the nightly backup
 
-Five unit files, two placeholders. `@INSTALL_DIR@` is `$HOME/Sepia`; `@USER@` is `autumn`.
+Eight unit files, two placeholders. `@INSTALL_DIR@` is `$HOME/Sepia`; `@USER@` is `autumn`.
 
 ```bash
 cd "$HOME/Sepia"
@@ -80,7 +80,8 @@ for f in compose/systemd/sepia-*.path compose/systemd/sepia-*.service compose/sy
     sudo tee "/etc/systemd/system/$(basename "$f")" >/dev/null
 done
 sudo systemctl daemon-reload
-sudo systemctl enable --now sepia-update.path sepia-update.timer sepia-heartbeat.timer
+sudo systemctl enable --now sepia-update.path sepia-update.timer sepia-heartbeat.timer \
+  sepia-backup.timer sepia-backup.path
 ```
 
 Check it without waiting for a release:
@@ -93,6 +94,55 @@ journalctl -u sepia-update.service -n 30 --no-pager
 ```
 
 Settings → Updates should now say the helper is running, with the version it found.
+
+### The backup timer
+
+`sepia-backup.timer` runs `compose/backup/backup.sh` at 03:30 board time and catches up after a night the board was
+off. The script snapshots the database with SQLite's own online backup API, checks the snapshot, keeps seven dailies
+and four weeklies, then mirrors `data/backups/` and `data/covers/` to R2 with `rclone`. Everything runs as you, on
+the host: the container has no rclone, no sqlite3 and no R2 token.
+
+It uses a **second** rclone remote, `r2sepia`, scoped to the `sepia-backups` bucket alone. `r2:` stays
+Vaultwarden-only and is never touched by Sepia:
+
+```bash
+rclone listremotes                                  # should show r2: and r2sepia:
+rclone lsf r2sepia:sepia-backups/db                 # tonight's snapshot, after the first run
+```
+
+Check a run without waiting for 03:30:
+
+```bash
+systemctl start sepia-backup.service
+journalctl -u sepia-backup.service -n 40 --no-pager
+cat "$HOME/Sepia/data/backups/receipts.jsonl"        # one line per target: ok, failed or skipped
+```
+
+Settings → Backups and export should show the last run, its size, and whether R2 has it.
+
+### The restore drill
+
+A backup nobody has restored is a rumour. Run this on a scratch directory, never over `data/`:
+
+```bash
+cd "$HOME/Sepia"
+mkdir -p /tmp/sepia-restore
+docker compose exec sepia /sepia restore \
+  --snapshot /data/backups/db/sepia-2026-11-15.db \
+  --into /restore \
+  --compare /data/sepia.db
+```
+
+`--into` must be empty, and the command prints the four row counts it restored. `--compare` makes it fail unless the
+restored library equals the live one, which is the assertion the gate asks for. The covers are objects, not rows:
+
+```bash
+rclone copy r2sepia:sepia-backups/covers /tmp/sepia-restore/covers
+```
+
+To restore for real: stop the service (`docker compose down`, not `restart`), move the current database aside, run
+the restore into `data/`, then start the service again. Moving the old file aside is deliberate: nothing here
+overwrites a database, and a restore is not the moment to test that.
 
 ## 5. The doctor
 

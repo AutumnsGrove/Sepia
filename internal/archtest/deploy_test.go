@@ -337,8 +337,9 @@ func pinnedAction(uses string) bool {
 	return true
 }
 
-// TestSystemdUnits: installing the watcher means copying these five files and substituting two placeholders. A unit
-// that runs as root, has no bound, or points at a service that no longer exists is a silent outage on the board.
+// TestSystemdUnits: installing the watcher and the backup means copying these eight files and substituting two
+// placeholders. A unit that runs as root, has no bound, or points at a service that no longer exists is a silent
+// outage on the board.
 func TestSystemdUnits(t *testing.T) {
 	dir := filepath.Join("..", "..", "compose", "systemd")
 	update := repoFile(t, filepath.Join("compose", "systemd", "sepia-update.service"))
@@ -346,6 +347,9 @@ func TestSystemdUnits(t *testing.T) {
 	updateTimer := repoFile(t, filepath.Join("compose", "systemd", "sepia-update.timer"))
 	beatService := repoFile(t, filepath.Join("compose", "systemd", "sepia-heartbeat.service"))
 	beatTimer := repoFile(t, filepath.Join("compose", "systemd", "sepia-heartbeat.timer"))
+	backupService := repoFile(t, filepath.Join("compose", "systemd", "sepia-backup.service"))
+	backupPath := repoFile(t, filepath.Join("compose", "systemd", "sepia-backup.path"))
+	backupTimer := repoFile(t, filepath.Join("compose", "systemd", "sepia-backup.timer"))
 
 	if !strings.Contains(update, "User=@USER@") {
 		t.Error("the update service does not name a user; systemd would run it as root")
@@ -377,10 +381,32 @@ func TestSystemdUnits(t *testing.T) {
 	if !strings.Contains(beatTimer, "OnUnitActiveSec=1min") {
 		t.Error("the heartbeat is not refreshed every minute")
 	}
-	// Every one of the five files is an installed artifact; a missing one is an install that half happened.
+	// The backup runs as her too, and its bound is above the script's own: sqlite3 120s plus two syncs and two
+	// read-backs at 600s each.
+	if !strings.Contains(backupService, "User=@USER@") || strings.Contains(backupService, "User=root") {
+		t.Error("the backup service does not run as the operator")
+	}
+	if !strings.Contains(backupService, "TimeoutStartSec=2700") {
+		t.Error("TimeoutStartSec is not the 2700s the backup script's own bounds need")
+	}
+	if !strings.Contains(backupService, "backup.sh") || !strings.Contains(backupService, "@INSTALL_DIR@") {
+		t.Error("the backup service does not run the installed script")
+	}
+	if !strings.Contains(backupTimer, "OnCalendar=") || !strings.Contains(backupTimer, "Persistent=true") {
+		t.Error("the backup timer is not a nightly calendar entry that catches up after downtime")
+	}
+	if !strings.Contains(backupTimer, "Unit=sepia-backup.service") {
+		t.Error("the backup timer does not name the backup service")
+	}
+	if !strings.Contains(backupPath, "PathExists=@INSTALL_DIR@/update-signal/backup-requested") ||
+		!strings.Contains(backupPath, "Unit=sepia-backup.service") {
+		t.Error("the backup path unit does not watch the request file or does not name the backup service")
+	}
+	// Every one of the eight files is an installed artifact; a missing one is an install that half happened.
 	for _, name := range []string{
 		"sepia-update.path", "sepia-update.service", "sepia-update.timer",
 		"sepia-heartbeat.service", "sepia-heartbeat.timer",
+		"sepia-backup.path", "sepia-backup.service", "sepia-backup.timer",
 	} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Errorf("compose/systemd is missing %s: %v", name, err)

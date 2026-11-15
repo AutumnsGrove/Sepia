@@ -1,0 +1,16 @@
+[Unit]
+Description=Sepia backup (one shot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# The operator account, never root: the script reads ./data, writes ./data/backups and talks to R2 with her own rclone
+# config. Root would add no capability and would leave root-owned snapshots in her directory.
+User=@USER@
+WorkingDirectory=@INSTALL_DIR@
+ExecStart=@INSTALL_DIR@/compose/backup/backup.sh
+# Above the script's worst case, so systemd never SIGKILLs it between a snapshot and its receipt: sqlite3 120s, then
+# one rclone sync and one read-back per target at 600s each, which is 2520s. The board is slow and R2 is a network;
+# the bound exists so a wedged transfer ends as a failure, not as a lock held until morning.
+TimeoutStartSec=2700
