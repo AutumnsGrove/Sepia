@@ -115,7 +115,7 @@ test.describe('logging a review', () => {
           // Any entry with that answer, not items[0]: the list's order breaks ties on a generated id.
           return (
             library.items
-              .flatMap((item) => item.answers)
+              .flatMap((item) => item.answers ?? [])
               .find((answer) => answer.category === 'setting')?.values ?? []
           );
         },
