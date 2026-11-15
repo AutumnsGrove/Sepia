@@ -1,0 +1,49 @@
+# Sepia on the potato. Run `docker compose up -d` from this folder: compose resolves the project directory from
+# the compose file, so a mount of ./data is the checkout's data and `docker compose` is the whole invocation.
+#
+# Host networking is deliberate (docs/slices/S13-deploy-and-update.md, Decisions): the container's 127.0.0.1 is
+# the potato's, so config.Load's loopback rule stays literally true, `tailscale serve` and the update watcher reach
+# http://localhost:8893/healthz the way every other app does, and Sepia can reach Polaris on 127.0.0.1:8899.
+# There is no published port for that reason, and none should be added: Docker ignores it under host networking.
+#
+# .env is not passed as an env_file. Compose reads it from this folder for interpolation only, which keeps the
+# housekeeping keys (SEPIA_IMAGE, SEPIA_UID, SEPIA_GID) out of the container: config.Load refuses an unknown
+# SEPIA_ key, and one of those leaking in would stop the service at boot. The passthrough list below is the only
+# environment the container gets, and a test in internal/archtest feeds it to config.Load.
+name: sepia
+
+services:
+  sepia:
+    # Pinned by digest in .env by the watcher. Never :latest: an update must install the image the page named.
+    image: ${SEPIA_IMAGE:?SEPIA_IMAGE is not set; run compose/doctor.sh}
+    container_name: sepia
+    network_mode: host
+    # The distroless nonroot user is 65532; the board's autumn is 1000, and the data directory is hers. The ids
+    # are in .env so the mount and the process agree even if they change.
+    user: "${SEPIA_UID:-1000}:${SEPIA_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    environment:
+      SEPIA_ADDR: 127.0.0.1:8893
+      SEPIA_DATA_DIR: /data
+      SEPIA_CONFIG_DIR: /config
+      SEPIA_UPDATE_DIR: /update-signal
+      SEPIA_TMDB_API_KEY: ${SEPIA_TMDB_API_KEY:-}
+      SEPIA_OPENROUTER_API_KEY: ${SEPIA_OPENROUTER_API_KEY:-}
+    volumes:
+      # SQLite, covers and exports. The only writable tree inside the container.
+      - ./data:/data
+      # The shipped question banks and decisions config, read only: the image carries a copy but the checkout's
+      # copy is what the watcher fast-forwards, so a config change lands without a new image.
+      - ./config:/config:ro
+      # The signal directory the app writes requests into and the host watcher reads (docs/UPDATE.md). The
+      # container never touches Docker; this file handshake is the whole interface.
+      - ./update-signal:/update-signal
+    # A turn in flight is drained by the service's SIGTERM path; the watcher waits for the container to stop
+    # before it decides an update failed.
+    stop_grace_period: 30s
+    restart: unless-stopped
