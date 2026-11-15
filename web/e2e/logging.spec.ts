@@ -112,8 +112,11 @@ test.describe('logging a review', () => {
           const library = (await list.json()) as {
             items: { answers: { category?: string; values: string[] }[] }[];
           };
+          // Any entry with that answer, not items[0]: the list's order breaks ties on a generated id.
           return (
-            library.items[0]?.answers.find((answer) => answer.category === 'setting')?.values ?? []
+            library.items
+              .flatMap((item) => item.answers)
+              .find((answer) => answer.category === 'setting')?.values ?? []
           );
         },
         { timeout: 10_000 },
