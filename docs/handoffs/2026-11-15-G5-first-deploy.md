@@ -35,17 +35,31 @@ Two defects were found and fixed while building this, both with regression tests
 systemd would have recorded every failed deploy as a success), and every fresh SQLite database was world-readable
 (`0644` from the umask; the store now creates and keeps it `0600`).
 
-## What I need from you
+## Live results, 2026-11-15
 
-1. **The secrets plan.** Paste `SEPIA_OPENROUTER_API_KEY` and `SEPIA_TMDB_API_KEY` into `~/Sepia/.env` (mode 0600),
+The deploy ran with your go-ahead, and the gate is demonstrated. The image published, the board pulled it, the units
+and `tailscale serve` are in place, the keys went into `~/Sepia/.env` through ssh stdin without being printed, and
+`sepia doctor` passed every check. A real update moved production from `r113.8c7d673` to `r115.7bd5e13`. On
+`~/Sepia-scratch` (8897, its own project and units) a failed recreate produced the "may be down" result with the old
+digest re-pinned, and a failed health check rolled back to the previous version, which came back healthy. Both are
+in `docs/BUILD-LOG.md`, and the two bugs the live run found are fixed and merged.
+
+## What is left from the list below
+
+Items 1 to 3 are done, and the baseline artifact was committed before the merge. Only item 4, the Meridian tile
+and the health-check line in their repositories, remains, plus your own look at the panel.
+
+## The original ask
+
+1. **The secrets plan (done).** Paste `SEPIA_OPENROUTER_API_KEY` and `SEPIA_TMDB_API_KEY` into `~/Sepia/.env` (mode 0600),
    and set `SEPIA_UID`/`SEPIA_GID` to `id -u`/`id -g`. `sepia doctor` confirms presence, mode and owner without ever
    printing a value. This is the plan the gate asks for; the temporary G4 keys are expired and do not need rotating.
 
-2. **Publish the first image.** Push this to `main`, let `docker-publish` run, and copy the digest from the run
+2. **Publish the first image (done).** Push this to `main`, let `docker-publish` run, and copy the digest from the run
    summary into `SEPIA_IMAGE` in `.env`. Then follow `docs/INSTALL.md` sections 1 to 6: compose up, the five units,
    `tailscale serve --bg 8893`, and `docker compose exec sepia /sepia doctor`.
 
-3. **G5 on the scratch copy.** `docs/INSTALL.md` section 7 sets up `~/Sepia-scratch` on port 8897 with its own
+3. **G5 on the scratch copy (done).** `docs/INSTALL.md` section 7 sets up `~/Sepia-scratch` on port 8897 with its own
    units. It asks for one update that works and one that fails its health check. The recipe makes the failure with a
    `docker-compose.override.yml` that sets `entrypoint: ["/bin/false"]`. That is a deliberately broken *container*
    rather than a deliberately broken published image; it exercises the same health-check and rollback code on the
@@ -57,7 +71,7 @@ systemd would have recorded every failed deploy as a success), and every fresh S
    honestly; or remove the override while the health poll runs, and the old version comes back, which is the
    successful rollback. Do both if the gate is to be shown in full.
 
-4. **The two lines in other repositories.** `service-healthcheck.sh` gains the Sepia block in `docs/INSTALL.md` 6;
+4. **The two lines in other repositories (left).** `service-healthcheck.sh` gains the Sepia block in `docs/INSTALL.md` 6;
    Meridian's live config gains the tile. I did not edit either repository.
 
 ## One thing the spec did not settle (answered 2026-11-15)
