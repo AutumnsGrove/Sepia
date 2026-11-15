@@ -3,6 +3,7 @@
 /update-signal/
 /.env
 /.update-watcher.lock
+/.backup-watcher.lock
 
 # My reviews, covers, exports and database snapshots. Never commit these.
 *.db

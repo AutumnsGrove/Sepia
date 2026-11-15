@@ -1086,3 +1086,14 @@ R2, and a restore into a scratch directory that matched the live library row for
 **What is left: G6's last step, the receipts screen on the deployed app.** The units are not installed there yet. The gate needs a backup
 that reached R2, a restore on a scratch copy and the receipts screen working, and installing units on the board is
 the operator's call, not an agent's.
+
+## 2026-11-15, S14 live: G6 cleared
+
+The slice merged as a rebase and CI published `r133.009040d` (`sha256:b2ed1d0f…`). The watcher moved the potato from
+`r124.8ce4165` and reported ok. The three units were installed from the checkout, `sepia-backup.timer` and
+`sepia-backup.path` enabled, and the loop exercised from the app rather than from a shell: the Back up now button
+wrote the request, the path unit fired the service, the journal carried the run, the request file was consumed,
+`pending` went back to false, and the live screen showed the new run with its size and "Mirrored".
+
+**G6 cleared**: a backup reached R2, a restore on a scratch copy matched the live library row for row, and the
+receipts screen works. The first real review now has something behind it.
