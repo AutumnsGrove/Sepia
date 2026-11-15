@@ -122,27 +122,44 @@ Settings → Backups and export should show the last run, its size, and whether 
 
 ### The restore drill
 
-A backup nobody has restored is a rumour. Run this on a scratch directory, never over `data/`:
+A backup nobody has restored is a rumour. The drill writes under `/data`, because the container's root filesystem is
+read-only and `/tmp` is a 16 MB tmpfs: the data mount is the only place with room, and it is also where a real
+recovery restores to.
 
 ```bash
 cd "$HOME/Sepia"
-mkdir -p /tmp/sepia-restore
 docker compose exec sepia /sepia restore \
   --snapshot /data/backups/db/sepia-2026-11-15.db \
-  --into /restore \
+  --into /data/restore-drill \
   --compare /data/sepia.db
 ```
 
-`--into` must be empty, and the command prints the four row counts it restored. `--compare` makes it fail unless the
-restored library equals the live one, which is the assertion the gate asks for. The covers are objects, not rows:
+`--into` must not already hold a database (other files are fine, which is why a restore into `data/` works), and the
+command prints the four row counts it restored. `--compare` makes it fail unless the restored library equals the live
+one, which is the assertion the gate asks for. The covers are objects, not rows:
 
 ```bash
-rclone copy r2sepia:sepia-backups/covers /tmp/sepia-restore/covers
+rclone copy r2sepia:sepia-backups/covers "$HOME/Sepia/data/restore-drill/covers"
 ```
 
-To restore for real: stop the service (`docker compose down`, not `restart`), move the current database aside, run
-the restore into `data/`, then start the service again. Moving the old file aside is deliberate: nothing here
-overwrites a database, and a restore is not the moment to test that.
+Clean the drill up when it has passed: `rm -rf data/restore-drill`.
+
+To restore for real, stop the service rather than restarting it, move the current database aside, restore into
+`data/`, then start it again:
+
+```bash
+cd "$HOME/Sepia"
+docker compose down
+mv data/sepia.db data/sepia.db.before-restore
+rm -f data/sepia.db-wal data/sepia.db-shm
+docker compose run --rm --entrypoint /sepia sepia restore \
+  --snapshot /data/backups/db/sepia-2026-11-15.db --into /data
+docker compose up -d
+```
+
+The move is not ceremony: the restore refuses to write over an existing `sepia.db` on purpose, and a restore is not
+the moment to find out whether the old file was still needed. The image's entrypoint is `serve`, so the one-off run
+has to name the binary as its entrypoint and pass the subcommand as its command, as above.
 
 ## 5. The doctor
 
