@@ -1,0 +1,80 @@
+# G5: the first deploy
+
+**Date:** 2026-11-15. **Slice:** S13, deploy and update. **Gate:** G5 (before the first production deploy), plus the
+S13 live checks.
+
+## What I did
+
+Everything in S13 that can be built and tested off the potato is committed on `main`:
+
+- `docker-compose.yml` at the repository root, host networking, read-only root, no Docker socket, non-root, the three
+  mounts the service uses, and the `.env` mount the doctor reads. `.env` is compose interpolation only, so the
+  housekeeping keys never reach `config.Load`.
+- `Dockerfile` hardened (distroless nonroot, release labels, a module layer cache) and `.github/workflows/docker-publish.yml`,
+  which builds amd64+arm64, pushes by digest, queues rather than cancelling, attests an SBOM and scans the arm64
+  image with Trivy before the board can pull it. Each publish prints the pinned digest in its summary.
+- `compose/watcher/update.sh`, five `compose/systemd` units, and a test suite in `internal/archtest/watcher_test.go`
+  that runs the real script against scripted fakes of Docker, git, the registry and the health endpoint. It covers a
+  check, an update, a skipped update, a restart, a refused target, a failed checkout, a health failure that rolls
+  back, a health failure whose rollback also fails, and a malformed request.
+- `internal/update`, the five update routes and the reply-in-flight refusal, and the Updates and Services screens
+  with the panel's eight states as a pure function. `sepia doctor` checks the install itself.
+- `docs/INSTALL.md` with the install steps, the Meridian tile, the health-check line, and the scratch-copy recipe.
+
+`make check`, `make coverage` and `go test -race ./...` are green. The new gallery states and both new screens are
+axe-clean on Chromium; the Linux pixel baselines do not exist yet (below).
+
+## What is true now, in plain terms
+
+The repository is ready to install. Nothing has been deployed: I did not touch the potato, GHCR, `tailscale serve`,
+Meridian or the homelab, and no agent has read a key. `~/Sepia/.env` on the potato is still the staged file with the
+two keys empty, as recorded in the slice plan.
+
+Two defects were found and fixed while building this, both with regression tests: a failed update exited zero (so
+systemd would have recorded every failed deploy as a success), and every fresh SQLite database was world-readable
+(`0644` from the umask; the store now creates and keeps it `0600`).
+
+## What I need from you
+
+1. **The secrets plan.** Paste `SEPIA_OPENROUTER_API_KEY` and `SEPIA_TMDB_API_KEY` into `~/Sepia/.env` (mode 0600),
+   and set `SEPIA_UID`/`SEPIA_GID` to `id -u`/`id -g`. `sepia doctor` confirms presence, mode and owner without ever
+   printing a value. This is the plan the gate asks for; the temporary G4 keys are expired and do not need rotating.
+
+2. **Publish the first image.** Push this to `main`, let `docker-publish` run, and copy the digest from the run
+   summary into `SEPIA_IMAGE` in `.env`. Then follow `docs/INSTALL.md` sections 1 to 6: compose up, the five units,
+   `tailscale serve --bg 8893`, and `docker compose exec sepia /sepia doctor`.
+
+3. **G5 on the scratch copy.** `docs/INSTALL.md` section 7 sets up `~/Sepia-scratch` on port 8897 with its own
+   units. It asks for one update that works and one that fails its health check. The recipe makes the failure with a
+   `docker-compose.override.yml` that sets `entrypoint: ["/bin/false"]`. That is a deliberately broken *container*
+   rather than a deliberately broken published image; it exercises the same health-check and rollback code on the
+   real units. **Tell me if you want a genuinely broken image published to GHCR instead** (a one-line image with a
+   non-existent entrypoint, built and pushed once by a throwaway workflow). I did not add one without asking: it is a
+   permanent package on your account for a temporary demonstration.
+
+   The recipe gives two endings: leave the override in place and the rollback also fails, which the panel reports
+   honestly; or remove the override while the health poll runs, and the old version comes back, which is the
+   successful rollback. Do both if the gate is to be shown in full.
+
+4. **Baselines.** Run the `baselines` workflow and commit its artifact, as S11 and S12 did. It needs to produce the
+   Linux set for thirteen new gallery states (`upd-*`), `reading-updates-no-helper.png` and `reading-services.png`,
+   and the changed `reading-settings.png`.
+
+5. **The two lines in other repositories.** `service-healthcheck.sh` gains the Sepia block in `docs/INSTALL.md` 6;
+   Meridian's live config gains the tile. I did not edit either repository.
+
+## One thing the spec did not settle
+
+Meridian's vital is specified as "reviews this month". There is no endpoint that answers it: `/healthz` is two fields
+by design and `GET /api/entries` has no month filter. The tile in `docs/INSTALL.md` carries the build version instead,
+which is what Warbler does. A "reviews this month" vital needs a small new route with its own contract entry, tests
+and a limits table row, and it belongs in a slice rather than in a deploy change. **Do you want that route, or is the
+build version enough for the tile?**
+
+## Where the detail is
+
+- `docs/INSTALL.md`: install, doctor, Meridian and health-check lines, the G5 recipe.
+- `docs/UPDATE.md`: the file handshake, the trust rules, the REST routes and the panel's states.
+- `compose/README.md`: the units and the signal files.
+- `docs/BUILD-LOG.md`, 2026-11-15: what was learned, including both defects.
+- `docs/slices/S13-deploy-and-update.md`: the decisions and the status.

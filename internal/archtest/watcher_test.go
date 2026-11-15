@@ -1,6 +1,7 @@
 package archtest
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -107,7 +108,8 @@ func (w *watcherTree) request(t *testing.T, action, target string) {
 // run executes the watcher with the fakes first on PATH and the given environment overrides.
 func (w *watcherTree) run(t *testing.T, extra map[string]string, args ...string) (string, error) {
 	t.Helper()
-	cmd := exec.Command("bash", append([]string{filepath.Join(w.root, "compose", "watcher", "update.sh")}, args...)...)
+	cmd := exec.CommandContext(context.Background(), "bash",
+		append([]string{filepath.Join(w.root, "compose", "watcher", "update.sh")}, args...)...)
 	env := []string{
 		"PATH=" + w.bin + ":" + os.Getenv("PATH"),
 		"HOME=" + w.root,

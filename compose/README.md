@@ -26,6 +26,10 @@ The app writes, the watcher reads.
 
 Every write on both sides is a temp file plus a rename, so neither side can read the other half way through.
 
+The compose file also mounts `./.env` read-only at `/run/sepia/env`. Nothing loads it as configuration (the values
+arrive through the environment); it exists so `sepia doctor` can check the file's mode and owner without the host
+involved.
+
 ## Installing the units
 
 `@INSTALL_DIR@` and `@USER@` are placeholders. `docs/INSTALL.md` has the substitutions and the enable commands;

@@ -125,3 +125,9 @@ checkout) were answered on 2026-11-14 and are recorded under Decisions above.
 
 The image deploys to the potato, an update from Settings succeeds, a deliberately failed one rolls back, the
 Meridian tile shows, and the operator has run the live check.
+
+**Status 2026-11-15: everything buildable is built; waiting at G5.** The image, the compose file, the publish
+workflow, the watcher and its units, the update API and both screens are committed and checked in CI. What is left is
+the install itself: publish and pin a digest, `docker compose up -d` on the potato, the scratch-copy failure and
+rollback for G5, the two Linux baseline sets, and the Meridian and health-check lines in their own repositories. The
+handoff is [`../handoffs/2026-11-15-G5-first-deploy.md`](../handoffs/2026-11-15-G5-first-deploy.md).

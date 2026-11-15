@@ -88,6 +88,16 @@ browser:
 - **Restart is separate from Update.** It does no pull and no rebuild, and is for when something is simply
   stuck.
 
+## Installing and checking it
+
+[`INSTALL.md`](INSTALL.md) has the install: the checkout, `.env`, the five systemd units, `tailscale serve`, the
+Meridian tile and the health-check line, and the scratch-copy recipe for the G5 demonstration.
+
+`sepia doctor`, run as `docker compose exec sepia /sepia doctor`, checks the install rather than the app: the bound
+address is loopback, the data directory is writable, `.env` is mode 0600 and owned by the container's uid, every key
+line is present (never its value), the database's protections are present and refuse a forbidden write, and whether
+the helper's heartbeat is fresh.
+
 ## Fixture cases to write
 
 - the page derives each view above from synthetic inputs, including a result older than the update that was

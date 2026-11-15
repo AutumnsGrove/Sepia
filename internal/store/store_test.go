@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -665,5 +666,116 @@ func TestAFailedMigrationChangesNothing(t *testing.T) {
 	}
 	if after != before {
 		t.Fatalf("user_version moved from %d to %d after a failed migration", before, after)
+	}
+}
+
+// The database is hers alone. A fresh file must not inherit the operator's umask, and a file an earlier version left
+// world-readable is tightened on the next open rather than waiting for someone to notice.
+func TestOpenKeepsTheDatabasePrivate(t *testing.T) {
+	t.Run("fresh", func(t *testing.T) {
+		s := openTest(t)
+		info, err := os.Stat(s.Path())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Errorf("fresh database mode = %04o, want 0600", got)
+		}
+		health, err := s.Doctor(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !health.OK() {
+			t.Errorf("a fresh database is not healthy: %+v", health)
+		}
+	})
+
+	t.Run("existing loose file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "sepia.db")
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		s, err := Open(context.Background(), Options{Path: path})
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer func() { _ = s.Close() }()
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Errorf("existing database mode = %04o, want 0600 after open", got)
+		}
+	})
+}
+
+// Bad: a path that is a directory, or a directory that cannot be made, is a startup error with the path in it. The
+// database is where every review goes; an open that quietly did half the work would be worse than one that stops.
+func TestOpenRefusesUnusablePaths(t *testing.T) {
+	t.Run("the path is a directory", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "sepia.db")
+		if err := os.Mkdir(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Open(context.Background(), Options{Path: path}); err == nil {
+			t.Fatal("Open accepted a directory as the database")
+		}
+	})
+
+	t.Run("the parent cannot be made", func(t *testing.T) {
+		blocker := filepath.Join(t.TempDir(), "blocker")
+		if err := os.WriteFile(blocker, []byte("not a directory"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Open(context.Background(), Options{Path: filepath.Join(blocker, "sepia.db")}); err == nil {
+			t.Fatal("Open accepted a path under a file")
+		}
+	})
+}
+
+// A loose write-ahead log from an earlier install is tightened on the next open: the database and everything SQLite
+// writes beside it are hers alone.
+func TestOpenTightensALooseWriteAheadLog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sepia.db")
+	// A zero-length WAL is what SQLite finds after a clean close; it is valid to have one on disk.
+	if err := os.WriteFile(path+"-wal", nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(context.Background(), Options{Path: path})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+	for _, name := range []string{path, path + "-wal"} {
+		info, err := os.Stat(name)
+		if os.IsNotExist(err) {
+			continue // a clean open may remove the WAL; the database itself is the claim that matters
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Errorf("%s mode = %04o, want 0600", name, got)
+		}
+	}
+}
+
+// A restored or hand-edited schema can have the table without the protection. The doctor names the trigger that is
+// missing, because "unhealthy" with no name is not something anyone can fix.
+func TestDoctorNamesAMissingProtection(t *testing.T) {
+	s := openTest(t)
+	if err := raw(t, s, `DROP TRIGGER entries_no_delete`); err != nil {
+		t.Fatal(err)
+	}
+	health, err := s.Doctor(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if health.OK() {
+		t.Fatal("a database without entries_no_delete was reported healthy")
+	}
+	if !slices.Contains(health.MissingTriggers, "entries_no_delete") {
+		t.Errorf("missing triggers = %v, want entries_no_delete", health.MissingTriggers)
 	}
 }
