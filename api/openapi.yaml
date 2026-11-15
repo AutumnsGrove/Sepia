@@ -641,7 +641,7 @@ components:
       type: object
       required: [name, state]
       properties:
-        name: { enum: [database, decisions, polaris, tmdb, open_library, r2] }
+        name: { enum: [main_model, database, decisions, polaris, tmdb, open_library, r2] }
         state: { enum: [ok, degraded, down, not_configured] }
         detail: { type: string, maxLength: 300 }
       additionalProperties: false

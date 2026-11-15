@@ -605,13 +605,17 @@ func (s *Server) serveServices(w http.ResponseWriter, r *http.Request) {
 		}
 		return "not_configured"
 	}
+	// "ok" means configured, not probed: this route never makes a live call, so the screen that explains a slow
+	// dependency never becomes one. The panel's words say so ("Ready", not "Reachable").
+	keyed := state(s.cfg.OpenRouterKey != "")
 	services := []map[string]any{
-		{"name": "database", "state": state(s.engine != nil)},
-		{"name": "decisions", "state": state(s.model != nil)},
-		{"name": "polaris", "state": "not_configured"},
-		{"name": "tmdb", "state": state(s.cfg.TMDBKey != "")},
-		{"name": "open_library", "state": "ok"},
-		{"name": "r2", "state": "not_configured"},
+		{"name": "main_model", "state": keyed, "detail": s.cfg.Model},
+		{"name": "decisions", "state": keyed, "detail": "Quick pre-read and routing"},
+		{"name": "tmdb", "state": state(s.cfg.TMDBKey != ""), "detail": "Films and TV"},
+		{"name": "open_library", "state": "ok", "detail": "Books"},
+		{"name": "polaris", "state": "not_configured", "detail": "Web lookups"},
+		{"name": "database", "state": state(s.engine != nil), "detail": "Your entries and drafts"},
+		{"name": "r2", "state": "not_configured", "detail": "Backups"},
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"services": services})
 }
