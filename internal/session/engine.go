@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
 	"github.com/AutumnsGrove/sepia/internal/store"
@@ -748,6 +749,16 @@ func (e *Engine) IncludeLeftOut(ctx context.Context, sessionID string, baseVersi
 	}
 	if !domain.SpansContained(sourceText, []domain.Span{span}) {
 		return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "That passage is not in what you wrote."}
+	}
+	// The offsets come from the client. A range that cuts a character in half, or that overlaps a passage already
+	// kept, would put broken or repeated text in the body.
+	if !utf8.ValidString(span.Text) {
+		return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "That passage is not in what you wrote."}
+	}
+	for _, kept := range draft.Entry.BodySpans {
+		if span.Start < kept.End && kept.Start < span.End {
+			return Draft{}, &Refusal{Code: CodeInvalidValue, Message: "That passage is already on the card."}
+		}
 	}
 	spans := append(append([]domain.Span(nil), draft.Entry.BodySpans...), span)
 	// Spans are stored in source order, so the body reads the way she wrote it however they were added.

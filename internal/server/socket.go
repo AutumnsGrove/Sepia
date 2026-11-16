@@ -124,6 +124,9 @@ func (s *Server) socket(w http.ResponseWriter, r *http.Request) {
 	sock.readLoop()
 	sock.close(closeNormal, "the session ended")
 	sock.wg.Wait()
+	// The writer closes the connection after a clean close, but a failed write returns without it. A hijacked
+	// connection is never closed by net/http, so this is the one place that guarantees it is not leaked.
+	_ = ws.close()
 	s.hub.unregister(sock)
 	cancel()
 }
@@ -166,6 +169,9 @@ func (sock *socket) tail() {
 		if err != nil {
 			if sock.ctx.Err() == nil {
 				sock.server.log.Error("event tail failed", "session", sock.sessionID, "err", err.Error())
+				// Close rather than go quiet: a socket that stays open but never delivers again looks alive to the
+				// client, which would never reconnect and replay.
+				sock.close(closeInternal, "the event log could not be read")
 			}
 			return
 		}
@@ -227,6 +233,13 @@ func (sock *socket) writeLoop() {
 			}
 		}
 	}
+}
+
+// fail ends the socket after a write error. The connection is closed straight away so the read loop, which is
+// blocked on it, wakes now instead of at the read deadline.
+func (sock *socket) fail(reason string) {
+	sock.close(closeInternal, reason)
+	_ = sock.ws.close()
 }
 
 // readLoop reads client frames until the socket closes. A protocol failure closes with a stable code.
