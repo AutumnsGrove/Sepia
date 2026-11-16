@@ -249,7 +249,7 @@ func (n normalised) exact(source, quote string, cursor int) (Span, bool) {
 	if needle == "" {
 		return Span{}, false
 	}
-	at := strings.Index(n.text, needle)
+	at := n.indexOnWords(needle)
 	if at < 0 {
 		return Span{}, false
 	}
@@ -258,6 +258,25 @@ func (n normalised) exact(source, quote string, cursor int) (Span, bool) {
 		return Span{}, false
 	}
 	return Span{Start: start, End: end, Text: source[start:end]}, true
+}
+
+// indexOnWords finds the needle in the normalised text, but only where it starts and ends on a word edge. The
+// normalised text is lower-case words with single spaces, so an edge is the start, the end or a space. Without this
+// a quote of "dune!" would match inside "dunes" and put half a word in the body, which findExact already refuses.
+func (n normalised) indexOnWords(needle string) int {
+	for from := 0; from+len(needle) <= len(n.text); {
+		i := strings.Index(n.text[from:], needle)
+		if i < 0 {
+			return -1
+		}
+		at := from + i
+		end := at + len(needle)
+		if (at == 0 || n.text[at-1] == ' ') && (end == len(n.text) || n.text[end] == ' ') {
+			return at
+		}
+		from = at + 1
+	}
+	return -1
 }
 
 // findExact looks for the quote as written, preferring an occurrence at or after the cursor so quotes stay in the

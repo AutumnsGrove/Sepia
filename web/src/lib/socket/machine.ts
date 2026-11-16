@@ -101,6 +101,12 @@ export class SessionSocket {
   private readonly newID: () => string;
 
   private socket: SocketLike | null = null;
+  /**
+   * Which connection is the current one. A socket the machine has given up on (a silent one it closed, or one it
+   * replaced) can still report its own close, or even a late frame, minutes later on a dead network. Those must not
+   * be able to tear down the connection that replaced it.
+   */
+  private generation = 0;
   private state: ConnectionState = 'idle';
   private lastSeq = 0;
   private attempts = 0;
@@ -154,10 +160,15 @@ export class SessionSocket {
     if (this.stopped) return;
     this.clearRetry();
     this.setState(this.attempts === 0 ? 'connecting' : 'reconnecting');
+    const generation = ++this.generation;
     try {
       this.socket = this.connect(this.url(), {
-        onMessage: (raw) => this.onMessage(raw),
-        onClose: () => this.onClose(),
+        onMessage: (raw) => {
+          if (generation === this.generation) this.onMessage(raw);
+        },
+        onClose: () => {
+          if (generation === this.generation) this.onClose();
+        },
       });
     } catch (error) {
       // A constructor that throws (a bad URL, a browser without WebSockets) is a drop like any other.
@@ -300,6 +311,8 @@ export class SessionSocket {
   private closeSocket(code: number, reason: string): void {
     const socket = this.socket;
     this.socket = null;
+    // Whatever this socket says from here on is about a connection nobody is using.
+    this.generation += 1;
     this.clearSilenceWatchdog();
     try {
       socket?.close(code, reason);

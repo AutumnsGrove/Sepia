@@ -40,12 +40,12 @@ func assets() fstest.MapFS {
 	_ = zw.Close()
 
 	return fstest.MapFS{
-		"index.html":      {Data: []byte("<!doctype html><html lang=\"en\"><title>Sepia</title><p>placeholder</p></html>")},
-		"index.html.gz":   {Data: gz.Bytes()},
-		"_app/app.css":    {Data: []byte(":root{--bg:black}")},
-		"_app/app.css.gz": {Data: gz.Bytes()},
-		"_app/app.css.br": {Data: []byte("BROTLI-BYTES")},
-		"fonts/x.woff2":   {Data: []byte("wOF2")},
+		"index.html":                {Data: []byte("<!doctype html><html lang=\"en\"><title>Sepia</title><p>placeholder</p></html>")},
+		"index.html.gz":             {Data: gz.Bytes()},
+		"_app/immutable/app.css":    {Data: []byte(":root{--bg:black}")},
+		"_app/immutable/app.css.gz": {Data: gz.Bytes()},
+		"_app/immutable/app.css.br": {Data: []byte("BROTLI-BYTES")},
+		"fonts/x.woff2":             {Data: []byte("wOF2")},
 	}
 }
 
@@ -143,7 +143,7 @@ func TestStaticPage(t *testing.T) {
 
 func TestStaticAssetAndCompression(t *testing.T) {
 	h := newTestServer(t, testConfig(), assets())
-	rec := do(t, h, http.MethodGet, "/_app/app.css", "localhost:8893", "", nil)
+	rec := do(t, h, http.MethodGet, "/_app/immutable/app.css", "localhost:8893", "", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -196,7 +196,7 @@ func TestHostRefused(t *testing.T) {
 		"ip and port trick":        "127.0.0.1:8893@evil.example",
 		"ipv6 loopback alias":      "[::1]:9999",
 	}
-	paths := []string{"/healthz", "/", "/api/v1/anything", "/_app/app.css"}
+	paths := []string{"/healthz", "/", "/api/v1/anything", "/_app/immutable/app.css"}
 	for name, host := range hostile {
 		for _, p := range paths {
 			t.Run(name+" "+p, func(t *testing.T) {
@@ -531,7 +531,7 @@ func TestPrecompressedAssets(t *testing.T) {
 	h := newTestServer(t, testConfig(), assets())
 
 	get := func(accept string) *httptest.ResponseRecorder {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/_app/app.css", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/_app/immutable/app.css", nil)
 		req.Host = "localhost:8893"
 		if accept != "" {
 			req.Header.Set("Accept-Encoding", accept)
@@ -593,7 +593,7 @@ func TestPrecompressedAssets(t *testing.T) {
 
 func TestCompressionSkippedWithoutAcceptEncoding(t *testing.T) {
 	h := newTestServer(t, testConfig(), assets())
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/_app/app.css", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/_app/immutable/app.css", nil)
 	req.Host = "localhost:8893"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -604,13 +604,13 @@ func TestCompressionSkippedWithoutAcceptEncoding(t *testing.T) {
 
 func TestConditionalGet(t *testing.T) {
 	h := newTestServer(t, testConfig(), assets())
-	first := do(t, h, http.MethodGet, "/_app/app.css", "localhost:8893", "", nil)
+	first := do(t, h, http.MethodGet, "/_app/immutable/app.css", "localhost:8893", "", nil)
 	etag := first.Header().Get("ETag")
 	if etag == "" {
 		t.Fatal("no ETag")
 	}
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/_app/app.css", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/_app/immutable/app.css", nil)
 	req.Host = "localhost:8893"
 	req.Header.Set("If-None-Match", etag)
 	rec := httptest.NewRecorder()

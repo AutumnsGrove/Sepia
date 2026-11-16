@@ -108,11 +108,12 @@ test.describe('logging a review', () => {
     await expect
       .poll(
         async () => {
-          const list = await page.request.get('/api/entries?limit=1');
+          const list = await page.request.get('/api/entries?limit=100');
           const library = (await list.json()) as {
             items: { answers: { category?: string; values: string[] }[] }[];
           };
-          // Any entry with that answer, not items[0]: the list's order breaks ties on a generated id.
+          // Any entry with that answer, not items[0]: both browser projects log on this stack on the same day, and the
+          // list's order breaks that tie on a generated id, so a page of one could be the other project's entry.
           return (
             library.items
               .flatMap((item) => item.answers ?? [])

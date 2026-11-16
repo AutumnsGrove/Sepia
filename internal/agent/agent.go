@@ -301,8 +301,12 @@ func (a *Agent) runModel(ctx context.Context, state *RunState, nudge string) err
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, a.turnDeadline)
+	// The deadline is a clock that stops while she is deciding on a card, so her time is not charged to the model.
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	clock := newTurnClock(a.turnDeadline, cancel)
+	defer clock.stop()
+	state.clock = clock
 
 	// The ledgers are receipts, not gates: a read failure costs a number on the "why" sheet, not the turn.
 	prior, err := a.store.SessionCost(ctx, state.SessionID)
@@ -353,6 +357,10 @@ func (a *Agent) runModel(ctx context.Context, state *RunState, nudge string) err
 		}
 	}
 	if runErr != nil {
+		if clock.reached() && !errors.Is(runErr, errBudget) {
+			// The clock cancelled the run, which reads as a plain cancellation; say what actually happened.
+			runErr = context.DeadlineExceeded
+		}
 		state.setEnded("error")
 		if errors.Is(runErr, errBudget) {
 			state.setEnded("budget")

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
@@ -51,6 +52,17 @@ type Service struct {
 	signalDir string
 	store     Store
 	now       func() time.Time
+
+	// imported is the receipt file as it was when the last import finished. The Backups and Services screens both
+	// import on read, so without it every page view re-wrote up to 500 rows that were already there.
+	mu       sync.Mutex
+	imported fileStamp
+}
+
+// fileStamp is enough to tell that the receipt file has not changed: the script only ever appends to it.
+type fileStamp struct {
+	size    int64
+	modTime time.Time
 }
 
 // New builds the service. signalDir is empty in a bare deployment, which is a normal state: the screen says there is
@@ -131,6 +143,15 @@ func (s *Service) Last(ctx context.Context) (*domain.Mirror, error) {
 // Import reads the receipt file and writes anything new to the mirrors table. A missing file is not an error: it
 // means the helper has never run. It returns how many receipts were written.
 func (s *Service) Import(ctx context.Context) (int, error) {
+	// Stamp before reading: if the file grows while it is parsed, the stamp is older than what was read and the
+	// next import runs again rather than missing the new line.
+	stamp, haveFile := s.stamp()
+	s.mu.Lock()
+	unchanged := haveFile && stamp == s.imported
+	s.mu.Unlock()
+	if unchanged {
+		return 0, nil
+	}
 	parsed, err := s.parse()
 	if err != nil {
 		return 0, err
@@ -142,7 +163,21 @@ func (s *Service) Import(ctx context.Context) (int, error) {
 		}
 		written++
 	}
+	if haveFile {
+		s.mu.Lock()
+		s.imported = stamp
+		s.mu.Unlock()
+	}
 	return written, nil
+}
+
+// stamp reads the receipt file's size and modification time. A missing file reports false.
+func (s *Service) stamp() (fileStamp, bool) {
+	info, err := os.Stat(filepath.Join(s.dataDir, backupsDir, receiptsName))
+	if err != nil {
+		return fileStamp{}, false
+	}
+	return fileStamp{size: info.Size(), modTime: info.ModTime()}, true
 }
 
 // parse reads the newest end of the receipt file.
@@ -231,6 +266,10 @@ func (s *Service) helper() Helper {
 
 // pending is true while a request exists and is young enough to still be served.
 func (s *Service) pending() bool {
+	if s.signalDir == "" {
+		// A bare deployment has no signal directory; joining the empty path would look in the working directory.
+		return false
+	}
 	info, err := os.Stat(filepath.Join(s.signalDir, requestName))
 	if err != nil {
 		return false
