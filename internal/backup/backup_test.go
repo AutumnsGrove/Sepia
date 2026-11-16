@@ -457,6 +457,9 @@ func TestRequestNeedsADirectory(t *testing.T) {
 
 // A restore into a directory it cannot write must fail with a sentence, not leave a half database behind.
 func TestRestoreReportsAnUnwritableTarget(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions, so a read-only directory proves nothing")
+	}
 	dir := t.TempDir()
 	snapshot := filepath.Join(dir, "sepia.db")
 	makeDB(t, snapshot, 1, 0)
@@ -528,6 +531,9 @@ func TestRestoreReportsAMissingCompare(t *testing.T) {
 
 // A signal directory the app cannot write is a failure with a reason, not a request that looks sent.
 func TestRequestReportsAnUnwritableSignalDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions, so a read-only directory proves nothing")
+	}
 	now := time.Date(2026, 11, 15, 4, 0, 0, 0, time.UTC)
 	dir := t.TempDir()
 	signal := filepath.Join(dir, "signal")
