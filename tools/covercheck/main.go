@@ -60,9 +60,12 @@ type result struct {
 // percentage, so 95.4% clears a floor of 95 and 94.9% does not.
 func (r result) ok() bool { return r.covered*100 >= r.percent*r.total }
 
-// String renders one line of the report.
+// String renders one line of the report. The statement counts are printed beside the percentage because a report
+// rounded to one decimal cannot show the margin a package has: 794 of 942 statements reads as 84.3% against a floor
+// of 84, and so does a package one statement clear of it.
 func (r result) String() string {
-	return fmt.Sprintf("%s coverage: %.1f%% (floor %d%%)", r.pkg, 100*float64(r.covered)/float64(r.total), r.percent)
+	return fmt.Sprintf("%s coverage: %d/%d statements (%.1f%%, floor %d%%)",
+		r.pkg, r.covered, r.total, 100*float64(r.covered)/float64(r.total), r.percent)
 }
 
 func main() {
@@ -89,8 +92,10 @@ func run(path string, out io.Writer, floors []floor) error {
 	for _, r := range results {
 		fmt.Fprintln(out, r)
 		if !r.ok() {
-			failed = append(failed, fmt.Sprintf("%s is %.1f%%, below the %d%% floor",
-				r.pkg, 100*float64(r.covered)/float64(r.total), r.percent))
+			// Two decimals and the counts, because one decimal can print a failing package as the floor itself: 664
+			// of 699 is 94.99% and reads "95.0%", so the message contradicted its own verdict in a CI log.
+			failed = append(failed, fmt.Sprintf("%s is %d/%d statements (%.2f%%), below the %d%% floor",
+				r.pkg, r.covered, r.total, 100*float64(r.covered)/float64(r.total), r.percent))
 		}
 	}
 	if len(failed) > 0 {

@@ -34,7 +34,9 @@ the one `go test -cover` prints for that package, so a log line always means wha
   those weights a three-line helper like a three-hundred-line engine (issue #5). The job used to do exactly that,
   which reported `internal/domain` as 94% while it stood at 95.4% of statements, so no amount of testing could clear
   its floor. `tools/covercheck` reads the profile and sums statements. The comparison is done in whole statements
-  rather than a rounded percentage, and it is unit tested on the happy, bad and sad routes.
+  rather than a rounded percentage, and it is unit tested on the happy, bad and sad routes. A failing line carries the
+  counts and two decimals (`internal/domain is 664/699 statements (94.99%), below the 95% floor`), because one
+  decimal printed 94.99% as "95.0%" and the message contradicted the verdict it was explaining.
 - **Generated code is excluded.** sqlc's `internal/store/db` has no tests by design and is covered through the
   repositories; counting it would punish the schema for being generated rather than written.
 - **A package with no statements in the profile is an error, not a zero.** That means its tests did not run, and a
