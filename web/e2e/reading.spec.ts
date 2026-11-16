@@ -279,7 +279,7 @@ test('services names every dependency and what an outage costs', async ({ page }
   await expect(page).toHaveScreenshot('reading-services.png', { fullPage: true });
 });
 
-test('the first run teaches by example and a tap fills the composer', async ({ page }) => {
+test('the first run asks the question and offers no words of its own', async ({ page }) => {
   // An empty library is answered for instead of a real one, because the seeded stack never is empty.
   await page.route('**/api/entries*', (route) =>
     route.fulfill({ status: 200, json: { items: [], next_cursor: null } }),
@@ -290,15 +290,17 @@ test('the first run teaches by example and a tap fills the composer', async ({ p
 
   await openReading(page, '/');
   await expect(page.getByRole('heading', { name: 'Finished something?' })).toBeVisible();
+  await expect(page.getByText(/Say what you thought, the way you would out loud/)).toBeVisible();
   await expect(page.getByRole('link', { name: 'Drafts, 0 waiting' })).toBeVisible();
+  // Nothing invented to tap: a suggested review would be the app putting words in her mouth, so the empty state is
+  // the heading, the explanation and an empty composer, and Send stays off until she has typed something.
+  await expect(page.getByLabel('Say what you thought')).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Send' })).toBeDisabled();
+  // The composer is the textarea and Send. The 1% pixel tolerance cannot see a 44px control disappear, so the
+  // absence of the old disabled paperclip is asserted rather than left to a baseline (issue #15).
+  await expect(page.getByRole('button', { name: /attach/i })).toHaveCount(0);
   await noViolations(page);
   await expect(page).toHaveScreenshot('reading-first-run.png', { fullPage: true });
-
-  // Tapping an example fills the composer and sends nothing: the send button stays off until she sends it.
-  const example = page.getByRole('button', { name: /finished the lantern keeper/ });
-  await example.click();
-  await expect(page.getByLabel('Say what you thought')).toHaveValue(/finished the lantern keeper/);
-  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
 });
 
 test('a slow library shows skeleton rows rather than a spinner in the middle', async ({ page }) => {

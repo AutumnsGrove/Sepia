@@ -13,8 +13,10 @@ S01.6 findings on how the pinned model reads screenshots. Phase 3.
 
 ## Where we start
 
-The composer has a disabled attach button. The `media` table and `body_origin = imported` exist in the schema.
-The decisions layer takes text only.
+The composer is the textarea and Send: there is no attachment affordance yet, because a control that is
+permanently off teaches that the app is broken (issue #15 removed the placeholder one). This slice adds the
+control back with its own reason to be enabled, its own limits and its own accept step (S18.4). The `media` table
+and `body_origin = imported` exist in the schema. The decisions layer takes text only.
 
 ## Settled
 
