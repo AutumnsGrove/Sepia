@@ -78,7 +78,9 @@ pulls the image and compiles nothing. This is what the update flow ([`UPDATE.md`
 - **Local only:** `make check` (format, vet, lint, unit and integration tests, a short fuzz smoke), `make
   coverage` (the same floors CI asserts), and a potato benchmark over SSH. **The potato is never a CI runner.**
 - **Dependabot:** Go modules, pnpm and GitHub Actions weekly, grouped, each update going through the normal
-  required checks.
+  required checks. `pi-review` skips bot pull requests (`triggers.skipBots` in `.github/pi-review.json`): GitHub
+  withholds repository secrets from a Dependabot run, so a review there could only fail for want of the App token
+  and the API key, leaving a failed check and a "could not complete" comment on every bump.
 
 ## 4. Public-repo security rules
 
