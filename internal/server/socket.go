@@ -203,17 +203,17 @@ func (sock *socket) writeLoop() {
 		select {
 		case data := <-sock.persisted:
 			if !write(opText, data) {
-				sock.close(closeInternal, "the write failed")
+				sock.fail("the write failed")
 				return
 			}
 		case data := <-sock.live:
 			if !write(opText, data) {
-				sock.close(closeInternal, "the write failed")
+				sock.fail("the write failed")
 				return
 			}
 		case <-ping.C:
 			if !write(opPing, nil) {
-				sock.close(closeInternal, "the ping failed")
+				sock.fail("the ping failed")
 				return
 			}
 		case <-sock.closed:
