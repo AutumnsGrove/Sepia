@@ -304,6 +304,8 @@
 
 <style>
   .ix {
+    /* The same rhythm as every other block in the thread; without it the card sat 4px under the activity line. */
+    margin-top: 0.9rem;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: var(--r-lg);
