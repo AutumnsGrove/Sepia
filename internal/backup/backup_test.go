@@ -565,3 +565,46 @@ func TestParseReportsABrokenReceiptsPath(t *testing.T) {
 		t.Fatal("a receipts path that cannot be opened was reported as no receipts")
 	}
 }
+
+// countingStore counts the writes the importer makes.
+type countingStore struct {
+	*fakeStore
+	writes int
+}
+
+func (c *countingStore) RecordMirror(ctx context.Context, m domain.Mirror) error {
+	c.writes++
+	return c.fakeStore.RecordMirror(ctx, m)
+}
+
+// Both screens import on read, so an unchanged receipt file must cost no writes after the first look. Without that,
+// every page view re-wrote every receipt in the file.
+func TestImportSkipsAnUnchangedFile(t *testing.T) {
+	now := time.Date(2026, 11, 15, 4, 0, 0, 0, time.UTC)
+	tree := newTree(t)
+	tree.receipts(t, []string{line("run-1", "r2sepia:sepia-backups/db", "ok", now, 1, "")})
+	store := &countingStore{fakeStore: newFakeStore()}
+	service := New(tree.data, tree.signal, store, func() time.Time { return now })
+
+	for i := 0; i < 3; i++ {
+		if _, err := service.View(context.Background()); err != nil {
+			t.Fatalf("view %d: %v", i, err)
+		}
+	}
+	if store.writes != 1 {
+		t.Errorf("writes = %d after three views of one file, want 1", store.writes)
+	}
+
+	// A new night appended: it is picked up, and only the file's rows are written again.
+	tree.receipts(t, []string{
+		line("run-1", "r2sepia:sepia-backups/db", "ok", now, 1, ""),
+		line("run-2", "r2sepia:sepia-backups/db", "ok", now.Add(time.Hour), 2, ""),
+	})
+	view, err := service.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Runs) != 2 {
+		t.Errorf("runs = %d, want the new receipt picked up", len(view.Runs))
+	}
+}
