@@ -164,6 +164,28 @@ function closedBlocks(blocks: TranscriptBlock[]): TranscriptBlock[] {
   );
 }
 
+/**
+ * Settles every activity row still waiting to end. A turn that is stopped, times out or fails can end with a tool
+ * still marked live and no tool_end to follow, and `isWorking` reads a live row as a reply in progress, so the
+ * composer would stay on Stop with a pulsing dot for a turn that is over.
+ */
+function settledActivity(activity: ActivityRow[]): ActivityRow[] {
+  return activity.map((row) => (row.live ? { ...row, live: false, ok: false } : row));
+}
+
+/**
+ * The notices a turn ends on. Others arrive in the middle of a turn, while a tool is still running and about to
+ * report its own end, so they must leave the activity alone.
+ */
+const turnEndingNotices = new Set([
+  'stopped',
+  'turn_budget',
+  'turn_timeout',
+  'model_unavailable',
+  'model_off',
+  'step_limit',
+]);
+
 function withoutInteraction(state: SessionState, id: string): OpenInteraction[] {
   return state.interactions.filter((interaction) => interaction.id !== id);
 }
@@ -431,6 +453,9 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
           nextOrder: state.nextOrder + 1,
           // A notice can be the last word on a turn that stopped or failed, so nothing is left streaming.
           blocks: closedBlocks(state.blocks),
+          activity: turnEndingNotices.has(data.code)
+            ? settledActivity(state.activity)
+            : state.activity,
           notices: [
             ...state.notices,
             { level: data.level, code: data.code, text: data.text, at, order: state.nextOrder },
@@ -446,6 +471,7 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
           ...state,
           // A failed turn never sends assistant_end; without this the composer would stay on Stop.
           blocks: closedBlocks(state.blocks),
+          activity: settledActivity(state.activity),
           error: { code: data.code, message: data.message, retryable: data.retryable },
         },
       };
