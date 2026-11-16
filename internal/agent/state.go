@@ -58,6 +58,8 @@ type RunState struct {
 	StartedCard   bool
 	lookupRetries int
 	stopped       bool
+	// clock is the turn's deadline, which stops while a question waits for her.
+	clock *turnClock
 	// mu guards the turn's end state. Nova may call the TurnEnd hook and return from Run on different goroutines,
 	// so a plain field is a data race the detector finds under load.
 	mu sync.Mutex
@@ -168,7 +170,15 @@ func (s *RunState) ask(ctx context.Context, kind string, payload any) (json.RawM
 	if err != nil {
 		return nil, err
 	}
-	return s.Agent.responder.Wait(ctx, s.SessionID, question.ID)
+	return s.waitForHer(ctx, question.ID)
+}
+
+// waitForHer blocks on her answer with the turn's deadline stopped. Only an explicit stop, which cancels the
+// context, ends the wait early.
+func (s *RunState) waitForHer(ctx context.Context, interactionID string) (json.RawMessage, error) {
+	s.clock.pause()
+	defer s.clock.resume()
+	return s.Agent.responder.Wait(ctx, s.SessionID, interactionID)
 }
 
 // askAny opens a question that is not part of the bank, such as a fill_gap, still under the round cap.
@@ -180,7 +190,7 @@ func (s *RunState) askAny(ctx context.Context, kind string, payload any) (json.R
 	if err != nil {
 		return nil, err
 	}
-	return s.Agent.responder.Wait(ctx, s.SessionID, question.ID)
+	return s.waitForHer(ctx, question.ID)
 }
 
 // onMessage keeps what nova produced, without writing it anywhere yet. The whole transcript is stored once the

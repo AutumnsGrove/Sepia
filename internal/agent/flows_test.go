@@ -795,3 +795,29 @@ func TestSearchLibraryReachesPastTheNewestPage(t *testing.T) {
 		t.Errorf("result = %q, want the oldest entry found", result.Content)
 	}
 }
+
+// The turn deadline is for the model and the services. Time she spends deciding on a card is hers, so a slow answer
+// must not time the turn out, and must not leave the "model took longer than two minutes" notice behind.
+func TestTheDeadlineDoesNotRunWhileSheDecides(t *testing.T) {
+	r := newRig(t, rigOptions{script: bookScript(), turnDeadline: 400 * time.Millisecond})
+	scriptBook(r.fake)
+	r.responder.delay = 300 * time.Millisecond // two or more questions, so she takes well over the deadline in all
+	r.responder.script("describe", map[string]any{"selected": map[string][]string{"feel": {"moving"}}})
+	answerQuestions(t, r)
+
+	ctx := context.Background()
+	sess, err := r.session.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := r.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1"})
+	if err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if out.Ended != "done" || out.Draft == nil {
+		t.Errorf("ended = %q, draft = %v; a slow answer from her ended the turn", out.Ended, out.Draft != nil)
+	}
+	if hasNotice(t, r, sess.ID, "turn_timeout") {
+		t.Error("her thinking time was reported as the model being slow")
+	}
+}
