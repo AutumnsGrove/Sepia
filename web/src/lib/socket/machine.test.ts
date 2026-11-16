@@ -264,6 +264,26 @@ describe('the socket machine', () => {
     expect(r.sockets).toHaveLength(2);
   });
 
+  it('ignores a late close from a socket it already replaced', () => {
+    const r = rig();
+    r.machine.start();
+    r.last().deliver(hello());
+    vi.advanceTimersByTime(SILENCE_LIMIT);
+    vi.advanceTimersByTime(500);
+    expect(r.sockets).toHaveLength(2);
+    r.last().deliver(hello());
+    expect(r.states.at(-1)).toBe('open');
+
+    // On a dead network the first socket's own close can arrive long after its replacement is up.
+    r.sockets[0].handlers.onClose();
+    r.sockets[0].deliver(event('user_message', 7, { text: 'from a socket nobody is using' }));
+    expect(r.states.at(-1)).toBe('open');
+    expect(r.events).toHaveLength(0);
+    vi.advanceTimersByTime(10_000);
+    expect(r.sockets).toHaveLength(2);
+    expect(r.last().closed).toBeNull();
+  });
+
   it('keeps the watchdog fed by frames, so an active socket is never cut', () => {
     const r = rig();
     r.machine.start();
