@@ -28,6 +28,12 @@
   };
   const tone = $derived(variant ?? byMedium[medium] ?? 'default');
 
+  // A cover that will not load (a missing file, a host that is down) falls back to the stand-in, rather than
+  // leaving the browser's broken-image icon in the card. Remembering the URL that failed, not a flag, means a
+  // new url gets its own try.
+  let failedUrl = $state<string | null>(null);
+  const showImage = $derived(Boolean(url) && failedUrl !== url);
+
   const initials = $derived(
     title
       .split(/\s+/)
@@ -39,8 +45,8 @@
 </script>
 
 <span class="cover {tone}" class:lg={size === 'lg'} aria-hidden="true">
-  {#if url}
-    <img src={url} alt="" loading="lazy" decoding="async" />
+  {#if showImage}
+    <img src={url} alt="" loading="lazy" decoding="async" onerror={() => (failedUrl = url)} />
   {:else}
     <span class="tt">{initials || title.slice(0, 2)}</span>
   {/if}
