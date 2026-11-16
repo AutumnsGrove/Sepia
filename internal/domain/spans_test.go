@@ -381,3 +381,21 @@ func TestComplementRefusesABadSource(t *testing.T) {
 		t.Errorf("Complement with a span past the end = %+v, want nil", got)
 	}
 }
+
+// The normalised match ignores case and punctuation, and it must still land on whole words: a quote of "dune!" is
+// not in "the dunes were lovely", and a half-word span would put words in her body she did not write.
+func TestLocateDoesNotMatchInsideALongerWord(t *testing.T) {
+	got := Locate("The dunes were lovely and so was the sand.", []string{"dune!"})
+	if len(got.Spans) != 0 {
+		t.Fatalf("spans = %+v, want none: dune is not a word in that sentence", got.Spans)
+	}
+	if len(got.Dropped) != 1 {
+		t.Errorf("dropped = %v, want the quote reported", got.Dropped)
+	}
+
+	// The same quote still finds the whole word where it is one, with its punctuation and case different.
+	got = Locate("I loved the Dune, honestly.", []string{"dune!"})
+	if len(got.Spans) != 1 || got.Spans[0].Text != "Dune" {
+		t.Errorf("spans = %+v, want the word Dune", got.Spans)
+	}
+}
