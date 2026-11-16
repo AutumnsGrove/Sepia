@@ -608,3 +608,48 @@ func TestImportSkipsAnUnchangedFile(t *testing.T) {
 		t.Errorf("runs = %d, want the new receipt picked up", len(view.Runs))
 	}
 }
+
+// A line the script cannot have written is skipped and counted, and every usable line after it still arrives: a
+// hand-edited or half-written receipt must not stop the import at the first bad night.
+func TestParseSkipsALineItCannotHaveWritten(t *testing.T) {
+	at := time.Date(2026, 11, 15, 3, 30, 0, 0, time.UTC)
+	input := strings.Join([]string{
+		line("run-1", "r2sepia:sepia-backups/db", "ok", at, 1, ""),
+		"x" + strings.Repeat("x", MaxReceiptLine),
+		`{"run":"run-2","ran_at":"yesterday","target":"r2sepia:sepia-backups/db","status":"ok","bytes":1}`,
+		line("run-3", "r2sepia:sepia-backups/covers", "ok", at, 1, ""),
+		"",
+	}, "\n")
+
+	got := Parse(strings.NewReader(input))
+
+	if len(got.Items) != 2 || got.Skipped != 2 {
+		t.Fatalf("items = %d, skipped = %d, want 2 and 2", len(got.Items), got.Skipped)
+	}
+	if got.Items[1].ID != "run-3:r2sepia:sepia-backups/covers" {
+		t.Errorf("last item = %q, want the line after the bad ones", got.Items[1].ID)
+	}
+}
+
+// More than one bounded read arrived: the part that did is kept, the half line at its end is dropped rather than
+// parsed into a receipt, and the result says it was cut so the screen can say so.
+func TestParseDropsTheHalfLineWhenTheFileIsTooLarge(t *testing.T) {
+	at := time.Date(2026, 11, 15, 3, 30, 0, 0, time.UTC)
+	var b strings.Builder
+	for i := 0; b.Len() <= MaxReceiptFileBytes; i++ {
+		b.WriteString(line(fmt.Sprintf("run-%04d", i), "r2sepia:sepia-backups/db", "ok", at, 1, ""))
+		b.WriteString("\n")
+	}
+
+	got := Parse(strings.NewReader(b.String()))
+
+	if !got.Truncated {
+		t.Fatal("a body larger than one read was not reported as truncated")
+	}
+	if len(got.Items) == 0 {
+		t.Fatal("nothing survived the cut")
+	}
+	if last := got.Items[len(got.Items)-1]; last.Status != domain.MirrorOK || last.Bytes != 1 {
+		t.Errorf("the last receipt is a half line: %+v", last)
+	}
+}
