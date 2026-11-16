@@ -24,7 +24,10 @@ permissions:
 
 jobs:
   review:
-    if: (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '@pi') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) && github.event.comment.user.type != 'Bot')
+    # Bots are skipped (`triggers.skipBots`): GitHub withholds repository secrets from a Dependabot run, so the
+    # review could only ever fail for want of the App token and the API key, and it would leave a failure and a
+    # "could not complete" comment on every dependency bump.
+    if: (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.type != 'Bot') || (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '@pi') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) && github.event.comment.user.type != 'Bot')
     uses: AutumnsGrove/pi-extensions/.github/workflows/pi-review-reusable.yml@main
     with:
       settings-path: '.github/pi-review.json'
