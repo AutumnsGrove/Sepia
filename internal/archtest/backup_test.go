@@ -118,6 +118,10 @@ case "$1" in
 			printf 'ERROR : AccessDenied: Access Denied\n' >&2
 			exit 3
 		fi
+		if [ "${FAKE_RCLONE_SYNC_FAIL:-0}" = "tab" ]; then
+			printf 'ERROR :\tAccessDenied:\tAccess Denied\n' >&2
+			exit 3
+		fi
 		;;
 	check)
 		if [ "${FAKE_RCLONE_CHECK_FAIL:-0}" = "1" ]; then
@@ -406,6 +410,9 @@ func TestBackupMirrorFailuresAreRecorded(t *testing.T) {
 		contains string
 	}{
 		{"auth failure", map[string]string{"FAKE_RCLONE_SYNC_FAIL": "1"}, "AccessDenied"},
+		// A raw tab inside a JSON string is invalid JSON, and the app skips a line it cannot parse, which would hide
+		// the very failure the receipt exists to report.
+		{"tab in the error text", map[string]string{"FAKE_RCLONE_SYNC_FAIL": "tab"}, "AccessDenied"},
 		{"partial upload", map[string]string{"FAKE_RCLONE_CHECK_FAIL": "1"}, "read back clean"},
 	}
 	for _, tc := range cases {
