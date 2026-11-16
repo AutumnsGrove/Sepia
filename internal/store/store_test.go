@@ -14,6 +14,8 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/AutumnsGrove/sepia/internal/domain"
 )
 
 // The data layer's tests are about what the DATABASE refuses, not what the code refuses. Every protection is
@@ -777,5 +779,49 @@ func TestDoctorNamesAMissingProtection(t *testing.T) {
 	}
 	if !slices.Contains(health.MissingTriggers, "entries_no_delete") {
 		t.Errorf("missing triggers = %v, want entries_no_delete", health.MissingTriggers)
+	}
+}
+
+// A socket request can arrive after shutdown has begun. Every read has to come back as an error that names the
+// operation, never as a zero value the caller could mistake for an empty library, an empty ledger or a healthy
+// database; Setting says so in its own comment, and the rest have to match it.
+func TestAClosedStoreNamesTheOperationThatFailed(t *testing.T) {
+	s := openTest(t)
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	ctx := context.Background()
+	calls := []struct {
+		name string
+		call func() error
+	}{
+		{"Work", func() error { _, err := s.Work(ctx, "w1"); return err }},
+		{"WorksByTitle", func() error { _, err := s.WorksByTitle(ctx, "book", "Dune"); return err }},
+		{"Sources", func() error { _, err := s.Sources(ctx, "w1"); return err }},
+		{"Entry", func() error { _, err := s.Entry(ctx, "e1"); return err }},
+		{"Library", func() error { _, _, err := s.Library(ctx, domain.Cursor{}, 10); return err }},
+		{"Drafts", func() error { _, err := s.Drafts(ctx, 10); return err }},
+		{"EntriesOnWork", func() error { _, err := s.EntriesOnWork(ctx, "w1"); return err }},
+		{"Revisions", func() error { _, err := s.Revisions(ctx, "e1"); return err }},
+		{"RevisionAt", func() error { _, err := s.RevisionAt(ctx, "e1", 1); return err }},
+		{"EntryTags", func() error { _, err := s.EntryTags(ctx, "e1"); return err }},
+		{"Answers", func() error { _, err := s.Answers(ctx, "e1"); return err }},
+		{"Setting", func() error { _, err := s.Setting(ctx, "preread", "on"); return err }},
+		{"DecisionCalls", func() error { _, err := s.DecisionCalls(ctx, "s1"); return err }},
+		{"TurnCalls", func() error { _, err := s.TurnCalls(ctx, "s1"); return err }},
+		{"SessionCost", func() error { _, err := s.SessionCost(ctx, "s1"); return err }},
+		{"Mirrors", func() error { _, err := s.Mirrors(ctx, 10); return err }},
+		{"Version", func() error { _, err := s.Version(ctx); return err }},
+		{"Doctor", func() error { _, err := s.Doctor(ctx); return err }},
+	}
+	for _, c := range calls {
+		err := c.call()
+		if err == nil {
+			t.Errorf("%s answered a closed store with no error", c.name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "store: ") {
+			t.Errorf("%s error does not name the operation: %v", c.name, err)
+		}
 	}
 }

@@ -242,3 +242,40 @@ func TestMergeLosesNothing(t *testing.T) {
 		}
 	}
 }
+
+// The other half of the year rule: when the primary already carries the earlier year, a later source is rejected
+// and recorded rather than silently dropped. The card shows what it refused, so the shape of the conflict matters.
+func TestMergeRejectsALaterYearAndNamesBoth(t *testing.T) {
+	book := Source{Provider: "openlibrary", Trust: TrustVerified, Title: "Dune", Year: 1965}
+	edition := Source{Provider: "other", Trust: TrustVerified, Title: "Dune", Year: 1984}
+
+	got := Merge("book", []Source{book, edition})
+	if got.Work.Year != 1965 {
+		t.Fatalf("year = %d, want the earliest", got.Work.Year)
+	}
+	if len(got.Conflicts) != 1 {
+		t.Fatalf("conflicts = %+v, want one", got.Conflicts)
+	}
+	want := Conflict{Field: "year", Kept: "1965", Rejected: "1984", From: "other"}
+	if got.Conflicts[0] != want {
+		t.Errorf("conflict = %+v, want %+v", got.Conflicts[0], want)
+	}
+}
+
+// No source anywhere has a title: the work stays empty rather than borrowing a name, and the sources are still
+// carried so the card can offer to fill the fields in. A title invented here would be a work nobody identified.
+func TestMergeWithNoTitleAnywhere(t *testing.T) {
+	got := Merge("film", []Source{
+		{Provider: "web", Trust: TrustUnverified, Title: "   "},
+		{Provider: "other", Trust: TrustUnverified},
+	})
+	if got.Work.Title != "" || got.Work.PrimaryProvider != "" {
+		t.Errorf("work = %+v, want no title and no primary", got.Work)
+	}
+	if len(got.Work.Sources) != 2 {
+		t.Errorf("sources = %d, want both kept", len(got.Work.Sources))
+	}
+	if got.Work.Verified {
+		t.Error("an untitled work must not be verified")
+	}
+}

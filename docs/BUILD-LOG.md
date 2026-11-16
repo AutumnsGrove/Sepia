@@ -1127,3 +1127,23 @@ docker major bumps (`setup-qemu` v3 -> v4, `setup-buildx` v3 -> v4, `login` v3 -
 the node24/ESM runtime change with no input or default Sepia uses touched, but `docker-publish.yml` runs only on a push
 to `main`, so no PR check exercises it and the first real run is the one after the merge. That bump is worth a pair of
 eyes on the publish run rather than a merge at the end of a batch.
+
+## 2026-11-16, the coverage job explains itself and stops living on the edge
+
+**What changed.** Issue #5 was closed as done and #27 fixed what was actually left. `tools/covercheck` now prints
+statement counts beside every number and, when a floor fails, two decimals: `internal/domain is 664/699 statements
+(94.99%), below the 95% floor`. Before that, one decimal printed 94.99% as "95.0%", so the log on 2026-11-09 said
+"95.0%, below the 95% floor" and read like a checker bug rather than one statement short.
+
+**Why it mattered.** The metric was already right (statements, `84d80fc`) and the job has been green since
+2026-11-14, but `store` was two statements above its floor, and `domain` and `backup` four. That is why it went red
+on 2026-11-09 and 11-10 while nothing was broken: any refactor that moves one error path out of a test flips it. The
+margins are now `domain` 741/767 (+12), `store` 815/942 (+23) and `backup` 215/254 (+11), all lifted by tests and
+none by moving a bar.
+
+**The tests chosen are worth knowing about.** `TestAClosedStoreNamesTheOperationThatFailed` drives eighteen store
+methods after `Close` and requires each to return an error naming its operation: a socket request that arrives during
+shutdown must not read as an empty library. The rest cover behavior the code documents and never asserted — a quote
+over `MaxQuoteLength` is recorded as dropped rather than silently lost, a receipt line the script cannot have
+written is counted and skipped while later lines still arrive, the year rule records a *later* source too, and
+`MirrorStatus` is asserted against the schema's own CHECK list so the two cannot drift apart.
