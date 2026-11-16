@@ -89,7 +89,10 @@ pulls the image and compiles nothing. This is what the update flow ([`UPDATE.md`
 1. **Triggers:** `pull_request`, never `pull_request_target`; no workflow checks out or runs fork code with
    secrets. Fork PRs get no secrets and run only the world-backed jobs.
 2. **Least privilege:** default `permissions: contents: read`; jobs add only what they need.
-3. **Pin third-party actions by full commit SHA,** updated by Dependabot, from a short allow-list.
+3. **Pin third-party actions by full commit SHA,** updated by Dependabot, from a short allow-list. The pin's
+   version comment is checked against the tag when a bump lands: a `uses:` SHA that is a tag object rather than a
+   commit (trivy's was, until 2026-11-16) still resolves, but it names a tag someone can move instead of a tree
+   nobody can.
 4. **No self-hosted runners,** because a public repo plus a self-hosted runner lets any PR run code on that
    machine. GitHub-hosted runners only.
 5. **Secrets:** none in the repo or at repository level. Eval credentials live in protected Environments.

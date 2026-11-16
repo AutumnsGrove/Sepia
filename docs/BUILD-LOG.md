@@ -1147,3 +1147,27 @@ shutdown must not read as an empty library. The rest cover behavior the code doc
 over `MaxQuoteLength` is recorded as dropped rather than silently lost, a receipt line the script cannot have
 written is counted and skipped while later lines still arrive, the year rule records a *later* source too, and
 `MirrorStatus` is asserted against the schema's own CHECK list so the two cannot drift apart.
+
+## 2026-11-16, the actions group lands, docker majors included
+
+**What changed.** The last of Monday's batch, #24, moved five pins: CodeQL `v4.39.2` -> `v4.39.3`, and the docker
+actions across majors (`setup-qemu` v3 -> v4.4.0, `setup-buildx` v3 -> v4.4.1, `login` v3 -> v4.8.0, `build-push`
+v6 -> v7.4.0). They are the node24/ESM runtime bump, and none of the inputs Sepia passes (`platforms`, `push`, `tags`,
+`annotations`, `labels`, `build-args`, `sbom`, `provenance: mode=max`, `cache-from`/`cache-to`, the `digest` output)
+were removed or given a new default.
+
+**The trivy pin was quietly wrong and is now right.** `aquasecurity/trivy-action` was pinned to `a9c7b0f`, which is
+the annotated *tag object* for v0.36.0, not the commit it points at. `ed142fd` is that commit. A tag object resolves
+as a `uses:` ref, but it names something a maintainer can move, which is exactly what pinning by SHA is supposed to
+rule out. `docs/CI.md` 4.3 now says to check the comment against the tag on every bump.
+
+**Why this one was watched rather than merged in the batch.** `docker-publish.yml` runs only on a push to `main`, so
+no pull-request check exercises it: a broken action major would have shown up on the deploy that followed, with the
+potato waiting on an image that never published. Merged, and the first run after it (`r149.8dd7297`,
+`sha256:e9973d1c…`) went through every step: qemu, buildx, login, the multi-arch build with SBOM and provenance
+attestations, the Trivy scan of the `arm64` image, and the moving `:latest` tag. The failure mode if it had not:
+`:latest` stays on the last scanned image, so the watcher cannot pull an unscanned build.
+
+**Lesson for the next major.** A workflow that only runs on `main` cannot be verified by CI, so its dependency
+majors are the one place a batch merge is genuinely unsafe. Land them alone, and read the publish log rather than
+the green tick.
