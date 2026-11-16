@@ -399,3 +399,36 @@ func TestLocateDoesNotMatchInsideALongerWord(t *testing.T) {
 		t.Errorf("spans = %+v, want the word Dune", got.Spans)
 	}
 }
+
+// The guards inside findExact are tested directly because Locate filters and clamps before it reaches them: an empty
+// quote is dropped earlier, and a cursor is never past the end of a message. They are still the checks that keep a
+// quote off a longer word and a stale cursor from skipping the whole first pass.
+func TestFindExactRefusesItsEdgeCases(t *testing.T) {
+	if _, ok := findExact("dune", "", 0); ok {
+		t.Error("an empty quote matched")
+	}
+	if _, ok := findExact("dunes everywhere", "dune", 0); ok {
+		t.Error("a quote matched inside a longer word")
+	}
+	// A cursor past the end of the source is skipped rather than trusted, so the second pass still finds the quote.
+	span, ok := findExact("watched dune again", "dune", 999)
+	if !ok {
+		t.Fatal("a cursor past the end of the source lost the quote")
+	}
+	if got := "watched dune again"[span.Start:span.End]; got != "dune" {
+		t.Errorf("span covers %q, want %q", got, "dune")
+	}
+}
+
+// A quote longer than the cap is not silently ignored: it is recorded as dropped, so the caller can say so instead of
+// showing an empty body with no reason.
+func TestLocateRecordsAnOverlongQuoteAsDropped(t *testing.T) {
+	long := strings.Repeat("a", MaxQuoteLength+1)
+	got := Locate(message, []string{long})
+	if len(got.Spans) != 0 {
+		t.Fatalf("an over-long quote was saved: %+v", got.Spans)
+	}
+	if len(got.Dropped) != 1 || got.Dropped[0] != long {
+		t.Fatalf("dropped = %d quotes, want the over-long one", len(got.Dropped))
+	}
+}
