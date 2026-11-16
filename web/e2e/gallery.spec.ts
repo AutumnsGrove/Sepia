@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { shot } from './shot';
 
 /**
- * The gallery is the unit of visual regression (S10.3): one baseline per component state, one axe scan per
- * state, on a phone viewport. A pixel diff is evidence, not proof, so look at the diff before updating a
- * baseline; the behavioural assertions live in the Go and Vitest suites.
+ * The gallery is the unit of visual regression (S10.3): one axe scan per component state on a phone viewport, and a
+ * pixel baseline when asked for (`make screenshots`). A pixel diff is evidence, not proof, so look at the diff before
+ * updating a baseline; the behavioural assertions live in the Go and Vitest suites.
  */
 
 const states = [
@@ -70,7 +71,7 @@ test.describe('the gallery', () => {
   });
 
   for (const state of states) {
-    test(`${state} matches its baseline and passes axe`, async ({ page }) => {
+    test(`${state} renders, passes axe and matches its baseline when asked`, async ({ page }) => {
       await page.goto(`/gallery?state=${state}`);
       // The heading for one state is the small uppercase label, so wait for the section itself.
       await expect(page.locator('section').first()).toBeVisible();
@@ -78,7 +79,7 @@ test.describe('the gallery', () => {
       const results = await new AxeBuilder({ page }).analyze();
       expect(results.violations).toEqual([]);
 
-      await expect(page).toHaveScreenshot(`gallery-${state}.png`, { fullPage: true });
+      await shot(page, `gallery-${state}.png`);
     });
   }
 });

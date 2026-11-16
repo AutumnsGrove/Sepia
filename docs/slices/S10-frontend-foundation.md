@@ -78,8 +78,8 @@ and with a real one in Playwright (`e2e/socket.spec.ts`, through the gallery's l
 bundle is asserted at under 80 kB of JS and 12 kB of CSS gzipped. Every screen in S11 and S12 can be built
 from a golden example: `session.test.ts` folds all 34 server examples through the reducer.
 
-The Linux baselines still need the `baselines` workflow run once, as S00's did; the macOS ones are committed
-from this machine.
+The baselines are this machine's and are compared by `make screenshots`; CI compares no pixels (2026-11-16,
+`docs/BUILD-LOG.md`).
 
 ## Decisions (recorded 2026-11-08, while building)
 

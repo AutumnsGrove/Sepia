@@ -101,7 +101,7 @@ the contract now carry; anything not listed here was settled already.
 The reading screens match the mockups on a phone, every empty and error state has a test, and soft delete and
 restore are demonstrated through the UI.
 
-**Status: built.** Fourteen end-to-end states on each of two browsers, each with an axe pass and a baseline, against a
-seeded stack of its own; the Go and Vitest suites cover the new boundary's three routes. Two live checks are left for
-Autumn, in [`../BUILD-LOG.md`](../BUILD-LOG.md): the Linux baselines are made by the `baselines` workflow, and the
-screens have not been looked at on the potato.
+**Status: built.** Fourteen end-to-end states on each of two browsers, each with an axe pass and a pixel baseline
+(`make screenshots`), against a seeded stack of its own; the Go and Vitest suites cover the new boundary's three routes.
+One live check is left for Autumn, in [`../BUILD-LOG.md`](../BUILD-LOG.md): the screens have not been looked at on the
+potato.

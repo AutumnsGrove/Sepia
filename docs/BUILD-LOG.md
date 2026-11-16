@@ -1193,5 +1193,27 @@ now says so instead of promising a disabled button to build on.
 passed against baselines that still had the paperclip in them. Only `reading-first-run` moved enough (three stacked
 example buttons) to fail. A pixel baseline is not a test for a missing control: `reading.spec.ts` and `logging.spec.ts`
 now assert `getByRole('button', { name: /attach/i })` is absent, so the removal is guarded by behaviour rather than by
-a tolerance. The Linux baselines still want the `baselines` workflow run on this branch: the gallery frames are wrong
-by half a percent each, which is under the threshold and still wrong.
+a tolerance. The frames were regenerated once on this machine anyway, for the reason in the next entry.
+
+## 2026-11-16, the pixel baselines stop being CI's business
+
+**What changed.** `.github/workflows/baselines.yml` is gone. `web/e2e/shot.ts` is now the one place a baseline is
+compared, and it does nothing unless `SCREENSHOTS=1`: `make screenshots` compares the frames this machine draws,
+`make screenshots-update` rewrites them. The committed set is one platform's (macOS, 130 frames) instead of two, and the
+Linux set is deleted.
+
+**Why.** The previous change is the argument. A control 44px wide disappeared from every composer and the runner's
+baselines stayed green, because half a percent is under `maxDiffPixelRatio: 0.01`, while the one frame that did move
+turned `e2e` red on the PR. So the ceremony was: a second workflow, a downloaded artifact, a person copying PNGs into
+`__screenshots__`, all to protect a baseline drawn by a machine nobody develops against. The honest split is that CI
+asserts what a test can assert about a page it renders elsewhere (every state renders, axe passes, behaviour is right)
+and the person making the change looks at the pixels, which is the only way a diff has ever actually been judged.
+
+**What is lost, in plain words.** Nothing on a push will notice a screen moving by a few pixels. axe still catches
+contrast, labelling and focus, the Go and Vitest suites catch behaviour, and a UI change still carries its frames for
+review. If that proves too loose, the cheap fix is a step in `ci.yml`'s existing `e2e` job that uploads the diff on
+failure, not a second workflow that owns the truth.
+
+**`SEPIA_SCREENSHOTS` was the first name and it could not work.** The dev server refuses an unknown `SEPIA_` key, and
+the e2e environment rides along into every web server Playwright starts, so the run died with `config: unknown key
+SEPIA_SCREENSHOTS`. The variable is `SCREENSHOTS=1`, and `shot.ts` says why it is not prefixed.

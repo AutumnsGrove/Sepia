@@ -51,7 +51,7 @@ Rules:
 | Model judgment (evals) | Real models on the fixture corpus, on demand | Thresholds, extraction quality, hint quality. Costs cents and is logged |
 | Frontend unit and component | Vitest and the Svelte testing library | Stores, the socket client and its resume logic, the rating control, the update view |
 | End to end | Playwright against the real binary and the world | Every mockup state, on a phone viewport first |
-| Visual regression | Playwright screenshots, pixel diff | One baseline per mockup frame |
+| Visual regression | Playwright screenshots, pixel diff, `make screenshots` on the developer's platform | One baseline per mockup frame |
 | Accessibility | axe in Playwright | Contrast, labels, focus order, reduced motion |
 | Live | The real potato, real providers | Update flow, Polaris reachability, R2 mirror, resource use. Manual |
 | Performance | `go test -bench` with budget assertions | Cold start, library search over a large corpus, resume replay |
@@ -118,7 +118,11 @@ Each rule in `PLAN.md` section 11 is a test that fails if the rule is broken.
 ## 6. Frontend, end to end, visuals
 
 - Each mockup frame becomes a named Playwright state (for example `card/web-fields`, `system/offline`),
-  asserting the content and a pixel baseline, on a phone viewport first and then a laptop.
+  asserting the content, on a phone viewport first and then a laptop.
+- A pixel baseline is compared only when asked for (`SCREENSHOTS=1`, or `make screenshots`), because a PNG is
+  only true on the machine that drew it. `make screenshots-update` rewrites the ones this machine draws; look at the
+  diff before committing it. CI runs the states for behaviour and axe and compares no pixels, so a red `e2e` always
+  means a real failure.
 - Each trust state asserts its **shape or label, not just its colour** (verified, unverified, image-read).
 - axe runs on every state. Reduced motion is tested: the progress bar and the pulse stop.
 - Offline and reconnect, a sleeping tab, and a version-mismatch reload are driven in a real browser.
@@ -139,7 +143,7 @@ Each rule in `PLAN.md` section 11 is a test that fails if the rule is broken.
 - [ ] A regression test for any bug, verified failing without the fix.
 - [ ] Anything that parses untrusted input has a fuzz target and a seed corpus.
 - [ ] An integration test through the real boundary (SQLite, HTTP, WebSocket), not only mocks.
-- [ ] For UI: the Playwright state, its baseline, and an axe pass, on a phone viewport.
+- [ ] For UI: the Playwright state and an axe pass, on a phone viewport, and the baseline updated if the frame moved.
 - [ ] For anything a model touches: a fake-model plumbing test plus the relevant safety assertion, and an
       eval run if instructions, thresholds or models changed.
 - [ ] A live check on the potato when it touches update, deployment, backup or resource use, recorded in
