@@ -29,7 +29,7 @@ Mockup pages 01, 02, 06 and 07 ([`../../mockups/`](../../mockups/)) and [`../ENT
 ## Scope
 
 1. **S11.1 Session screen.** Transcript blocks, activity rows with the live pulse, the status strips, the composer
-   with Stop and the queued state, the attach button (disabled until S18).
+   with Stop and the queued state.
 2. **S11.2 Interactions.** Each kind above as a component driven by an `interaction_request` and answered with an
    `interaction_response`, with hints dashed and nothing pre-selected.
 3. **S11.3 Entry card, draft.** All blocks and states; the rating control; edit in place with `draft_edit` and

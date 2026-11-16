@@ -1,27 +1,20 @@
 <script lang="ts">
-  import { Paperclip, Send } from '@lucide/svelte';
+  import { Send } from '@lucide/svelte';
   import { messageProblem, MAX_MESSAGE } from '../session/composer';
-  import { uiCopy } from '../session/copy';
 
   /**
    * Home's composer. It is the front door: what she types here starts a review, and the send button is off until there
-   * is something to send. The attach button is disabled with its reason, because screenshots arrive with S18 and a
-   * control that does nothing is a lie.
+   * is something to send. It is the textarea and Send, nothing else: a control with nothing behind it teaches her that
+   * the app is broken rather than that a feature has not arrived.
    */
   interface Props {
     onsend: (text: string) => void;
-    /** A sentence tapped in the first-run examples lands here, not in the sent stream. */
-    value?: string;
     placeholder?: string;
     busy?: boolean;
   }
-  let {
-    onsend,
-    value = $bindable(''),
-    placeholder = 'Say what you thought',
-    busy = false,
-  }: Props = $props();
+  let { onsend, placeholder = 'Say what you thought', busy = false }: Props = $props();
 
+  let value = $state('');
   let field = $state<HTMLTextAreaElement | null>(null);
   const problem = $derived(messageProblem(value));
   const sendable = $derived(problem === '' && !busy);
@@ -61,9 +54,6 @@
     </p>
   {/if}
   <div class="box">
-    <button type="button" class="attach" aria-label={uiCopy.attachDisabled} disabled>
-      <Paperclip size={22} aria-hidden="true" />
-    </button>
     <textarea
       bind:this={field}
       bind:value
@@ -116,17 +106,6 @@
   }
   textarea::placeholder {
     color: var(--text-3);
-  }
-  .attach {
-    width: 44px;
-    height: 44px;
-    display: grid;
-    place-items: center;
-    border: 0;
-    background: none;
-    color: var(--text-3);
-    border-radius: 999px;
-    align-self: flex-end;
   }
   .send {
     width: 44px;

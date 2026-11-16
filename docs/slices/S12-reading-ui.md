@@ -18,9 +18,9 @@ Drafts, Tags).
 
 ## Settled
 
-- Home is a launcher: drafts that are waiting, recent entries, a first-run empty state with tap-to-fill
-  examples, the composer where the thumb is, and Drafts, Library and Settings in the top bar with a drafts
-  badge.
+- Home is a launcher: drafts that are waiting, recent entries, a first-run empty state that asks the question and
+  explains what happens next, the composer where the thumb is, and Drafts, Library and Settings in the top bar with
+  a drafts badge.
 - The Drafts list states what each draft is waiting for; drafts never expire.
 - The Library is grouped by month with medium chips, a sort, and cursor pagination; the entry page shows the
   latest entry, the other entries on the same work, details, and earlier versions with Restore as draft.

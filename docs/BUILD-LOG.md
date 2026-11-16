@@ -1171,3 +1171,27 @@ attestations, the Trivy scan of the `arm64` image, and the moving `:latest` tag.
 **Lesson for the next major.** A workflow that only runs on `main` cannot be verified by CI, so its dependency
 majors are the one place a batch merge is genuinely unsafe. Land them alone, and read the publish log rather than
 the green tick.
+
+## 2026-11-16, two dead controls leave the composer
+
+**What changed.** Issues #15 and #16 took the paperclip and the three first-run example sentences out of the app.
+The paperclip was disabled with the reason "Screenshots arrive later": a control that is permanently off does not
+teach that a feature has not arrived, it teaches that the app is broken. The examples were invented reviews
+("finished the lantern keeper last night, 4.5...") offered as taps on a personal journal, which reads as the app
+putting words in her mouth. The composer on Home and on the session screen is now the textarea and Send; the first
+run is the heading, the one-line explanation and the composer. `uiCopy.attachDisabled` is gone, `HomeComposer` no
+longer takes a bindable `value` (the tap-to-fill examples were its only reason), mockup page 03's first-run frame and
+S11, S12 and S18 are updated in the same change.
+
+**The mockups keep their paperclips, deliberately.** Pages 01, 03, 04, 06 and 07 draw `aria-label="Attach a
+screenshot"` as a live control, which is what S18.4 will ship: a tray, count and size limits, a stated "this leaves
+your device", and an accept step for fields read from an image. The code was never that, and S18's "Where we start"
+now says so instead of promising a disabled button to build on.
+
+**Both baselines stayed green with a control gone, which is worth knowing.** A 44px round button is about 0.5% of a
+390x844 phone frame, under Playwright's `maxDiffPixelRatio: 0.01`, so `reading-home` and every `screen-*` gallery state
+passed against baselines that still had the paperclip in them. Only `reading-first-run` moved enough (three stacked
+example buttons) to fail. A pixel baseline is not a test for a missing control: `reading.spec.ts` and `logging.spec.ts`
+now assert `getByRole('button', { name: /attach/i })` is absent, so the removal is guarded by behaviour rather than by
+a tolerance. The Linux baselines still want the `baselines` workflow run on this branch: the gallery frames are wrong
+by half a percent each, which is under the threshold and still wrong.

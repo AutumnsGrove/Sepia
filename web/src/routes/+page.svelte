@@ -14,23 +14,16 @@
 
   /**
    * Home: the launcher. Drafts that are waiting come first, then what she has read lately, and the composer sits where
-   * her thumb is. A first run is not an error state: it is an empty page that teaches by example.
+   * her thumb is. A first run is not an error state: it is an empty page that asks the question and explains what
+   * happens next, and then stops talking. A suggested review would be the app putting words in her mouth.
    */
   const client = createClient();
   const thisYear = new Date().getFullYear();
-  // The first-run examples are invented sentences, the first of them the one the dev world is scripted for, so the
-  // whole flow can be tried offline by tapping it.
-  const examples = [
-    'finished the lantern keeper last night, 4.5, the ending landed but it was too long',
-    'watched bramble hollow at the cinema, 5/5, the sound design carried it',
-    'just beat hollow deep, 4 stars, the boss fights were great but the story dragged',
-  ];
 
   let drafts = $state<Session[]>([]);
   let recent = $state<Entry[]>([]);
   let loading = $state(true);
   let problem = $state('');
-  let text = $state('');
   let starting = $state(false);
   const now = new Date();
 
@@ -60,10 +53,10 @@
     void load();
   });
 
-  async function start() {
+  async function start(sentence: string) {
     if (starting) return;
     // The sentence travels in memory, never in the URL: her words do not go in a browser's history.
-    stashFirstMessage(text);
+    stashFirstMessage(sentence);
     starting = true;
     try {
       await goto(resolve('/new'));
@@ -111,11 +104,6 @@
           Say what you thought, the way you would out loud. Sepia finds the details and asks a few
           questions.
         </p>
-        <div class="ex">
-          {#each examples as example (example)}
-            <button type="button" onclick={() => (text = example)}>{example}</button>
-          {/each}
-        </div>
       </div>
     {:else}
       {#if drafts.length > 0}
@@ -155,29 +143,5 @@
     {/if}
   </div>
 
-  <HomeComposer bind:value={text} onsend={() => void start()} busy={starting} />
+  <HomeComposer onsend={(sentence) => void start(sentence)} busy={starting} />
 </main>
-
-<style>
-  .ex {
-    display: grid;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-    width: 100%;
-  }
-  .ex button {
-    text-align: left;
-    border: 1px solid var(--line);
-    background: var(--panel);
-    color: var(--text-2);
-    border-radius: var(--r-md);
-    padding: 0.7rem 0.85rem;
-    font-size: 0.875rem;
-    line-height: 1.45;
-    min-height: 44px;
-  }
-  .ex button:hover {
-    border-color: var(--accent);
-    color: var(--text);
-  }
-</style>
