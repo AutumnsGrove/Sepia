@@ -31,7 +31,7 @@ func TestCheckReportsStatementCoveragePerPackage(t *testing.T) {
 	if !results[0].ok() {
 		t.Errorf("%v did not clear its floor", results[0])
 	}
-	if got, want := results[0].String(), "internal/domain coverage: 75.0% (floor 75%)"; got != want {
+	if got, want := results[0].String(), "internal/domain coverage: 3/4 statements (75.0%, floor 75%)"; got != want {
 		t.Errorf("line = %q, want %q", got, want)
 	}
 }
@@ -80,6 +80,35 @@ func TestCheckComparesInStatementsNotRoundedPercent(t *testing.T) {
 	}
 	if results[0].ok() {
 		t.Errorf("94.9%% cleared a floor of 95")
+	}
+}
+
+func TestAFailedFloorNamesTheStatementsSoTheLineCannotContradictItself(t *testing.T) {
+	// 664 of 699 statements is 94.99%, which rounds to "95.0%" at one decimal. Printed that way beside a floor of
+	// 95 the failure read "internal/domain is 95.0%, below the 95% floor" in the log on 2026-11-09, which looks
+	// like a bug in the checker rather than one statement short. The counts and two decimals settle it.
+	profile := header + "github.com/AutumnsGrove/sepia/internal/domain/a.go:1.1,2.2 664 1\n" +
+		"github.com/AutumnsGrove/sepia/internal/domain/b.go:3.1,4.2 35 0\n"
+	floors := []floor{{pkg: "internal/domain", percent: 95}}
+	results, err := check(strings.NewReader(profile), floors)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if results[0].ok() {
+		t.Fatalf("94.99%% cleared a floor of 95: %v", results[0])
+	}
+
+	err = run(writeProfile(t, profile), &strings.Builder{}, floors)
+	if err == nil {
+		t.Fatal("run passed a profile below its floors")
+	}
+	for _, want := range []string{"664/699 statements", "94.99%", "below the 95% floor"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not carry %q: %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "95.0%,") {
+		t.Errorf("the error repeats the rounded percentage it is failing: %v", err)
 	}
 }
 
