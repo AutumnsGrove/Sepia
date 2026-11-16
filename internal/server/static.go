@@ -164,9 +164,10 @@ func acceptsEncoding(header, encoding string) bool {
 }
 
 // cacheControlFor gives a hashed build asset a year and everything else a revalidation. SvelteKit writes
-// content-hashed files under _app/immutable, so a year is safe there and wrong anywhere else.
+// content-hashed files under _app/immutable, so a year is safe there and wrong anywhere else. _app/version.json is
+// not hashed, and it is what the app polls to learn that a new build exists, so it must always revalidate.
 func cacheControlFor(name string) string {
-	if strings.HasPrefix(name, "_app/immutable/") || strings.HasPrefix(name, "_app/") {
+	if strings.HasPrefix(name, "_app/immutable/") {
 		return "public, max-age=31536000, immutable"
 	}
 	return "no-cache"
