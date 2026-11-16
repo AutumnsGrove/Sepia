@@ -457,6 +457,9 @@ func TestRequestNeedsADirectory(t *testing.T) {
 
 // A restore into a directory it cannot write must fail with a sentence, not leave a half database behind.
 func TestRestoreReportsAnUnwritableTarget(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions, so a read-only directory proves nothing")
+	}
 	dir := t.TempDir()
 	snapshot := filepath.Join(dir, "sepia.db")
 	makeDB(t, snapshot, 1, 0)
@@ -528,6 +531,9 @@ func TestRestoreReportsAMissingCompare(t *testing.T) {
 
 // A signal directory the app cannot write is a failure with a reason, not a request that looks sent.
 func TestRequestReportsAnUnwritableSignalDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions, so a read-only directory proves nothing")
+	}
 	now := time.Date(2026, 11, 15, 4, 0, 0, 0, time.UTC)
 	dir := t.TempDir()
 	signal := filepath.Join(dir, "signal")
@@ -557,5 +563,48 @@ func TestParseReportsABrokenReceiptsPath(t *testing.T) {
 	service := New(dir, "", newFakeStore(), func() time.Time { return now })
 	if _, err := service.View(context.Background()); err == nil {
 		t.Fatal("a receipts path that cannot be opened was reported as no receipts")
+	}
+}
+
+// countingStore counts the writes the importer makes.
+type countingStore struct {
+	*fakeStore
+	writes int
+}
+
+func (c *countingStore) RecordMirror(ctx context.Context, m domain.Mirror) error {
+	c.writes++
+	return c.fakeStore.RecordMirror(ctx, m)
+}
+
+// Both screens import on read, so an unchanged receipt file must cost no writes after the first look. Without that,
+// every page view re-wrote every receipt in the file.
+func TestImportSkipsAnUnchangedFile(t *testing.T) {
+	now := time.Date(2026, 11, 15, 4, 0, 0, 0, time.UTC)
+	tree := newTree(t)
+	tree.receipts(t, []string{line("run-1", "r2sepia:sepia-backups/db", "ok", now, 1, "")})
+	store := &countingStore{fakeStore: newFakeStore()}
+	service := New(tree.data, tree.signal, store, func() time.Time { return now })
+
+	for i := 0; i < 3; i++ {
+		if _, err := service.View(context.Background()); err != nil {
+			t.Fatalf("view %d: %v", i, err)
+		}
+	}
+	if store.writes != 1 {
+		t.Errorf("writes = %d after three views of one file, want 1", store.writes)
+	}
+
+	// A new night appended: it is picked up, and only the file's rows are written again.
+	tree.receipts(t, []string{
+		line("run-1", "r2sepia:sepia-backups/db", "ok", now, 1, ""),
+		line("run-2", "r2sepia:sepia-backups/db", "ok", now.Add(time.Hour), 2, ""),
+	})
+	view, err := service.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Runs) != 2 {
+		t.Errorf("runs = %d, want the new receipt picked up", len(view.Runs))
 	}
 }

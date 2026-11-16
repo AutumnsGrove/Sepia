@@ -53,7 +53,7 @@ var (
 
 // targetPattern is a digest reference to a GHCR image. A tag is refused: an update must install the build the page
 // named, not whatever the tag means when the watcher runs.
-var targetPattern = regexp.MustCompile(`^[a-z0-9.-]+/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$`)
+var targetPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$`)
 
 // Signal is the handshake directory. One instance per service; the mutex is what keeps two taps on Update from
 // both seeing an empty request file.

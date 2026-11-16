@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/AutumnsGrove/nova/tool"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
+	"github.com/AutumnsGrove/sepia/internal/providers"
 	"github.com/AutumnsGrove/sepia/internal/session"
 	"github.com/AutumnsGrove/sepia/internal/store"
 	"github.com/AutumnsGrove/sepia/internal/world"
@@ -737,5 +739,85 @@ func TestARetryDoesNotAppendHerMessageAgain(t *testing.T) {
 	after, _ := r.session.UserMessages(ctx, sess.ID)
 	if len(after) != 1 {
 		t.Fatalf("messages after the retry = %v, want the same one", after)
+	}
+}
+
+// A new lookup must forget the work she picked from the last one. Otherwise merge_candidates keeps using the old
+// pick, because her tap wins over whatever the model names, and the wrong work is merged.
+func TestANewLookupForgetsTheEarlierChoice(t *testing.T) {
+	old := providers.Candidate{Provider: "openlibrary", ProviderID: "OLOLD", Title: "The First One"}
+	fresh := providers.Candidate{Provider: "openlibrary", ProviderID: "OLNEW", Title: "The Second One"}
+	state := &RunState{Agent: &Agent{}, Chosen: &old}
+
+	if _, err := state.offerCandidates(context.Background(), []providers.Candidate{fresh}, toolDetails{}); err != nil {
+		t.Fatalf("offerCandidates: %v", err)
+	}
+	if state.Chosen != nil {
+		t.Errorf("Chosen = %+v, want it forgotten when a new lookup arrives", state.Chosen)
+	}
+	if _, ok := state.Candidates["openlibrary|OLNEW"]; !ok {
+		t.Errorf("candidates = %v, want the new lookup's", state.Candidates)
+	}
+}
+
+// The model's search over her library has to reach past the newest page, or "nothing matches" is a false statement
+// about an older review.
+func TestSearchLibraryReachesPastTheNewestPage(t *testing.T) {
+	r := newRig(t, rigOptions{})
+	ctx := context.Background()
+	save := func(id, title, finished string) {
+		t.Helper()
+		if err := r.store.SaveWork(ctx, domain.Work{ID: "w-" + id, Medium: "book", Title: title, Verified: true}); err != nil {
+			t.Fatal(err)
+		}
+		entry := domain.Entry{
+			ID: "e-" + id, WorkID: "w-" + id, Rating: 16, Body: "kept", BodyOrigin: domain.BodyTyped,
+			Status: domain.StatusDraft, FinishedOn: finished,
+		}
+		if err := r.store.CreateDraft(ctx, entry); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.store.SaveEntry(ctx, entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save("oldest", "The Oldest Lantern", "2001-01-01")
+	for i := 0; i < 130; i++ {
+		save(fmt.Sprintf("f%03d", i), fmt.Sprintf("Filler %03d", i), "2024-06-01")
+	}
+
+	state := &RunState{Agent: r.agent, SessionID: "s1"}
+	result, err := searchLibrary(ctx, json.RawMessage(`{"query":"oldest lantern"}`), &tool.Context{Data: state})
+	if err != nil {
+		t.Fatalf("searchLibrary: %v", err)
+	}
+	if result.IsError || !strings.Contains(result.Content, "The Oldest Lantern") {
+		t.Errorf("result = %q, want the oldest entry found", result.Content)
+	}
+}
+
+// The turn deadline is for the model and the services. Time she spends deciding on a card is hers, so a slow answer
+// must not time the turn out, and must not leave the "model took longer than two minutes" notice behind.
+func TestTheDeadlineDoesNotRunWhileSheDecides(t *testing.T) {
+	r := newRig(t, rigOptions{script: bookScript(), turnDeadline: 400 * time.Millisecond})
+	scriptBook(r.fake)
+	r.responder.delay = 300 * time.Millisecond // two or more questions, so she takes well over the deadline in all
+	r.responder.script("describe", map[string]any{"selected": map[string][]string{"feel": {"moving"}}})
+	answerQuestions(t, r)
+
+	ctx := context.Background()
+	sess, err := r.session.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := r.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1"})
+	if err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if out.Ended != "done" || out.Draft == nil {
+		t.Errorf("ended = %q, draft = %v; a slow answer from her ended the turn", out.Ended, out.Draft != nil)
+	}
+	if hasNotice(t, r, sess.ID, "turn_timeout") {
+		t.Error("her thinking time was reported as the model being slow")
 	}
 }

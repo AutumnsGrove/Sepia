@@ -169,8 +169,8 @@
       </div>
 
       <Banner
-        >Export arrives with your data screens. Backups run on the potato every night. Everything
-        else here is set in config.</Banner
+        >Export is not built yet. Backups run on the potato once they are set up. Everything else
+        here is set in config.</Banner
       >
     {/if}
   </div>

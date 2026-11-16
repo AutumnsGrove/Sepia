@@ -155,6 +155,9 @@ func TestCacheControl(t *testing.T) {
 	if got := cacheControlFor("_app/immutable/chunk.js"); !strings.Contains(got, "immutable") {
 		t.Errorf("hashed asset: %q", got)
 	}
+	if got := cacheControlFor("_app/version.json"); got != "no-cache" {
+		t.Errorf("version.json Cache-Control = %q; it is not hashed and must revalidate", got)
+	}
 	if got := cacheControlFor("index.html"); got != "no-cache" {
 		t.Errorf("index: %q", got)
 	}

@@ -44,7 +44,7 @@ now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # Every value written below is built here, from a status word, our own sentences, a digest reference or truncated
 # command output, so this does not need the full JSON escape table.
 json_escape() {
-	printf '%s' "$1" | tr -d '\000-\010\013\014\016-\037\n\r' | sed 's/\\/\\\\/g; s/"/\\"/g'
+	printf '%s' "$1" | tr -d '\000-\037\177' | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 # truncate_detail keeps the failure text readable and inside the contract's limit. Only the tail matters: the last

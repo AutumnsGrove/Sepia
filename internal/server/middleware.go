@@ -275,7 +275,10 @@ func (g *gzipResponder) close() {
 func (g *gzipResponder) Unwrap() http.ResponseWriter { return g.ResponseWriter }
 
 func (g *gzipResponder) Flush() {
-	g.close()
+	// Flush the compressor, never close it: a closed gzip writer refuses every later write.
+	if g.writer != nil {
+		_ = g.writer.Flush()
+	}
 	if f, ok := g.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}

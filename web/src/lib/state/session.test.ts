@@ -220,6 +220,29 @@ describe('the one transcript order', () => {
     expect(rows[1].kind === 'activity' && rows[1].row.live).toBe(false);
   });
 
+  it('settles a tool left running when the turn ends on a stop, a timeout or an error', () => {
+    // The composer reads a live activity row as a reply in progress, so a row that never gets its end would keep
+    // it on Stop for a turn that is over.
+    const running = applyEvent(emptySession(), fixture('server-tool-start.json')).state;
+    expect(isWorking(running)).toBe(true);
+
+    const notice = fixture('server-notice.json');
+    const stopped = {
+      ...notice,
+      data: { ...(notice.data as object), code: 'stopped' },
+    } as unknown as ServerEvent;
+    expect(isWorking(applyEvent(running, stopped).state)).toBe(false);
+
+    expect(isWorking(applyEvent(running, fixture('server-error.json')).state)).toBe(false);
+
+    // A notice in the middle of a turn leaves the running tool alone, so its own end still finds it.
+    const mid = {
+      ...notice,
+      data: { ...(notice.data as object), code: 'drops_opinion' },
+    } as unknown as ServerEvent;
+    expect(isWorking(applyEvent(running, mid).state)).toBe(true);
+  });
+
   it('keeps a notice where it arrived, between the message and the reply', () => {
     let state = emptySession();
     state = applyEvent(state, fixture('server-user-message.json')).state;

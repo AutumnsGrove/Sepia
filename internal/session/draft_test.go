@@ -444,3 +444,26 @@ func TestIncludeLeftOutRefusesWhatIsNotHers(t *testing.T) {
 		t.Errorf("stale include = %v, want a refusal", err)
 	}
 }
+
+// The offsets of an include come from the client, so a range that overlaps a kept passage would repeat her words
+// in the body, and one that cuts a character in half would store broken text.
+func TestIncludeLeftOutRefusesOverlapAndSplitCharacters(t *testing.T) {
+	e, sess, source, kept, leftOut := extractedDraft(t)
+	ctx := context.Background()
+	var refusal *Refusal
+
+	overlap := domain.Span{Start: kept.Start, End: kept.End, Text: source[kept.Start:kept.End]}
+	if _, err := e.IncludeLeftOut(ctx, sess.ID, 1, source, overlap, "m-overlap"); !errors.As(err, &refusal) || refusal.Code != CodeInvalidValue {
+		t.Fatalf("overlapping passage = %v, want invalid_value", err)
+	}
+
+	const accented = "café is good" // the e-acute is two bytes
+	cut := domain.Span{Start: 4, End: 8, Text: accented[4:8]}
+	if _, err := e.IncludeLeftOut(ctx, sess.ID, 1, accented, cut, "m-split"); !errors.As(err, &refusal) || refusal.Code != CodeInvalidValue {
+		t.Fatalf("split character = %v, want invalid_value", err)
+	}
+	// The passage that really was left out is still accepted afterwards.
+	if _, err := e.IncludeLeftOut(ctx, sess.ID, 1, source, leftOut, "m-ok"); err != nil {
+		t.Fatalf("a real left-out passage was refused: %v", err)
+	}
+}

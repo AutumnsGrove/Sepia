@@ -779,3 +779,28 @@ func TestSocketUnknownSessionIs404(t *testing.T) {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
+
+// The event tail polls the log. When the log cannot be read it used to return and leave the socket open, so the
+// client saw a live connection that never delivered again and never reconnected to replay. It must close with a
+// stable code instead.
+func TestSocketClosesWhenTheEventLogCannotBeRead(t *testing.T) {
+	rig := newSocketRig(t)
+	defer rig.close()
+	sess := rig.newDraft()
+	client := rig.dial(sess.ID, 0, "http://"+rig.host)
+	client.expect("hello")
+
+	if err := rig.db.Close(); err != nil {
+		t.Fatalf("close the store: %v", err)
+	}
+	for i := 0; i < 10; i++ {
+		ev, ok := client.nextWithin(3 * time.Second)
+		if !ok {
+			if ev.closeCode != closeInternal {
+				t.Errorf("close code = %d, want %d", ev.closeCode, closeInternal)
+			}
+			return
+		}
+	}
+	t.Fatal("the socket stayed open after the event log became unreadable")
+}

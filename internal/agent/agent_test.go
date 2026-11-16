@@ -201,6 +201,9 @@ type scriptedResponder struct {
 	session *session.Engine
 	store   *store.Store
 
+	// delay is how long she takes to answer, so a test can make her slower than the turn's deadline.
+	delay time.Duration
+
 	mu       sync.Mutex
 	answers  []scriptedAnswer
 	fillGaps map[string]string
@@ -230,6 +233,13 @@ func (r *scriptedResponder) scriptFillGap(field, value string) {
 }
 
 func (r *scriptedResponder) Wait(ctx context.Context, sessionID, interactionID string) (json.RawMessage, error) {
+	if r.delay > 0 {
+		select {
+		case <-time.After(r.delay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	question, err := r.store.Interaction(ctx, interactionID)

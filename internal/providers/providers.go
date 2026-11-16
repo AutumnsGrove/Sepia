@@ -381,7 +381,7 @@ func withDefaults(cfg Config) Config {
 		cfg.CacheTTL = DefaultCacheTTL
 	}
 	if cfg.HTTPClient == nil {
-		cfg.HTTPClient = &http.Client{Timeout: DefaultHTTPTimeout}
+		cfg.HTTPClient = &http.Client{Timeout: DefaultHTTPTimeout, CheckRedirect: redirectPolicy(cfg)}
 	}
 	if cfg.TMDBCallInterval == 0 {
 		cfg.TMDBCallInterval = TMDBDefaultInterval
@@ -409,3 +409,32 @@ const (
 	// DefaultUserAgent identifies Sepia to a provider that asks for contactable clients.
 	DefaultUserAgent = "sepia/0.1 (+https://github.com/AutumnsGrove/Sepia)"
 )
+
+// maxRedirects is how many hops a provider call may follow.
+const maxRedirects = 3
+
+// redirectPolicy keeps a redirect from taking a request somewhere the config never named. Without it, a provider
+// that redirected (or was impersonated) could send a call, whose API key travels in the query string, to any host,
+// and could send a cover download past the host allow-list. A hop must stay on https, stay under the hop limit and
+// land on a configured provider host. Open Library serves covers from archive.org, so that domain is named too.
+func redirectPolicy(cfg Config) func(*http.Request, []*http.Request) error {
+	hosts := coverHostsFrom(cfg.TMDBBaseURL, cfg.TMDBCoverBase, cfg.OpenLibraryBaseURL, cfg.OpenLibraryCoverBase)
+	return func(req *http.Request, via []*http.Request) error {
+		if len(via) > maxRedirects {
+			return fmt.Errorf("providers: stopped after %d redirects", maxRedirects)
+		}
+		host := req.URL.Hostname()
+		// A loopback host is trusted only when the config itself named it, which is the dev and test world. In
+		// production no base URL is loopback, so a redirect to 127.0.0.1 or localhost is refused like any other
+		// host, rather than letting a provider point the service at something running on the board.
+		configured := hosts[host]
+		loopback := host == "127.0.0.1" || host == "::1" || host == "localhost"
+		if req.URL.Scheme != "https" && (!configured || !loopback) {
+			return errors.New("providers: refused a redirect to a non-https address")
+		}
+		if configured || host == "archive.org" || strings.HasSuffix(host, ".archive.org") {
+			return nil
+		}
+		return errors.New("providers: refused a redirect to a host the config does not name")
+	}
+}

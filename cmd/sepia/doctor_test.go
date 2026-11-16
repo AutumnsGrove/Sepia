@@ -100,6 +100,9 @@ func TestDoctorRefusesAnOpenEnvFile(t *testing.T) {
 
 // Sad: a data directory the process cannot write to means no cover, no database and no review.
 func TestDoctorRefusesAReadOnlyDataDir(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions, so a read-only directory proves nothing")
+	}
 	environ, root, envFile := doctorEnv(t)
 	writeEnvFile(t, envFile, "0600")
 	data := filepath.Join(root, "data")
