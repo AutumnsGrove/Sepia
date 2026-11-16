@@ -429,7 +429,7 @@ func redirectPolicy(cfg Config) func(*http.Request, []*http.Request) error {
 		// host, rather than letting a provider point the service at something running on the board.
 		configured := hosts[host]
 		loopback := host == "127.0.0.1" || host == "::1" || host == "localhost"
-		if req.URL.Scheme != "https" && !(configured && loopback) {
+		if req.URL.Scheme != "https" && (!configured || !loopback) {
 			return errors.New("providers: refused a redirect to a non-https address")
 		}
 		if configured || host == "archive.org" || strings.HasSuffix(host, ".archive.org") {
