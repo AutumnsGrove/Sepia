@@ -28,9 +28,9 @@ export { BASE_URL, FAULT_URL, READING_URL, READING_WEBKIT_URL };
 
 export default defineConfig({
   testDir: 'e2e',
-  // One baseline per screen, browser and platform. The same fonts rasterise differently on macOS and on the
-  // Linux CI runner, and the potato is Linux, so CI's copy is the one that matters. A baseline is regenerated
-  // on purpose by the `baselines` workflow, never by running --update-snapshots on whatever machine is handy.
+  // One baseline per screen, browser and platform, and only the platform that drew them is compared: a PNG is true
+  // on one machine. `make screenshots` compares them and `make screenshots-update` rewrites them, deliberately, with
+  // the diff read first. The end-to-end job in CI runs for behaviour and axe and compares no pixels.
   snapshotPathTemplate:
     '{testDir}/__screenshots__/{testFileName}/{arg}-{projectName}-{platform}{ext}',
   fullyParallel: true,

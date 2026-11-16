@@ -98,6 +98,14 @@ e2e: ## The Playwright suite against the real binary and the world (installs bro
 	cd $(WEB_DIR) && $(PNPM) exec playwright install chromium webkit
 	cd $(WEB_DIR) && $(PNPM) exec playwright test
 
+screenshots: ## The suite with the pixel baselines compared, on this machine's platform
+	@test -d $(WEB_DIR)/node_modules || { echo "screenshots: run make web-check once first"; exit 1; }
+	cd $(WEB_DIR) && SCREENSHOTS=1 $(PNPM) exec playwright test
+
+screenshots-update: ## Rewrite the pixel baselines this machine draws; read the diff before committing
+	@test -d $(WEB_DIR)/node_modules || { echo "screenshots-update: run make web-check once first"; exit 1; }
+	cd $(WEB_DIR) && SCREENSHOTS=1 $(PNPM) exec playwright test --update-snapshots
+
 ## --- contract, guard, build ----------------------------------------------------------------------------
 
 gen: ## Regenerate everything derived from api/ and the SQL

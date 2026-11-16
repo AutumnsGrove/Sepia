@@ -1,11 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { READING_URL, READING_WEBKIT_URL } from '../playwright.config';
+import { shot } from './shot';
 
 /**
  * The reading screens: Home, Drafts, the Library, a saved entry with its versions, Deleted and Settings, against the
- * real service and a seeded invented library. One baseline and one axe pass per state, on a phone viewport, because
- * the mockups are frames of one (docs/TESTING.md 6).
+ * real service and a seeded invented library. One axe pass per state on a phone viewport, because the mockups are
+ * frames of one (docs/TESTING.md 6), and a pixel baseline when `make screenshots` asks for one.
  *
  * The file runs serially: two of its states change the library (delete, restore), and a screenshot taken while
  * another test is mid-delete is a flaky screenshot. It is the only file on this stack, so serial costs nothing else.
@@ -66,10 +67,7 @@ test('home is a launcher, with the drafts first and the composer at the thumb', 
   await expect(page.getByRole('link', { name: 'Drafts, 2 waiting' })).toBeVisible();
 
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-home.png', {
-    fullPage: true,
-    mask: [page.locator(ages)],
-  });
+  await shot(page, 'reading-home.png', { mask: [page.locator(ages)] });
 });
 
 test('the drafts list says what each draft is waiting for', async ({ page }) => {
@@ -85,10 +83,7 @@ test('the drafts list says what each draft is waiting for', async ({ page }) => 
   );
 
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-drafts.png', {
-    fullPage: true,
-    mask: [page.locator(ages)],
-  });
+  await shot(page, 'reading-drafts.png', { mask: [page.locator(ages)] });
 });
 
 test('resuming a draft returns to its card', async ({ page }) => {
@@ -109,7 +104,7 @@ test('the library groups by month, filters by medium, and sorts', async ({ page 
   // A saved entry without a finish date is not dropped: it is a group of its own at the end.
   await expect(page.getByText('No date')).toBeVisible();
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-library.png', { fullPage: true });
+  await shot(page, 'reading-library.png');
 
   // Filtering by medium is a real filter, not a scroll: only the films remain.
   await page.getByRole('button', { name: 'Film', exact: true }).click();
@@ -119,7 +114,7 @@ test('the library groups by month, filters by medium, and sorts', async ({ page 
   // Bad input with a way out: a medium with nothing in it says so and offers the way back.
   await page.getByRole('button', { name: 'Podcast', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'No podcast entries yet.' })).toBeVisible();
-  await expect(page).toHaveScreenshot('reading-library-empty-filter.png', { fullPage: true });
+  await shot(page, 'reading-library-empty-filter.png');
   await page.getByRole('button', { name: 'Show everything' }).click();
   await expect(page.getByRole('button', { name: /The Lantern Keeper/ }).first()).toBeVisible();
 
@@ -130,7 +125,7 @@ test('the library groups by month, filters by medium, and sorts', async ({ page 
   await page.getByRole('button', { name: 'Sort: Newest first' }).click();
   await expect(page.getByRole('button', { name: 'Sort: Highest rated' })).toBeVisible();
   await expect(page.locator('.list .row').first()).toContainText('The Copper Room');
-  await expect(page).toHaveScreenshot('reading-library-by-rating.png', { fullPage: true });
+  await shot(page, 'reading-library-by-rating.png');
 });
 
 test('a saved entry shows her words, the same work and its details', async ({ page }) => {
@@ -145,7 +140,7 @@ test('a saved entry shows her words, the same work and its details', async ({ pa
   await expect(page.getByText('Details')).toBeVisible();
 
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-entry.png', { fullPage: true });
+  await shot(page, 'reading-entry.png');
 });
 
 test('an entry with history shows its versions and restores one as a draft', async ({ page }) => {
@@ -158,10 +153,7 @@ test('an entry with history shows its versions and restores one as a draft', asy
   await expect(page.getByText('Version 1')).toBeVisible();
   await expect(page.getByText('First saved.')).toBeVisible();
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-versions.png', {
-    fullPage: true,
-    mask: [page.locator(instants)],
-  });
+  await shot(page, 'reading-versions.png', { mask: [page.locator(instants)] });
 
   // Restore as draft opens the old version in a new session, with the old words on the card.
   await page.getByRole('button', { name: 'Restore as draft' }).last().click();
@@ -196,10 +188,7 @@ test('deleting is inline, keeps by default, and Restore brings the entry back', 
   await expect(row).toBeVisible();
   await expect(row).toContainText('Deleted');
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-deleted.png', {
-    fullPage: true,
-    mask: [page.locator('.delrow .mm')],
-  });
+  await shot(page, 'reading-deleted.png', { mask: [page.locator('.delrow .mm')] });
 
   await row.getByRole('button', { name: 'Restore' }).click();
   await expect(page.locator('.delrow').filter({ hasText: 'Night Signal' })).toHaveCount(0);
@@ -215,10 +204,7 @@ test('a deleted entry opened by a stale link says so, and offers Restore', async
   await expect(note).toContainText('It is out of your library');
   await expect(note.getByRole('button', { name: 'Restore' })).toBeVisible();
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-entry-deleted.png', {
-    fullPage: true,
-    mask: [page.locator('.deletednote p')],
-  });
+  await shot(page, 'reading-entry-deleted.png', { mask: [page.locator('.deletednote p')] });
 
   await note.getByRole('button', { name: 'Restore' }).click();
   await expect(page.locator('.deletednote')).toHaveCount(0);
@@ -232,7 +218,7 @@ test('the pre-read switch is real: it is stored and it stays', async ({ page }) 
   const toggle = page.getByRole('switch', { name: 'Quick pre-read' });
   await expect(toggle).toHaveAttribute('aria-checked', 'true');
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-settings.png', { fullPage: true });
+  await shot(page, 'reading-settings.png');
 
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
@@ -260,7 +246,7 @@ test('updates reports a missing helper rather than pretending to update', async 
   await expect(page.getByRole('button', { name: 'Check for updates' })).toHaveCount(0);
 
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-updates-no-helper.png', { fullPage: true });
+  await shot(page, 'reading-updates-no-helper.png');
 });
 
 test('services names every dependency and what an outage costs', async ({ page }) => {
@@ -276,7 +262,7 @@ test('services names every dependency and what an outage costs', async ({ page }
   await expect(page.getByText('Web lookups are off. Everything else still works')).toBeVisible();
 
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-services.png', { fullPage: true });
+  await shot(page, 'reading-services.png');
 });
 
 test('the first run asks the question and offers no words of its own', async ({ page }) => {
@@ -300,7 +286,7 @@ test('the first run asks the question and offers no words of its own', async ({ 
   // absence of the old disabled paperclip is asserted rather than left to a baseline (issue #15).
   await expect(page.getByRole('button', { name: /attach/i })).toHaveCount(0);
   await noViolations(page);
-  await expect(page).toHaveScreenshot('reading-first-run.png', { fullPage: true });
+  await shot(page, 'reading-first-run.png');
 });
 
 test('a slow library shows skeleton rows rather than a spinner in the middle', async ({ page }) => {
@@ -331,7 +317,7 @@ test('a failed list says so and offers a retry that works', async ({ page }) => 
   const alert = page.getByRole('alert');
   await expect(alert).toBeVisible();
   await expect(alert).toContainText('Try again');
-  await expect(page).toHaveScreenshot('reading-library-failed.png', { fullPage: true });
+  await shot(page, 'reading-library-failed.png');
 
   fail = false;
   await alert.getByRole('button', { name: 'Try again' }).click();
@@ -359,7 +345,7 @@ test('a very long title and a very long review do not break the layout', async (
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
-  await expect(page).toHaveScreenshot('reading-entry-huge.png', { fullPage: false });
+  await shot(page, 'reading-entry-huge.png', { fullPage: false });
 });
 
 test('a malformed entry id shows a not-found state, not an empty page', async ({ page }) => {

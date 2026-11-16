@@ -25,7 +25,8 @@
   /**
    * The gallery: every base component in every state the mockups draw, in one column, addressable one state at
    * a time with `?state=name`. It is the unit of visual regression (S10.3): Playwright opens each state, checks
-   * axe and takes one baseline, and a change that moves a pixel has to be looked at.
+   * axe and takes a baseline when `make screenshots` asks for one, and a change that moves a pixel has to be looked
+   * at.
    *
    * It is linked from nowhere and carries no data of its own. SvelteKit reserves a leading `_`, so the plan's
    * `/_gallery` is `/gallery` here.
@@ -265,7 +266,7 @@
     {#if shown === null}
       <p class="lede">
         Every base component in every state. Open one at a time with <code>?state=name</code>; each
-        is a Playwright baseline.
+        has a Playwright baseline when `make screenshots` runs.
       </p>
       <nav class="index">
         {#each states as name (name)}
