@@ -33,7 +33,10 @@ func TestFailedWriteClosesTheConnection(t *testing.T) {
 		readDone <- err
 	}()
 	select {
-	case <-readDone:
+	case err := <-readDone:
+		if err == nil {
+			t.Error("the read returned without an error")
+		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("the connection was still open after the write failed")
 	}
