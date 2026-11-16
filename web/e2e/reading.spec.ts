@@ -368,3 +368,19 @@ test('a malformed entry id shows a not-found state, not an empty page', async ({
   await expect(page.getByRole('button', { name: 'Back to the library' })).toBeVisible();
   await noViolations(page);
 });
+
+test('a sentence typed on Home is the first message of the session it starts', async ({ page }) => {
+  // The one path from the composer to a session: Home's send stashes the sentence in memory, `/new` makes the session
+  // and sends it as the first message. Nothing else covers that handoff, and the old first-run test only read the
+  // composer's value back, so sending the wrong string would have passed it. Last in the file, because it leaves a
+  // draft in the library.
+  const sentence =
+    'finished the lantern keeper last night, 4.5, the ending landed but it was too long';
+
+  await openReading(page, '/');
+  await page.getByLabel('Say what you thought').fill(sentence);
+  await page.getByRole('button', { name: 'Send' }).click();
+
+  await expect(page).toHaveURL(/\/s\/[^/]+$/);
+  await expect(page.locator('.you p').first()).toHaveText(sentence);
+});
