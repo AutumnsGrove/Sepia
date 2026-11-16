@@ -424,11 +424,15 @@ func redirectPolicy(cfg Config) func(*http.Request, []*http.Request) error {
 			return fmt.Errorf("providers: stopped after %d redirects", maxRedirects)
 		}
 		host := req.URL.Hostname()
+		// A loopback host is trusted only when the config itself named it, which is the dev and test world. In
+		// production no base URL is loopback, so a redirect to 127.0.0.1 or localhost is refused like any other
+		// host, rather than letting a provider point the service at something running on the board.
+		configured := hosts[host]
 		loopback := host == "127.0.0.1" || host == "::1" || host == "localhost"
-		if req.URL.Scheme != "https" && !loopback {
+		if req.URL.Scheme != "https" && !(configured && loopback) {
 			return errors.New("providers: refused a redirect to a non-https address")
 		}
-		if hosts[host] || loopback || host == "archive.org" || strings.HasSuffix(host, ".archive.org") {
+		if configured || host == "archive.org" || strings.HasSuffix(host, ".archive.org") {
 			return nil
 		}
 		return errors.New("providers: refused a redirect to a host the config does not name")

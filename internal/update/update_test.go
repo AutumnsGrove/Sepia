@@ -154,6 +154,22 @@ func TestStartWithoutADigest(t *testing.T) {
 	}
 }
 
+// A digest whose host or path starts with a dash is shaped like a command line flag once a script reads it. The
+// available file is the watcher's, and the repo check below passes when the file and the target agree, so the
+// pattern is the only thing that refuses it.
+func TestStartRefusesADigestThatStartsWithADash(t *testing.T) {
+	for _, digest := range []string{
+		"-sneaky/sepia@sha256:" + strings.Repeat("a", 64),
+		"ghcr.io/-sneaky@sha256:" + strings.Repeat("a", 64),
+	} {
+		s := newTestSignal(t)
+		writeSignal(t, s.Dir(), "available", `{"latest_digest":"`+digest+`","update_available":true}`)
+		if err := s.Start(""); !errors.Is(err, ErrTargetInvalid) {
+			t.Errorf("Start with %q = %v, want ErrTargetInvalid", digest, err)
+		}
+	}
+}
+
 // Happy: restart is its own action and installs nothing.
 func TestRestartWritesItsOwnAction(t *testing.T) {
 	s := newTestSignal(t)
