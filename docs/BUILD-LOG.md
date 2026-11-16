@@ -1097,3 +1097,33 @@ wrote the request, the path unit fired the service, the journal carried the run,
 
 **G6 cleared**: a backup reached R2, a restore on a scratch copy matched the live library row for row, and the
 receipts screen works. The first real review now has something behind it.
+
+## 2026-11-16, the dependency surfaces catch up
+
+**What changed.** The weekly Dependabot run opened three pull requests and one of them needed a decision.
+`github.com/AutumnsGrove/nova` went `v0.3.4` -> **`v0.5.0`** in #26, not the `v0.4.1` Dependabot had opened in #21:
+0.4.1 was stale by the time anyone looked, and landing it would only have meant a second bump a day later.
+`modernc.org/sqlite` `1.61.1` -> `1.62.0` rode along, which pins `modernc.org/libc` `1.80.1` — the version sqlite's
+changelog says a downstream module must match — and moved `golang.org/x/sys` and `x/text` with it. The frontend group
+(#23, merged) took Playwright 1.65, kit 3.2.0, vite 8.3.8, prettier 3.10.1 and `@lucide/svelte` 1.72.0.
+
+**Nothing Sepia imports broke.** Nova 0.4.0 and 0.5.0 are voice releases: `agent.Config` and `tool.Context` gain
+optional `Speak`/`Transcribe`, `proto` gains commands and a 64 MiB line cap, and `voice/openrouter` loses
+`CostTimeout`, `DefaultCostTimeout`, `DefaultSpeechModel` and `DefaultTranscribeModel`. Sepia imports `agent`, `tool`,
+`decide`, `decide/openrouter`, `provider` and `message` and never `voice` or `serve`, so the removals cannot reach it
+and every addition is a nil field. `go build`, `go vet`, `go test -race ./...`, `make guard` and `make gen` (no drift)
+passed locally before the merge, and CI agreed. The one hard requirement is Go **1.26.11** for GO-2026-6859, which the
+module already clears at 1.27.4.
+
+**The `review` check was red on every Dependabot PR, and that was ours to fix, not theirs.** GitHub withholds
+repository secrets from a run it triggers for Dependabot, so `actions/create-github-app-token` got an empty `app-id`
+and, once the job moved to the reusable workflow, pi started without the provider key, wrote no artifact and posted
+"pi-review could not complete this review" on each bump. `triggers.skipBots` is now `true` in `.github/pi-review.json`
+with the matching condition in the generated `pi-review.yml` (#25), and `docs/CI.md` 3 records why. The lesson: a
+secret-dependent job will never be green on a bot PR, so it must skip rather than fail.
+
+**Not landed: the actions group (#24), still open.** The CodeQL patch is unremarkable, but the same PR carries four
+docker major bumps (`setup-qemu` v3 -> v4, `setup-buildx` v3 -> v4, `login` v3 -> v4, `build-push` v6 -> v7). They are
+the node24/ESM runtime change with no input or default Sepia uses touched, but `docker-publish.yml` runs only on a push
+to `main`, so no PR check exercises it and the first real run is the one after the merge. That bump is worth a pair of
+eyes on the publish run rather than a merge at the end of a batch.
