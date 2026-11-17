@@ -1171,3 +1171,49 @@ attestations, the Trivy scan of the `arm64` image, and the moving `:latest` tag.
 **Lesson for the next major.** A workflow that only runs on `main` cannot be verified by CI, so its dependency
 majors are the one place a batch merge is genuinely unsafe. Land them alone, and read the publish log rather than
 the green tick.
+
+## 2026-11-16, two dead controls leave the composer
+
+**What changed.** Issues #15 and #16 took the paperclip and the three first-run example sentences out of the app.
+The paperclip was disabled with the reason "Screenshots arrive later": a control that is permanently off does not
+teach that a feature has not arrived, it teaches that the app is broken. The examples were invented reviews
+("finished the lantern keeper last night, 4.5...") offered as taps on a personal journal, which reads as the app
+putting words in her mouth. The composer on Home and on the session screen is now the textarea and Send; the first
+run is the heading, the one-line explanation and the composer. `uiCopy.attachDisabled` is gone, `HomeComposer` no
+longer takes a bindable `value` (the tap-to-fill examples were its only reason), mockup page 03's first-run frame and
+S11, S12 and S18 are updated in the same change.
+
+**The mockups keep their paperclips, deliberately.** Pages 01, 03, 04, 06 and 07 draw `aria-label="Attach a
+screenshot"` as a live control, which is what S18.4 will ship: a tray, count and size limits, a stated "this leaves
+your device", and an accept step for fields read from an image. The code was never that, and S18's "Where we start"
+now says so instead of promising a disabled button to build on.
+
+**Both baselines stayed green with a control gone, which is worth knowing.** A 44px round button is about 0.5% of a
+390x844 phone frame, under Playwright's `maxDiffPixelRatio: 0.01`, so `reading-home` and every `screen-*` gallery state
+passed against baselines that still had the paperclip in them. Only `reading-first-run` moved enough (three stacked
+example buttons) to fail. A pixel baseline is not a test for a missing control: `reading.spec.ts` and `logging.spec.ts`
+now assert `getByRole('button', { name: /attach/i })` is absent, so the removal is guarded by behaviour rather than by
+a tolerance. The frames were regenerated once on this machine anyway, for the reason in the next entry.
+
+## 2026-11-16, the pixel baselines stop being CI's business
+
+**What changed.** `.github/workflows/baselines.yml` is gone. `web/e2e/shot.ts` is now the one place a baseline is
+compared, and it does nothing unless `SCREENSHOTS=1`: `make screenshots` compares the frames this machine draws,
+`make screenshots-update` rewrites them. The committed set is one platform's (macOS, 130 frames) instead of two, and the
+Linux set is deleted.
+
+**Why.** The previous change is the argument. A control 44px wide disappeared from every composer and the runner's
+baselines stayed green, because half a percent is under `maxDiffPixelRatio: 0.01`, while the one frame that did move
+turned `e2e` red on the PR. So the ceremony was: a second workflow, a downloaded artifact, a person copying PNGs into
+`__screenshots__`, all to protect a baseline drawn by a machine nobody develops against. The honest split is that CI
+asserts what a test can assert about a page it renders elsewhere (every state renders, axe passes, behaviour is right)
+and the person making the change looks at the pixels, which is the only way a diff has ever actually been judged.
+
+**What is lost, in plain words.** Nothing on a push will notice a screen moving by a few pixels. axe still catches
+contrast, labelling and focus, the Go and Vitest suites catch behaviour, and a UI change still carries its frames for
+review. If that proves too loose, the cheap fix is a step in `ci.yml`'s existing `e2e` job that uploads the diff on
+failure, not a second workflow that owns the truth.
+
+**`SEPIA_SCREENSHOTS` was the first name and it could not work.** The dev server refuses an unknown `SEPIA_` key, and
+the e2e environment rides along into every web server Playwright starts, so the run died with `config: unknown key
+SEPIA_SCREENSHOTS`. The variable is `SCREENSHOTS=1`, and `shot.ts` says why it is not prefixed.

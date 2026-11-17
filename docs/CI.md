@@ -15,7 +15,7 @@ and Playwright browsers.
 | `nocgo` | Fails if any package or dependency has cgo files, since the SQLite driver is pure Go (`modernc.org/sqlite`) |
 | `drift` | Regenerates the protocol types for the frontend, and any generated code, and fails on a diff |
 | `web` | `pnpm install --frozen-lockfile`, `svelte-check`, ESLint, Prettier, Vitest, and a build in a scratch directory with size budgets |
-| `e2e` | Playwright on WebKit and Chromium against the real binary and the world (never a live service), sharded, with visual baselines and axe; traces and screenshots on failure |
+| `e2e` | Playwright on WebKit and Chromium against the real binary and the world (never a live service), with axe on every state; traces and screenshots on failure. Pixel baselines are a local check, not this job's |
 | `guard` | `gitleaks` on the diff, a check that nothing is committed under the embedded-frontend build directory except its placeholder, a check that no test path can reach a live provider, and a check that every fuzz target has a seed corpus |
 | `deps` | `dependency-review-action`: new dependencies must have a compatible licence and no known vulnerabilities |
 | `codeql` | CodeQL for Go and TypeScript, also weekly |
