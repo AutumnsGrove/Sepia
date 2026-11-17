@@ -14,7 +14,6 @@ export const uiCopy = {
   waitForReply: 'Wait for the next reply',
   working: 'Working',
   editingSaved: 'You are editing a saved entry. Saving keeps the previous version.',
-  attachDisabled: 'Screenshots arrive later',
   savedNote: 'Saved to your library',
   whyTitle: 'How this was read',
   whyAllowance: 'An allowance is not money spent.',

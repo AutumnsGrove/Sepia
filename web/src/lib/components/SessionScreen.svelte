@@ -6,7 +6,6 @@
     Clock,
     Ellipsis,
     Info,
-    Paperclip,
     Send,
     Square,
   } from '@lucide/svelte';
@@ -281,9 +280,6 @@
         <p class="composerproblem" role="status">{composerProblem}</p>
       {/if}
       <div class="box">
-        <button type="button" class="attach" aria-label={uiCopy.attachDisabled} disabled>
-          <Paperclip size={22} aria-hidden="true" />
-        </button>
         <textarea
           bind:this={composer}
           bind:value={text}
@@ -591,21 +587,6 @@
     background: var(--raised);
     color: var(--text);
     border: 1px solid var(--line);
-  }
-  .attach {
-    width: 44px;
-    height: 44px;
-    border: 0;
-    background: none;
-    color: var(--text-3);
-    display: grid;
-    place-items: center;
-    border-radius: 999px;
-    flex: none;
-  }
-  .attach[disabled] {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
   .linkbtn {
     display: inline-flex;

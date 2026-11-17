@@ -16,6 +16,9 @@ async function startEntry(page: import('@playwright/test').Page) {
   await page.goto('/new');
   await expect(page).toHaveURL(/\/s\/[^/]+$/);
   await expect(page.getByLabel('Say what you thought')).toBeVisible();
+  // The composer is the textarea and Send: a paperclip with nothing behind it taught that the app was broken, and a
+  // 44px control is under the baseline's pixel tolerance, so its absence is asserted here (issue #15).
+  await expect(page.getByRole('button', { name: /attach/i })).toHaveCount(0);
 }
 
 /**

@@ -29,7 +29,7 @@ Mockup pages 01, 02, 06 and 07 ([`../../mockups/`](../../mockups/)) and [`../ENT
 ## Scope
 
 1. **S11.1 Session screen.** Transcript blocks, activity rows with the live pulse, the status strips, the composer
-   with Stop and the queued state, the attach button (disabled until S18).
+   with Stop and the queued state.
 2. **S11.2 Interactions.** Each kind above as a component driven by an `interaction_request` and answered with an
    `interaction_response`, with hints dashed and nothing pre-selected.
 3. **S11.3 Entry card, draft.** All blocks and states; the rating control; edit in place with `draft_edit` and
@@ -72,7 +72,9 @@ Recorded with Autumn on 2026-11-09, before the slice started.
    the revision draft, in card order, listing only fields that differ.
 7. **The message limit is 8,000 characters** (`STANDARDS.md` limits table). Over it, the composer refuses in
    place with the `message_too_long` copy and sends nothing.
-8. **Attach is disabled until S18** with a plain reason. The import frames on pages 02 and 07 are out of scope.
+8. **No attachment affordance.** The import frames on pages 02 and 07 are out of scope, and the disabled
+   paperclip that stood in for them was removed rather than left on screen (issue #15): S18.4 adds the control
+   with its own reason to be enabled.
 9. **A split dev scenario.** `SEPIA_DEV_SCENARIO=split` scripts a split medium, a candidate choice, Describe and
    a question form against the invented sample, so the end-to-end suite drives the whole flow offline. The
    default script stays as it is.
@@ -100,7 +102,6 @@ Recorded with Autumn on 2026-11-09, before the slice started.
 | Saved | "Saved to your library" |
 | Left out | "Left out ({n})" with Include on each segment |
 | A stale version | `copyFor('stale_version')`, and the current card is shown |
-| Attach | disabled, "Screenshots arrive later" |
 
 11. **Two controls wait for S12.** Tag editing and Edit on an unverified field are not built: `draft_edit` carries
     the entry's fields, and a work's title and year are a different write with its own accept rules. The card shows
