@@ -9,6 +9,7 @@ function draft(patch: Partial<Draft>): Draft {
     rating: { quarters: 18, scale: 'quarter_stars_20', favourite: false },
     body: 'the ending landed but it was too long',
     body_origin: 'extracted',
+    completion: 'finished',
     blocks: {
       work: 'verified',
       rating: 'set',

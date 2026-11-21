@@ -30,6 +30,7 @@ function draft(patch: Partial<Draft> = {}): Draft {
     verdict: 'the ending landed',
     body: 'the ending landed but it was too long',
     body_origin: 'extracted',
+    completion: 'finished',
     format: 'paperback',
     finished_on: '2026-10-30',
     blocks: {
@@ -207,6 +208,7 @@ const savedEntry: Entry = {
   verdict: 'the ending landed',
   body: 'the ending landed but it was too long',
   body_origin: 'extracted',
+  completion: 'finished',
   status: 'saved',
   format: 'paperback',
   finished_on: '2026-10-30',

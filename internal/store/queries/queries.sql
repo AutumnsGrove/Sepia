@@ -32,8 +32,9 @@ UPDATE work_sources SET trust = 'accepted', accepted_at = ? WHERE id = ? AND tru
 
 -- name: CreateEntry :exec
 INSERT INTO entries (id, work_id, rating_q, rating_scale, favourite, season, verdict, body, body_origin,
-                     imported_from, body_spans_json, format, finished_on, status, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                     imported_from, body_spans_json, format, completion, progress, finished_on, status, created_at,
+                     updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetEntry :one
 SELECT * FROM entries WHERE id = ?;
@@ -45,7 +46,7 @@ SELECT * FROM entries WHERE id = ?;
 -- the row existed, so a confirm can never report success for a write that changed nothing.
 UPDATE entries
 SET work_id = ?, rating_q = ?, rating_scale = ?, favourite = ?, season = ?, verdict = ?, body = ?, body_origin = ?,
-    body_spans_json = ?, format = ?, finished_on = ?, status = 'saved', updated_at = ?
+    body_spans_json = ?, format = ?, completion = ?, progress = ?, finished_on = ?, status = 'saved', updated_at = ?
 WHERE id = ? AND status IN ('draft', 'saved');
 
 -- name: SoftDeleteEntry :exec
@@ -225,7 +226,7 @@ SELECT COALESCE(revises_entry_id, '') FROM sessions WHERE id = ?;
 -- A draft's fields. The status guard is the WHERE clause, so a saved entry can never be rewritten this way.
 UPDATE entries
 SET work_id = ?, rating_q = ?, rating_scale = ?, favourite = ?, season = ?, verdict = ?, body = ?, body_origin = ?,
-    body_spans_json = ?, format = ?, finished_on = ?, updated_at = ?
+    body_spans_json = ?, format = ?, completion = ?, progress = ?, finished_on = ?, updated_at = ?
 WHERE id = ? AND status = 'draft';
 
 -- name: AcceptWorkSourceByProvider :execresult
@@ -254,14 +255,24 @@ ORDER BY revision DESC
 LIMIT sqlc.arg(row_limit);
 
 -- name: ListLibraryPage :many
--- The library, newest finished first, with its filters: medium (on the work), favourite, and work. Cursor pagination
--- on (finished_on, id), the same order as the index. An entry saved without a finish date sorts last, which is where
--- SQLite puts a null in a descending order, and the cursor carries whether the row it names had one.
+-- The library, newest finished first, with its filters: medium (on the work), favourite, work, and shelf. Cursor
+-- pagination on (finished_on, id), the same order as the index. An entry saved without a finish date sorts last,
+-- which is where SQLite puts a null in a descending order, and the cursor carries whether the row it names had one.
+--
+-- The shelf is a CASE rather than a plain equality so that an unnamed shelf means the library proper: everything she
+-- has reviewed, which is finished and abandoned but not a wish. A work she only means to read has no finish date and
+-- is not a review, so it is one chip away rather than mixed into the list she scans.
 SELECT entries.* FROM entries JOIN works ON works.id = entries.work_id
 WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
   AND (sqlc.narg(medium) IS NULL OR works.medium = sqlc.narg(medium))
   AND (sqlc.narg(favourite) IS NULL OR entries.favourite = sqlc.narg(favourite))
   AND (sqlc.narg(work_id) IS NULL OR entries.work_id = sqlc.narg(work_id))
+  AND CASE sqlc.narg(shelf)
+        WHEN 'want_to' THEN entries.completion = 'want_to'
+        WHEN 'finished' THEN entries.completion = 'finished'
+        WHEN 'abandoned' THEN entries.completion = 'abandoned'
+        ELSE entries.completion <> 'want_to'
+      END
   AND (sqlc.narg(before_id) IS NULL
        OR (sqlc.narg(before_finished_on) IS NOT NULL
            AND (entries.finished_on IS NULL
@@ -272,18 +283,29 @@ ORDER BY entries.finished_on DESC, entries.id DESC
 LIMIT sqlc.arg(row_limit);
 
 -- name: ListLibraryByRating :many
--- The same library, highest rating first. The order is rating_q then created_at then id because all three are never
--- null, so a page can neither repeat nor skip a row even when a saved entry has no finish date.
+-- The same library, highest rating first. The order is finished before unfinished, then rating_q, created_at and id.
+--
+-- The leading finished key is the shelf rule decided in S21: an unfinished entry has no rating to rank by, so it
+-- follows the rated ones instead of being scattered through them by a zero rating_q. created_at rather than
+-- finished_on breaks the tie inside a rating because a saved entry may have no finish date, and a cursor comparison
+-- against null skips a row.
 SELECT entries.* FROM entries JOIN works ON works.id = entries.work_id
 WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
   AND (sqlc.narg(medium) IS NULL OR works.medium = sqlc.narg(medium))
   AND (sqlc.narg(favourite) IS NULL OR entries.favourite = sqlc.narg(favourite))
   AND (sqlc.narg(work_id) IS NULL OR entries.work_id = sqlc.narg(work_id))
+  AND CASE sqlc.narg(shelf)
+        WHEN 'want_to' THEN entries.completion = 'want_to'
+        WHEN 'finished' THEN entries.completion = 'finished'
+        WHEN 'abandoned' THEN entries.completion = 'abandoned'
+        ELSE entries.completion <> 'want_to'
+      END
   AND (sqlc.narg(before_id) IS NULL
-       OR (entries.rating_q, entries.created_at, entries.id)
-          < (CAST(sqlc.narg(before_rating) AS INTEGER), CAST(sqlc.narg(before_created_at) AS TEXT),
-             sqlc.narg(before_id)))
-ORDER BY entries.rating_q DESC, entries.created_at DESC, entries.id DESC
+       OR ((CASE WHEN entries.completion = 'finished' THEN 1 ELSE 0 END),
+           entries.rating_q, entries.created_at, entries.id)
+          < (CAST(sqlc.narg(before_rank) AS INTEGER), CAST(sqlc.narg(before_rating) AS INTEGER),
+             CAST(sqlc.narg(before_created_at) AS TEXT), sqlc.narg(before_id)))
+ORDER BY (entries.completion = 'finished') DESC, entries.rating_q DESC, entries.created_at DESC, entries.id DESC
 LIMIT sqlc.arg(row_limit);
 
 -- name: ListDeletedPage :many

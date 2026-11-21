@@ -19,6 +19,7 @@
   import SkeletonRows from '../../../lib/components/SkeletonRows.svelte';
   import TopBar from '../../../lib/components/TopBar.svelte';
   import { dateText, mediumText, ratingText } from '../../../lib/session/format';
+  import { completionBadge } from '../../../lib/state/reading';
   import {
     describeGroups,
     otherEntries,
@@ -50,6 +51,7 @@
   let deleting = $state(false);
   let restoring = $state(false);
 
+  const badge = $derived(entry ? completionBadge(entry) : '');
   const tags = $derived(entry?.tags ?? []);
   const groupChips = $derived(describeGroups(entry?.answers ?? []));
   const questions = $derived(questionAnswers(entry?.answers ?? []));
@@ -207,17 +209,30 @@
       </section>
 
       <section class="sec">
-        <p class="stamp">
-          {entry.finished_on ? dateText(entry.finished_on) : 'No date'}{entry.format
-            ? ` · ${entry.format}`
-            : ''}
-        </p>
-        <div class="ratingrow">
-          <Rating quarters={entry.rating_q} readonly />
-          {#if entry.favourite}
-            <span class="favtag"><Heart size={14} aria-hidden="true" /> Favourite</span>
-          {/if}
-        </div>
+        {#if entry.finished_on || entry.format}
+          <p class="stamp">
+            {entry.finished_on ? dateText(entry.finished_on) : 'No date'}{entry.format
+              ? ` · ${entry.format}`
+              : ''}
+          </p>
+        {/if}
+        {#if badge}
+          <p class="shelfbadge">{badge}</p>
+        {/if}
+        {#if entry.completion !== 'want_to' && (entry.rating_q > 0 || entry.favourite)}
+          <div class="ratingrow">
+            <Rating quarters={entry.rating_q} readonly />
+            {#if entry.favourite}
+              <span class="favtag"><Heart size={14} aria-hidden="true" /> Favourite</span>
+            {/if}
+          </div>
+        {/if}
+        {#if entry.progress}
+          <div class="progress">
+            <span class="k">How far</span>
+            <span class="v">{entry.progress}</span>
+          </div>
+        {/if}
         {#if entry.body}
           <p class="words">{entry.body}</p>
         {/if}
@@ -352,6 +367,32 @@
 </main>
 
 <style>
+  .shelfbadge {
+    display: inline-block;
+    margin: 0.35rem 0 0;
+    padding: 0.05rem 0.45rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    color: var(--text-2);
+  }
+  /* The same shape as the stamp above it: a small label, then her words on their own line. Running them together
+     read as one sentence, "How far two episodes...". */
+  .progress {
+    display: grid;
+    gap: 0.15rem;
+    margin: 0.5rem 0 0;
+  }
+  .progress .k {
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-2);
+  }
+  .progress .v {
+    font-size: 0.9375rem;
+    color: var(--text);
+  }
   .work {
     display: flex;
     gap: 1rem;

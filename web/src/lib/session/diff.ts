@@ -1,5 +1,6 @@
 import type { Entry } from '../api/client';
 import type { Draft } from '../contract/events';
+import { dateLabel } from '../state/reading';
 import { dateText, ratingText } from './format';
 
 /**
@@ -8,7 +9,16 @@ import { dateText, ratingText } from './format';
  * long paragraphs side by side on a phone is not a diff anyone reads.
  */
 export interface Change {
-  field: 'rating' | 'body' | 'verdict' | 'format' | 'finished_on' | 'favourite' | 'tags';
+  field:
+    | 'rating'
+    | 'body'
+    | 'verdict'
+    | 'format'
+    | 'finished_on'
+    | 'favourite'
+    | 'tags'
+    | 'completion'
+    | 'progress';
   label: string;
   /** The old value, when it is short enough to show. */
   was?: string;
@@ -46,7 +56,19 @@ export function whatWillChange(saved: Entry, draft: Draft): Change[] {
   const wasDate = dateText(saved.finished_on);
   const nowDate = dateText(draft.finished_on);
   if (wasDate !== nowDate) {
-    changes.push({ field: 'finished_on', label: 'Finished', was: wasDate, now: nowDate });
+    changes.push({ field: 'finished_on', label: dateLabel(draft), was: wasDate, now: nowDate });
+  }
+
+  const wasShelf = shelfText(saved.completion);
+  const nowShelf = shelfText(draft.completion);
+  if (wasShelf !== nowShelf) {
+    changes.push({ field: 'completion', label: 'Shelf', was: wasShelf, now: nowShelf });
+  }
+
+  const wasProgress = saved.progress ?? 'None';
+  const nowProgress = draft.progress || 'None';
+  if (wasProgress !== nowProgress) {
+    changes.push({ field: 'progress', label: 'How far', was: wasProgress, now: nowProgress });
   }
 
   if (saved.favourite !== draft.rating.favourite) {
@@ -74,4 +96,16 @@ export function whatWillChange(saved: Entry, draft: Draft): Change[] {
 
 function tagNames(tags: { name: string }[] | undefined): string {
   return (tags ?? []).map((tag) => tag.name).join(', ');
+}
+
+/** The shelf, in the plain words the card uses. A normal revision changes neither side, so it is never listed. */
+function shelfText(completion: Draft['completion'] | Entry['completion'] | undefined): string {
+  switch (completion) {
+    case 'want_to':
+      return 'Wanted';
+    case 'abandoned':
+      return "Didn't finish";
+    default:
+      return 'Finished';
+  }
 }

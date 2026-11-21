@@ -1217,3 +1217,95 @@ failure, not a second workflow that owns the truth.
 **`SEPIA_SCREENSHOTS` was the first name and it could not work.** The dev server refuses an unknown `SEPIA_` key, and
 the e2e environment rides along into every web server Playwright starts, so the run died with `config: unknown key
 SEPIA_SCREENSHOTS`. The variable is `SCREENSHOTS=1`, and `shot.ts` says why it is not prefixed.
+
+## 2026-11-20, S21.1-S21.8, wishlist and didn't finish
+
+**Built.** An entry now has a `completion` of `want_to`, `finished` or `abandoned`, a second dimension beside
+`status`; `entries.progress` holds one line of how far she got, in her own words (migration `0009`). The save
+guard relaxed to match (`PLAN.md` 2, `ENTRY_CARD.md` 2): a finished entry needs a rating and a body, an
+abandoned one a body, a wanted one only its work. `domain.CompletionCues` reads "couldn't get into it", "gave
+up", "dnf", "want to read" and the like in plain code, never a model. The library gained a shelf filter and one
+`Wanted` chip; abandoned rows show a `didn't finish` badge, wanted rows `wanted`, and a finished row still shows
+none. Logging a review for a wanted work revises that row rather than adding a second.
+
+**What is true now.** `GET /api/entries?completion=` filters by shelf, and an omitted shelf is everything she
+reviewed, finished and abandoned but not a wish. The rating order puts finished rows first and the unrated tail
+after them; its cursor grew a fourth key, and a three-key cursor from an older build is refused rather than
+half-read. `save_entry` takes `completion` and `progress_quote`, the second located in her messages exactly like
+the verdict, so a model cannot write a how-far line she never said. `save_entry` also stopped demanding a rating
+for a work she stopped, which was the first bug the abandoned flow caught.
+
+**What the next agent should know.** The rating order's leading key is `(completion = 'finished')`, not a second
+column, so nothing needs a backfill. `CompletionState()` reads an empty value as `finished`, which is why every
+entry literal and stored row written before this slice is still valid and why the migration's `DEFAULT` is the
+whole of the data change. Two things are deliberately left to issue #31, the library design refresh: the
+undated tail of the newest order (wanted rows) is still ordered by id rather than by when she added it, and the
+shelf chips are plain chips rather than a designed set of shelves.
+
+**Live check for the operator.** None. No provider, no image, no new dependency, and the rule change was decided
+before the slice started and written into `PLAN.md` in the same change.
+
+## 2026-11-20, S21 review, four findings and an accessibility fix
+
+**Fixed from review.** Four real defects, each with a test that failed first:
+
+1. **The rating order stopped at its first unrated row.** `BeforeRating` still went through `int64Null`, which reads
+   zero as "no cursor", and every abandoned and wanted row is rated 0. A page boundary landing on one made the
+   row-value comparison NULL, so the next page came back empty and the rest of the list was never shown.
+   `TestTheRatingCursorSurvivesAPageThatEndsOnAnUnratedRow` pages four rows two at a time and saw two before the fix.
+   `int64Null` is now deleted: `rankNull` takes a presence flag, and zero is a key on both numeric keys.
+2. **S21.8 was documented but not implemented.** A work on her wanted list now goes straight to a revision of that
+   row, without the "a new entry or the old one" question, which is meaningless for a book she has not read.
+   `reviseInto` re-runs `applyParsed` on the revision, because the turn's parse ran before the card existed.
+3. **The model's `completion` argument was applied too late.** The shelf now decides what the card is asked for
+   before `fillRating`/`fillBody` run, so a model that correctly says "abandoned" when the cues missed her words is
+   not answered with "How would you rate it, out of five?".
+4. **A wanted card still drew the star control.** Only the label was inside the conditional; the `<Rating>` sat
+   outside it. The whole section is now conditional.
+
+**Two things the review did not name, found while testing the above.** `CompletionCues` could never return
+`finished`, so a wish could only become a review by tapping the shelf: it now reads "finished", "read it", "done
+with" and the rest out loud, with negation respected ("i haven't finished it yet" is not a finish). And
+`ask_reviewer` now refuses to run on a wish, because asking what she thought of a book she has not read is the same
+nudge as asking a stopped one for stars.
+
+**An accessibility gap the new test exposed.** `SessionScreen` rendered a `<div class="screen">` with no `<main>` and
+no `<h1>`: the session screen was the one screen the axe pass had never covered, because the only existing axe check
+on it ran with a modal dialog open, which narrows axe's scope. The route now owns the `<main>`, the top bar's title
+is the `<h1>`, and the card's work title is an `<h2>` rather than an `<h3>`. The component keeps a `<div>` because
+the gallery renders many frames on one page, where a landmark per frame would be invalid. The new end-to-end test
+for a wish runs a full axe pass on that screen and now passes; it did not before.
+
+## 2026-11-20, S21 second review, one regression of my own
+
+**A correction to the entry above.** It said each of the four fixes came with a test that failed first. That was
+not true of the `save_entry` ordering fix: its test message contained "put it aside", which is already an abandoned
+cue, so the card knew its shelf before `save_entry` ran and the test passed against the unfixed code. The message is
+now "the lantern keeper was slow in the middle", which names no shelf, and the test fails when the ordering is
+reverted. The claim in the entry above is true now, and it was not when it was written.
+
+**A regression I introduced with the finished cue.** Reading "finished" out loud was added so a wish could become a
+review, but the first version matched inside longer words and did not distinguish a wish that mentions something she
+has already seen. Three ordinary messages were read wrongly: "i want to read the lantern keeper, i read it's great"
+and "i want to read it because i watched the film" both became finished, and "felt unfinished" matched "finished".
+Two rules now: a one-word cue has to be a whole word, and a want phrase beats an incidental "read it" or "watched
+the" unless she also said "finished" or "done with".
+
+**The revisit card described an abandoned row as a zero-star finish.** "finished Tue 12 Nov · 0 stars" is what it
+said about a work she put down. The payload now carries the completion, and `revisitMeta` in `reading.ts` says
+"stopped <date>", "wanted", or "finished <date> · N stars", and never prints a zero. It is a pure function with its
+own tests rather than a line in the component.
+
+## 2026-11-20, S21 third review, the unguarded payload key
+
+**The one gap.** The fix for the abandoned revisit card was a single key in the revisit payload, and nothing tested
+it: `revisitMeta` falls back to `finished` when the field is absent, and its unit tests build the payload by hand, so
+removing the key left every test green and restored "finished <date>" for a row she put down.
+`TestTheRevisitCardCarriesTheShelf` drives a second turn into the real revisit card and asserts `previous.completion`
+is `abandoned`; it fails when the key is removed. That is the shape a payload fix needs: assert the payload the
+service actually builds, not the one a test constructs.
+
+**A latent copy of the same bug.** `session.Revisit` had no `completion` field, so `OfferRevisit` would have described
+an abandoned row as a finish. It has no production caller today, which is why the review could only call it
+non-blocking, but a path that is known to be wrong is the thing this review round already caught twice. The field is
+there now and `OfferRevisit` fills it.

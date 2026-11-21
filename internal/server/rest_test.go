@@ -431,6 +431,127 @@ func TestWorkDetailCarriesEverySourceAndItsTrust(t *testing.T) {
 // The reading screens' three additions to the entries routes: the rating order, the entries on one work, and the
 // Deleted list with the way back.
 
+// aShelfEntry confirms a card on a given shelf, which is the only way to make an abandoned or wanted row.
+func aShelfEntry(t *testing.T, engine *session.Engine, db *store.Store, title string, completion domain.Completion,
+	set map[string]json.RawMessage,
+) domain.Entry {
+	t.Helper()
+	ctx := context.Background()
+	if err := db.SaveWork(ctx, domain.Work{
+		ID: workIDFor(title), Medium: "book", Title: title, Verified: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := engine.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = engine.StartDraft(ctx, sess.ID, domain.Entry{WorkID: workIDFor(title)}); err != nil {
+		t.Fatal(err)
+	}
+	set["completion"] = json.RawMessage(`"` + string(completion) + `"`)
+	if _, err = engine.EditDraft(ctx, sess.ID, session.Edit{BaseVersion: 0, Set: set}); err != nil {
+		t.Fatal(err)
+	}
+	entry, _, _, err := engine.Confirm(ctx, sess.ID, session.ConfirmRequest{BaseVersion: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return entry
+}
+
+// The shelf is a real filter on the wire, and it is part of what a cursor was made for: a cursor from one shelf is
+// refused rather than answering a page from another.
+func TestLibraryShelfFilterAndCursor(t *testing.T) {
+	h, engine, db := newREST(t)
+	finished := aConfirmedEntry(t, engine, db, "The Lantern Keeper", "2026-10-30")
+	abandoned := aShelfEntry(t, engine, db, "A Cold Inheritance", domain.CompletionAbandoned,
+		map[string]json.RawMessage{
+			"body":     json.RawMessage(`"the house was beautiful and everybody in it was unpleasant"`),
+			"progress": json.RawMessage(`"two episodes"`),
+		})
+	wanted := aShelfEntry(t, engine, db, "The Quarry Year", domain.CompletionWantTo,
+		map[string]json.RawMessage{})
+
+	var page struct {
+		Items      []wireEntry `json:"items"`
+		NextCursor *string     `json:"next_cursor"`
+	}
+
+	// Happy: the library proper holds what she reviewed, which is finished and abandoned, and not a wish.
+	all := doJSON(t, h, http.MethodGet, "/api/entries", nil)
+	if all.Code != http.StatusOK {
+		t.Fatalf("library = %d: %s", all.Code, all.Body)
+	}
+	decode(t, all, &page)
+	if len(page.Items) != 2 {
+		t.Fatalf("default shelf = %+v", page.Items)
+	}
+	for _, item := range page.Items {
+		if item.ID == wanted.ID {
+			t.Fatal("a wanted row was in the default library")
+		}
+	}
+
+	// Happy: each shelf is exactly itself, and the abandoned row carries no rating.
+	byShelf := doJSON(t, h, http.MethodGet, "/api/entries?completion=abandoned", nil)
+	decode(t, byShelf, &page)
+	if len(page.Items) != 1 || page.Items[0].ID != abandoned.ID || page.Items[0].RatingQ != 0 {
+		t.Fatalf("abandoned shelf = %+v", page.Items)
+	}
+	if page.Items[0].Progress != "two episodes" {
+		t.Fatalf("progress on the wire = %q", page.Items[0].Progress)
+	}
+	byWanted := doJSON(t, h, http.MethodGet, "/api/entries?completion=want_to", nil)
+	decode(t, byWanted, &page)
+	if len(page.Items) != 1 || page.Items[0].ID != wanted.ID {
+		t.Fatalf("wanted shelf = %+v", page.Items)
+	}
+	if page.Items[0].Body != "" {
+		t.Fatalf("a wish carries a body: %q", page.Items[0].Body)
+	}
+
+	// The finished one is still exactly a finished review.
+	if finished.Completion != domain.CompletionFinished {
+		t.Fatalf("completion = %q", finished.Completion)
+	}
+
+	// Bad: a shelf Sepia does not know is refused with a stable code, not silently ignored.
+	if bad := doJSON(t, h, http.MethodGet, "/api/entries?completion=halfway", nil); bad.Code != http.StatusBadRequest {
+		t.Fatalf("unknown shelf = %d, want 400", bad.Code)
+	}
+
+	// Bad: a rating cursor is four keys now. A three-key cursor from another build is refused rather than read as a
+	// different position, which is how a page would skip or repeat a row.
+	rated := doJSON(t, h, http.MethodGet, "/api/entries?sort=rating&limit=1", nil)
+	if rated.Code != http.StatusOK {
+		t.Fatalf("rating page = %d: %s", rated.Code, rated.Body)
+	}
+	decode(t, rated, &page)
+	if page.NextCursor == nil {
+		t.Fatal("a one-row page of three has no cursor")
+	}
+	next := doJSON(t, h, http.MethodGet, "/api/entries?sort=rating&limit=1&cursor="+*page.NextCursor, nil)
+	if next.Code != http.StatusOK {
+		t.Fatalf("second page = %d: %s", next.Code, next.Body)
+	}
+	var second struct {
+		Items []wireEntry `json:"items"`
+	}
+	decode(t, next, &second)
+	if len(second.Items) != 1 || second.Items[0].ID == page.Items[0].ID {
+		t.Fatalf("second page = %+v, first page was %+v", second.Items, page.Items)
+	}
+	// Bad: the rating order used to carry three keys. A cursor in the old shape belongs to a build that no longer
+	// exists, so it is refused rather than half-read: reading it as the new shape would skip or repeat a row.
+	signature := cursorSignature("entries", "", "any", "", "", string(domain.SortRating), "false")
+	oldShape := encodeCursor(signature, "18", "2026-11-02T12:00:00Z", "id-1")
+	stale := doJSON(t, h, http.MethodGet, "/api/entries?sort=rating&cursor="+oldShape, nil)
+	if stale.Code != http.StatusBadRequest {
+		t.Fatalf("old three-key cursor = %d, want 400", stale.Code)
+	}
+}
+
 func TestLibrarySortWorkAndDeleted(t *testing.T) {
 	h, engine, db := newREST(t)
 	low := aConfirmedEntry(t, engine, db, "The Lantern Keeper", "2026-10-30")

@@ -6,12 +6,16 @@ import (
 	"github.com/AutumnsGrove/sepia/internal/domain"
 )
 
-// Parsed is the deterministic read of one message: the rating, the date and the format cues. It is plain rules,
-// never a model, so the same words always produce the same fields (PLAN.md 5, step 3).
+// Parsed is the deterministic read of one message: the rating, the date, the format cues and how far she got. It is
+// plain rules, never a model, so the same words always produce the same fields (PLAN.md 5, step 3).
 type Parsed struct {
 	Rating  domain.Rating
 	Date    domain.DateResult
 	Formats []string
+	// Completion and CompletionFound are the shelf the message named, if it named one. A message that says nothing
+	// about finishing or wanting leaves the card's shelf alone rather than guessing it.
+	Completion      domain.Completion
+	CompletionFound bool
 }
 
 // parseMessage reads the fields code can prove. A vague rating stays vague, so the card asks instead of guessing.
@@ -28,10 +32,13 @@ func parseMessage(text string, now time.Time, clientDate, timezone string) Parse
 			base = parsed
 		}
 	}
+	completion, found := domain.CompletionCues(text)
 	return Parsed{
-		Rating:  domain.ParseRating(text),
-		Date:    domain.ResolveDate(text, base, loc),
-		Formats: domain.FormatCues(text),
+		Rating:          domain.ParseRating(text),
+		Date:            domain.ResolveDate(text, base, loc),
+		Formats:         domain.FormatCues(text),
+		Completion:      completion,
+		CompletionFound: found,
 	}
 }
 

@@ -92,7 +92,9 @@ test('resuming a draft returns to its card', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/s\/[^/]+$/);
   await expect(page.getByLabel('Say what you thought')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Hollow Deep' })).toBeVisible();
+  // The screen titles the card in its top bar and the card names the work under it, so both are headings.
+  await expect(page.getByRole('heading', { level: 1, name: 'Hollow Deep' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Hollow Deep' })).toBeVisible();
 });
 
 test('the library groups by month, filters by medium, and sorts', async ({ page }) => {
@@ -126,6 +128,36 @@ test('the library groups by month, filters by medium, and sorts', async ({ page 
   await expect(page.getByRole('button', { name: 'Sort: Highest rated' })).toBeVisible();
   await expect(page.locator('.list .row').first()).toContainText('The Copper Room');
   await shot(page, 'reading-library-by-rating.png');
+});
+
+test('the shelves: a work she stopped is in the library, and wanted is one chip away', async ({
+  page,
+}) => {
+  await openReading(page, '/library');
+
+  // A dropped work is in the library she scans, with its badge and no stars: there was nothing to rate.
+  const dropped = page.getByRole('button', { name: /A Cold Inheritance/ });
+  await expect(dropped).toBeVisible();
+  await expect(dropped).toContainText("didn't finish");
+  await expect(dropped).not.toContainText('★');
+
+  // A work she only means to read is not in that list at all.
+  await expect(page.getByRole('button', { name: /The Quarry Year/ })).toHaveCount(0);
+
+  // It is one chip away, and flat rather than grouped by a month she has not reached.
+  await page.getByRole('button', { name: 'Wanted', exact: true }).click();
+  const wanted = page.getByRole('button', { name: /The Quarry Year/ });
+  await expect(wanted).toBeVisible();
+  await expect(wanted).toContainText('wanted');
+  await expect(page.getByText('November 2026')).toHaveCount(0);
+  await noViolations(page);
+
+  // The entry it opens says the same thing, and offers no rating for something she has not read.
+  await wanted.click();
+  await expect(page.getByRole('heading', { level: 2, name: 'The Quarry Year' })).toBeVisible();
+  await expect(page.locator('.shelfbadge')).toHaveText('wanted');
+  await expect(page.locator('.ratingrow')).toHaveCount(0);
+  await noViolations(page);
 });
 
 test('a saved entry shows her words, the same work and its details', async ({ page }) => {

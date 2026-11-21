@@ -163,7 +163,10 @@ test.describe('logging a review', () => {
 
   test('renders a hostile title as plain text', async ({ page }) => {
     await page.goto('/gallery?state=screen-hostile');
-    await expect(page.getByRole('heading', { name: /<img src=x onerror=/ })).toBeVisible();
+    // The top bar and the card both carry the title, which is the point: it is text in every place it appears.
+    const heading = page.getByRole('heading', { name: /<img src=x onerror=/ });
+    await expect(heading).toHaveCount(2);
+    await expect(heading.first()).toBeVisible();
     // The title is text, not markup: no image was created and no script ran.
     await expect(page.locator('article img')).toHaveCount(0);
     expect(
@@ -256,6 +259,41 @@ test.describe('logging a review', () => {
     await expect(page.getByRole('button', { name: /The book/ })).toBeVisible({ timeout: 45_000 });
     await expect(page.getByText(SENTENCE)).toHaveCount(1);
     await expect(page.getByText('Will send when you are back online')).toHaveCount(0);
+  });
+
+  test('a work she only means to read gets a card with nothing to score', async ({ page }) => {
+    await startEntry(page);
+    await send(page, 'want to read the lantern keeper, everyone says the ending is wild');
+
+    // The pre-read may still ask which medium; the card is the book either way.
+    const book = page.getByRole('button', { name: /The book/ });
+    await expect
+      .poll(
+        async () =>
+          (await book.isVisible()) ||
+          (await page.getByRole('button', { name: /The Lantern Keeper/ }).isVisible()),
+        {
+          timeout: 20_000,
+        },
+      )
+      .toBe(true);
+    if (await book.isVisible()) await book.click();
+    await page.getByRole('button', { name: /The Lantern Keeper/ }).click({ timeout: 20_000 });
+
+    // pickBook waits for the Describe form, which a wish must not get. The revisit card can still come up, because
+    // every flow on this stack logs the same invented work.
+    const shelfControl = page.getByRole('button', { name: 'Want to' });
+    const revisit = page.getByRole('button', { name: 'A new entry' });
+    await expect(shelfControl.or(revisit)).toBeVisible({ timeout: 20_000 });
+    if (await revisit.isVisible()) await revisit.click();
+
+    // The card knows it is a wish, so there is nothing to rate and nothing to answer: no Describe form, no stars.
+    await expect(shelfControl).toHaveAttribute('aria-pressed', 'true', { timeout: 20_000 });
+    await expect(page.getByRole('slider', { name: 'Your rating' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Save entry' })).toBeEnabled({ timeout: 20_000 });
+
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
   });
 });
 

@@ -12,7 +12,8 @@ off it. Decisions are from the 2026-10-31 planning session; the rules they serve
 | Work | Cover, title, year, creators, medium | `verified` (an API), `unverified` (web or manual), `accepted` (a web field I tapped) |
 | Rating | Quarter-star rating, with the favourite heart in the label row | `set`, or `empty` (shown as needed) |
 | My words | Verdict (one line) and body | `extracted`, `typed`, `mixed`, `imported`; see section 3 |
-| Facts | Format, date finished | `parsed`, `suggested` (from the decisions layer), `empty` |
+| Facts | Format, and the date: **Finished** for a finished entry, **Stopped** for an abandoned one | `parsed`, `suggested` (from the decisions layer), `empty` |
+| How far | One optional line in my own words, for an abandoned entry only | `extracted`, `typed`, `empty` |
 | Left out | The parts of my messages not kept | collapsed; each segment has a tap to include it |
 | Answers | The descriptor chips I picked, grouped by category, then the single questions I answered | `answered`, `skipped` (greyed) |
 | Tags | Genres from the provider and my own free-text tags (not the descriptor chips, which are answers) | `suggested`, `accepted` |
@@ -24,13 +25,17 @@ turned off and an Edit button on.
 
 ## 2. Required to confirm
 
-Only two things are required, and both are enforced in `save_entry` as well as in the button state:
+The requirements depend on the entry's **completion**, and every one of them is enforced in `save_entry` as well
+as in the button state. Everything not listed is optional: if I skip every question, the entry still saves.
 
-- a **rating** (a quarter-star value, 0.25 to 5.0), and
-- a **non-empty body** that is made of my own words.
+| Completion | Required | Shown as |
+|---|---|---|
+| `finished` | a **rating** (a quarter-star value, 0.25 to 5.0) and a **non-empty body** | no badge |
+| `abandoned` | a **non-empty body**. The rating stays optional, so a dropped book with no stars still saves | `didn't finish` |
+| `want_to` | nothing but the work and my confirm tap | `wanted` |
 
-Everything else is optional. If I skip every question, the entry still saves. If I only said "5/5" and
-nothing else, the agent asks for a few words or I type them; it does not write any.
+A body, whenever there is one, is made of my own words: the agent never writes one, and if I only said "5/5" and
+nothing else it asks for a few words or I type them.
 
 ## 3. The body and the verdict
 
@@ -69,6 +74,8 @@ each kept span sits in which session message), so containment can be re-checked 
 - **The exact number always shows** beside the stars, so the stored value is never hidden.
 - A parsed value that is not on a quarter snaps to the nearest quarter, and the card shows what was
   stored. A vague phrase ("a four and a bit") leaves the control empty and the agent asks.
+- **A wanted or abandoned entry may have no rating at all.** The control stays empty and the card does not
+  nag; the badge is what says why. If I do rate one, the value is stored exactly like any other.
 - The favourite flag is a separate toggle (a heart), never implied by the rating.
 
 ## 5. Unverified fields

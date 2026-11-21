@@ -10,7 +10,13 @@
   import TopBar from '../lib/components/TopBar.svelte';
   import { stashFirstMessage } from '../lib/state/handoff';
   import { draftsOf } from '../lib/state/lists';
-  import { ageText, countText, entryMeta, waitingText } from '../lib/state/reading';
+  import {
+    ageText,
+    completionBadge,
+    countText,
+    entryMeta,
+    waitingText,
+  } from '../lib/state/reading';
 
   /**
    * Home: the launcher. Drafts that are waiting come first, then what she has read lately, and the composer sits where
@@ -132,7 +138,8 @@
           <ListRow
             title={entry.work.title}
             meta={entryMeta(entry, thisYear)}
-            quarters={entry.rating_q}
+            quarters={entry.rating_q > 0 ? entry.rating_q : null}
+            badge={completionBadge(entry)}
             favourite={entry.favourite}
             medium={entry.work.medium}
             coverUrl={entry.work.cover_url}

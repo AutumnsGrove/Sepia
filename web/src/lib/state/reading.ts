@@ -1,5 +1,5 @@
 import type { Entry, Revision } from '../api/client';
-import { mediumText, ratingText } from '../session/format';
+import { dateText, mediumText, ratingText } from '../session/format';
 
 /**
  * The reading screens' derived state. Each function is pure and tested here rather than in a component: the month a
@@ -57,9 +57,16 @@ export function groupByMonth(entries: Entry[]): MonthGroup[] {
  * The library's sections. Month headings belong to the date order, where they are true: under the rating order the
  * same headings would march backwards and forwards (June 2026 after January 2024) because the list is no longer in
  * date order. A rating-sorted library is one list, and the tool row says which order it is.
+ *
+ * `flat` is the wanted shelf, where the headings are not true either: a work she has not read has no month she
+ * finished it, so the list is one section under no heading at all.
  */
-export function sectionsFor(entries: Entry[], sort: 'newest' | 'rating'): MonthGroup[] {
-  if (sort === 'newest') return groupByMonth(entries);
+export function sectionsFor(
+  entries: Entry[],
+  sort: 'newest' | 'rating',
+  flat = false,
+): MonthGroup[] {
+  if (sort === 'newest' && !flat) return groupByMonth(entries);
   return entries.length === 0 ? [] : [{ key: '', label: '', items: entries }];
 }
 
@@ -75,10 +82,70 @@ export function monthLabel(key: string): string {
 /** "Book · 30 Oct", with the year only when it is not this one: the month heading already says it for this year. */
 export function entryMeta(entry: Entry, thisYear: number): string {
   const medium = mediumText(entry.work.medium);
+  if (entry.completion === 'want_to') {
+    // A work she has not read has no date to show, and "Book" alone is the whole true sentence about it.
+    return medium;
+  }
   const date = shortDate(entry.finished_on, thisYear);
   if (!medium) return date;
   return date ? `${medium} · ${date}` : medium;
 }
+
+/** The saved entry a revisit card is describing, as the socket sends it. */
+export interface RevisitPrevious {
+  rating_q?: number;
+  finished_on?: string;
+  verdict?: string;
+  completion?: string;
+}
+
+/**
+ * One line about the entry already on a work, for the revisit card. An unfinished row has no rating and its date is
+ * the day she stopped, so it is never described as a zero-star finish: "finished Tue 12 Nov · 0 stars" was what an
+ * abandoned row said before this.
+ */
+export function revisitMeta(previous: RevisitPrevious): string {
+  const shelf = previous.completion ?? 'finished';
+  const parts: string[] = [];
+  if (shelf === 'want_to') {
+    parts.push('wanted');
+  } else if (shelf === 'abandoned') {
+    parts.push(
+      previous.finished_on ? `stopped ${dateText(previous.finished_on)}` : "didn't finish",
+    );
+  } else if (previous.finished_on) {
+    parts.push(`finished ${dateText(previous.finished_on)}`);
+  }
+  // Only a finished row has stars. A wish and a dropped work have none, and printing a zero would be a score it
+  // never had.
+  if (shelf === 'finished' && typeof previous.rating_q === 'number' && previous.rating_q > 0) {
+    parts.push(`${previous.rating_q / 4} stars`);
+  }
+  return parts.join(' · ');
+}
+
+/** The quiet badge a row or a card carries, or empty for an ordinary finished review. */
+export function completionBadge(entry: Pick<Entry, 'completion'>): string {
+  switch (entry.completion) {
+    case 'abandoned':
+      return "didn't finish";
+    case 'want_to':
+      return 'wanted';
+    default:
+      return '';
+  }
+}
+
+/** What the date field is called on the card: a review has a finish date, a work she stopped has a stop date. */
+export function dateLabel(entry: Pick<Entry, 'completion'>): string {
+  return entry.completion === 'abandoned' ? 'Stopped' : 'Finished';
+}
+
+/** Which shelf chip is on, in the order the chips appear. Empty is the library proper. */
+export const SHELVES = [
+  { value: '', label: 'Reviewed' },
+  { value: 'want_to', label: 'Wanted' },
+] as const;
 
 /** The day and month a row can show, or the year too when it is not the current one. */
 export function shortDate(iso: string | null | undefined, thisYear: number): string {
@@ -297,7 +364,19 @@ export function changeBetween(before: Entry, after: Entry): string {
     parts.push(after.format ? `Format set to ${titleCase(after.format)}.` : 'Format cleared.');
   }
   if ((before.finished_on ?? '') !== (after.finished_on ?? '')) {
-    parts.push(after.finished_on ? 'Finish date changed.' : 'Finish date cleared.');
+    parts.push(after.finished_on ? 'Date changed.' : 'Date cleared.');
+  }
+  if ((before.completion ?? 'finished') !== (after.completion ?? 'finished')) {
+    parts.push(
+      after.completion === 'abandoned'
+        ? 'Marked as not finished.'
+        : after.completion === 'want_to'
+          ? 'Moved to wanted.'
+          : 'Marked as finished.',
+    );
+  }
+  if ((before.progress ?? '') !== (after.progress ?? '')) {
+    parts.push(after.progress ? 'How far you got changed.' : 'How far you got cleared.');
   }
   if ((before.verdict ?? '') !== (after.verdict ?? '')) {
     parts.push(after.verdict ? 'Verdict added.' : 'Verdict cleared.');
