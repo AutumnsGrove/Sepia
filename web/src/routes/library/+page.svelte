@@ -16,7 +16,7 @@
   import SkeletonRows from '../../lib/components/SkeletonRows.svelte';
   import TopBar from '../../lib/components/TopBar.svelte';
   import { appendList, emptyList, replaceList, type ListState } from '../../lib/state/lists';
-  import { entryMeta, sectionsFor } from '../../lib/state/reading';
+  import { completionBadge, entryMeta, sectionsFor } from '../../lib/state/reading';
 
   /**
    * The Library: one list across every medium, grouped by the month she finished each thing. The medium chips filter
@@ -40,6 +40,9 @@
   ];
 
   let medium = $state<Medium | ''>('');
+  // The shelf. Empty is the library proper: finished and abandoned reviews. Wanted is one chip away, because a work
+  // she has not read has no finish date and is not a review (docs/slices/S21-wishlist-and-unfinished.md).
+  let shelf = $state<'' | 'want_to'>('');
   let sort = $state<'newest' | 'rating'>('newest');
   let list = $state<ListState<Entry>>(emptyList<Entry>());
   let loading = $state(true);
@@ -47,7 +50,7 @@
   let problem = $state('');
   let loaded = $state(false);
 
-  const groups = $derived(sectionsFor(list.items, sort));
+  const groups = $derived(sectionsFor(list.items, sort, shelf === 'want_to'));
   const sortLabel = $derived(sort === 'newest' ? 'Newest first' : 'Highest rated');
   const countLine = $derived(
     list.items.length === 0
@@ -69,6 +72,7 @@
     try {
       const page: LibraryPage = await client.listEntries({
         medium: medium === '' ? undefined : medium,
+        completion: shelf === '' ? undefined : shelf,
         sort,
         cursor: reset ? undefined : (list.cursor ?? undefined),
         limit: 50,
@@ -84,8 +88,12 @@
   }
 
   $effect(() => {
-    // Any change of filter or order starts again from the first page: a cursor belongs to the query that made it.
-    void (medium && sort);
+    // Any change of filter or shelf or order starts again from the first page: a cursor belongs to the query that
+    // made it. Each is read on its own line rather than in a short-circuiting expression, so the effect is registered
+    // against all three and not only against the first truthy one.
+    void medium;
+    void shelf;
+    void sort;
     list = emptyList<Entry>();
     void load(true);
   });
@@ -125,6 +133,11 @@
       {/each}
     </div>
 
+    <div class="chipsrow" role="group" aria-label="Filter by shelf">
+      <Chip pressed={shelf === ''} onclick={() => (shelf = '')}>Reviewed</Chip>
+      <Chip pressed={shelf === 'want_to'} onclick={() => (shelf = 'want_to')}>Wanted</Chip>
+    </div>
+
     <div class="toolrow">
       <span>{countLine}</span>
       {#if list.items.length > 0}
@@ -141,13 +154,24 @@
       <SkeletonRows label="Reading your library" />
     {:else if emptyFilter}
       <div class="zero">
-        <h2>{medium === '' ? 'Nothing here yet.' : `No ${chosen.toLowerCase()} entries yet.`}</h2>
+        <h2>
+          {shelf === 'want_to'
+            ? 'Nothing on your wanted list yet.'
+            : medium === ''
+              ? 'Nothing here yet.'
+              : `No ${chosen.toLowerCase()} entries yet.`}
+        </h2>
         <p>
-          {medium === ''
-            ? 'Everything you finish and write about lands here, across films, books, games, albums and more.'
-            : 'Nothing in your library yet, with this filter on.'}
+          {shelf === 'want_to'
+            ? 'Say what you mean to read, watch or play and it lands here, with no rating and nothing to write yet.'
+            : medium === ''
+              ? 'Everything you finish and write about lands here, across films, books, games, albums and more.'
+              : 'Nothing in your library yet, with this filter on.'}
         </p>
-        {#if medium === ''}
+        {#if shelf === 'want_to'}
+          <Button variant="primary" onclick={() => void goto(resolve('/new'))}>Add something</Button
+          >
+        {:else if medium === ''}
           <Button variant="primary" onclick={() => void goto(resolve('/new'))}>Log something</Button
           >
         {:else}
@@ -164,7 +188,8 @@
             <ListRow
               title={entry.work.title}
               meta={entryMeta(entry, thisYear)}
-              quarters={entry.rating_q}
+              quarters={entry.rating_q > 0 ? entry.rating_q : null}
+              badge={completionBadge(entry)}
               medium={entry.work.medium}
               favourite={entry.favourite}
               coverUrl={entry.work.cover_url}

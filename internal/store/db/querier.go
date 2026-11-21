@@ -70,12 +70,20 @@ type Querier interface {
 	// positional because a repeated named argument makes sqlc emit fewer struct fields than the driver has "?".
 	// A row-value comparison is used so SQLite can walk the (finished_on, id) index instead of sorting.
 	ListLibrary(ctx context.Context, arg ListLibraryParams) ([]Entry, error)
-	// The same library, highest rating first. The order is rating_q then created_at then id because all three are never
-	// null, so a page can neither repeat nor skip a row even when a saved entry has no finish date.
+	// The same library, highest rating first. The order is finished before unfinished, then rating_q, created_at and id.
+	//
+	// The leading finished key is the shelf rule decided in S21: an unfinished entry has no rating to rank by, so it
+	// follows the rated ones instead of being scattered through them by a zero rating_q. created_at rather than
+	// finished_on breaks the tie inside a rating because a saved entry may have no finish date, and a cursor comparison
+	// against null skips a row.
 	ListLibraryByRating(ctx context.Context, arg ListLibraryByRatingParams) ([]Entry, error)
-	// The library, newest finished first, with its filters: medium (on the work), favourite, and work. Cursor pagination
-	// on (finished_on, id), the same order as the index. An entry saved without a finish date sorts last, which is where
-	// SQLite puts a null in a descending order, and the cursor carries whether the row it names had one.
+	// The library, newest finished first, with its filters: medium (on the work), favourite, work, and shelf. Cursor
+	// pagination on (finished_on, id), the same order as the index. An entry saved without a finish date sorts last,
+	// which is where SQLite puts a null in a descending order, and the cursor carries whether the row it names had one.
+	//
+	// The shelf is a CASE rather than a plain equality so that an unnamed shelf means the library proper: everything she
+	// has reviewed, which is finished and abandoned but not a wish. A work she only means to read has no finish date and
+	// is not a review, so it is one chip away rather than mixed into the list she scans.
 	ListLibraryPage(ctx context.Context, arg ListLibraryPageParams) ([]Entry, error)
 	ListMediaForEntry(ctx context.Context, entryID *string) ([]Medium, error)
 	ListMirrors(ctx context.Context, limit int64) ([]Mirror, error)

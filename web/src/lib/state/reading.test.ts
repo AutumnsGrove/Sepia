@@ -6,6 +6,8 @@ import {
   countText,
   deletedMeta,
   describeGroups,
+  completionBadge,
+  dateLabel,
   entryMeta,
   groupByMonth,
   otherEntries,
@@ -244,5 +246,44 @@ describe('the versions screen', () => {
       'Format set to Print.',
     );
     expect(changeBetween(snapshot(), snapshot())).toBe('No visible change.');
+  });
+});
+
+describe('the shelves', () => {
+  it('badges only the rows that are not an ordinary finished review', () => {
+    expect(completionBadge(entry({ completion: 'finished' }))).toBe('');
+    expect(completionBadge(entry({ completion: 'abandoned' }))).toBe("didn't finish");
+    expect(completionBadge(entry({ completion: 'want_to' }))).toBe('wanted');
+  });
+
+  it('calls the date what it is: finished for a review, stopped for a work she put down', () => {
+    expect(dateLabel(entry({ completion: 'finished' }))).toBe('Finished');
+    expect(dateLabel(entry({ completion: 'want_to' }))).toBe('Finished');
+    expect(dateLabel(entry({ completion: 'abandoned' }))).toBe('Stopped');
+  });
+
+  it('shows no date for a work she has not read, because there is not one', () => {
+    expect(entryMeta(entry({ completion: 'want_to', finished_on: null }), 2026)).toBe('Book');
+  });
+
+  it('keeps the wanted shelf flat: a book she has not read has no month she finished it', () => {
+    const rows = [
+      entry({ id: 'a', completion: 'want_to', finished_on: null }),
+      entry({ id: 'b', completion: 'want_to', finished_on: '2026-10-02' }),
+    ];
+    expect(sectionsFor(rows, 'newest', true)).toHaveLength(1);
+    expect(sectionsFor(rows, 'newest', false).length).toBeGreaterThan(1);
+  });
+
+  it('names a shelf change and a how-far change in the version list', () => {
+    expect(
+      changeBetween(
+        entry({ completion: 'finished' }),
+        entry({ completion: 'abandoned', finished_on: '2026-10-30' }),
+      ),
+    ).toBe('Marked as not finished.');
+    expect(changeBetween(entry({ progress: undefined }), entry({ progress: '100 pages' }))).toBe(
+      'How far you got changed.',
+    );
   });
 });

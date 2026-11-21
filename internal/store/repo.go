@@ -220,7 +220,8 @@ func saveEntry(ctx context.Context, q *db.Queries, e domain.Entry, id string, sp
 		WorkID: e.WorkID, RatingQ: int64(e.Rating), RatingScale: scale,
 		Favourite: boolToInt(e.Favourite), Season: seasonPtr(e.Season), Verdict: e.Verdict,
 		Body: e.Body, BodyOrigin: string(e.BodyOrigin), BodySpansJson: string(spans),
-		Format: e.Format, FinishedOn: nullableString(e.FinishedOn), UpdatedAt: now.Format(timeLayout), ID: id,
+		Format: e.Format, Completion: string(e.CompletionState()), Progress: e.Normalized().Progress,
+		FinishedOn: nullableString(e.FinishedOn), UpdatedAt: now.Format(timeLayout), ID: id,
 	})
 	if err != nil {
 		return fmt.Errorf("store: save entry: %w", err)
@@ -295,7 +296,8 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 		rows = page
 	} else if query.Sort == domain.SortRating {
 		page, err := s.ReadQueries().ListLibraryByRating(ctx, db.ListLibraryByRatingParams{
-			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg,
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
+			BeforeRank:   rankNull(cursor.CompletionRank, cursor.ID != ""),
 			BeforeRating: int64Null(cursor.Rating), BeforeCreatedAt: stringNull(cursor.CreatedAt),
 			BeforeID: beforeID, RowLimit: int64(limit + 1),
 		})
@@ -305,7 +307,7 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 		rows = page
 	} else {
 		page, err := s.ReadQueries().ListLibraryPage(ctx, db.ListLibraryPageParams{
-			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg,
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
 			BeforeFinishedOn: nullableString(cursor.FinishedOn), BeforeID: beforeID, RowLimit: int64(limit + 1),
 		})
 		if err != nil {
@@ -323,7 +325,13 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 			next = domain.Cursor{ID: last.ID, DeletedAt: derefString(last.DeletedAt)}
 		}
 		if query.Sort == domain.SortRating && !query.Deleted {
-			next = domain.Cursor{ID: last.ID, Rating: int(last.RatingQ), CreatedAt: last.CreatedAt}
+			rank := 0
+			if last.Completion == string(domain.CompletionFinished) {
+				rank = 1
+			}
+			next = domain.Cursor{
+				ID: last.ID, Rating: int(last.RatingQ), CreatedAt: last.CreatedAt, CompletionRank: rank,
+			}
 		}
 	}
 	out := make([]domain.Entry, 0, len(rows))
@@ -364,6 +372,12 @@ func int64Null(value int) sql.NullInt64 {
 		return sql.NullInt64{}
 	}
 	return sql.NullInt64{Int64: int64(value), Valid: true}
+}
+
+// rankNull is a cursor key whose zero is a real value: an unfinished entry ranks 0, so only an empty cursor means
+// there is no key. int64Null cannot be used here, because it reads zero as absent.
+func rankNull(value int, present bool) sql.NullInt64 {
+	return sql.NullInt64{Int64: int64(value), Valid: present}
 }
 
 // stringNull is the same for a text key, where the empty string is never a real value either.
@@ -674,8 +688,8 @@ func (s *Store) entryParams(e domain.Entry) (db.CreateEntryParams, error) {
 		ID: e.ID, WorkID: e.WorkID, RatingQ: int64(e.Rating), RatingScale: domain.RatingScale,
 		Favourite: boolToInt(e.Favourite), Season: nullableInt(e.Season), Verdict: e.Verdict, Body: e.Body,
 		BodyOrigin: string(e.BodyOrigin), ImportedFrom: e.ImportedFrom, BodySpansJson: string(spans),
-		Format: e.Format, FinishedOn: nullableString(e.FinishedOn), Status: status,
-		CreatedAt: now, UpdatedAt: now,
+		Format: e.Format, Completion: string(e.CompletionState()), Progress: e.Normalized().Progress,
+		FinishedOn: nullableString(e.FinishedOn), Status: status, CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
 
@@ -696,6 +710,7 @@ func entryFromRow(row db.Entry) domain.Entry {
 		Favourite: row.Favourite == 1, Season: intPtr(row.Season), Verdict: row.Verdict, Body: row.Body,
 		BodyOrigin: domain.BodyOrigin(row.BodyOrigin), ImportedFrom: row.ImportedFrom,
 		Format: row.Format, FinishedOn: derefString(row.FinishedOn), Status: domain.Status(row.Status),
+		Completion: domain.Completion(row.Completion), Progress: row.Progress,
 		Deleted: row.DeletedAt != nil,
 	}
 	_ = json.Unmarshal([]byte(row.BodySpansJson), &e.BodySpans)

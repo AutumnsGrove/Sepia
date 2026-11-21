@@ -42,6 +42,10 @@ type seededEntry struct {
 	Rating     int
 	Favourite  bool
 	Body       string
+	// Completion is the shelf. Empty is an ordinary finished review, which is what most of them are.
+	Completion string
+	// Progress is how far she got, only ever set on an abandoned entry.
+	Progress string
 	// SameWorkAs makes this a second entry on an existing seeded title, which is a revisit rather than a new work.
 	SameWorkAs string
 	Answers    []domain.Answer
@@ -147,6 +151,19 @@ func seedEntries() []seededEntry {
 			Title: "The Salt Road", Medium: "book", Year: 2021, Creator: "T. Okonjo", CreatorOf: "author",
 			Format: "paperback", FinishedOn: "", Rating: 19, SameWorkAs: "The Salt Road",
 			Body: "Reread it and it holds up completely. No date on this one because I did not write down when I finished it.",
+		},
+		// The two shelves that are not a finished review: one she put down, and one she means to read. Neither has a
+		// rating, and the wanted one has nothing written at all, which is the whole point of it.
+		{
+			Title: "A Cold Inheritance", Medium: "tv", Year: 2024, Creator: "P. Vandermeer", CreatorOf: "creator",
+			Format: "streaming", FinishedOn: "2026-11-12", Rating: 0, Completion: "abandoned",
+			Progress: "two episodes and the first ten minutes of the third",
+			Body:     "the house was beautiful and everybody in it was unpleasant, and after two hours i could not tell you why any of them wanted anything",
+		},
+		{
+			Title: "The Quarry Year", Medium: "book", Year: 2022, Creator: "S. Adeyemi", CreatorOf: "author",
+			Rating: 0, Completion: "want_to",
+			Body: "",
 		},
 	}
 }
@@ -290,12 +307,18 @@ func seedSavedEntry(ctx context.Context, engine *session.Engine, seeded seededEn
 	if err != nil {
 		return domain.Entry{}, err
 	}
+	completion := seeded.Completion
+	if completion == "" {
+		completion = string(domain.CompletionFinished)
+	}
 	set := map[string]json.RawMessage{
 		"rating":      json.RawMessage(fmt.Sprintf("%d", seeded.Rating)),
 		"body":        json.RawMessage(quote(seeded.Body)),
 		"format":      json.RawMessage(quote(seeded.Format)),
 		"favourite":   json.RawMessage(fmt.Sprintf("%t", seeded.Favourite)),
 		"finished_on": json.RawMessage(quote(seeded.FinishedOn)),
+		"completion":  json.RawMessage(quote(completion)),
+		"progress":    json.RawMessage(quote(seeded.Progress)),
 	}
 	edited, err := engine.EditDraft(ctx, sess.ID, session.Edit{BaseVersion: card.Version, Set: set})
 	if err != nil {

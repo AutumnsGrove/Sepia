@@ -152,6 +152,14 @@ const eventsSchema = `{
         "imported"
       ]
     },
+    "completion": {
+      "description": "What she has to say about the work, kept apart from status. want_to is a list, finished a review, abandoned a work she stopped. A finished entry needs a rating and a body, an abandoned one a body, and a wanted one only the work.",
+      "enum": [
+        "want_to",
+        "finished",
+        "abandoned"
+      ]
+    },
     "work": {
       "type": "object",
       "required": [
@@ -442,6 +450,7 @@ const eventsSchema = `{
         "rating",
         "body",
         "body_origin",
+        "completion",
         "blocks"
       ],
       "properties": {
@@ -498,6 +507,14 @@ const eventsSchema = `{
         "finished_on": {
           "type": "string",
           "format": "date"
+        },
+        "completion": {
+          "$ref": "#/$defs/completion"
+        },
+        "progress": {
+          "description": "How far she got, in her own words. Only meaningful on an abandoned entry.",
+          "type": "string",
+          "maxLength": 200
         },
         "blocks": {
           "type": "object",

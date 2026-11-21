@@ -23,6 +23,8 @@
     age?: string;
     /** What a draft is waiting for, shown with its own icon. */
     waiting?: string;
+    /** The shelf, when it is not an ordinary finished review: "didn't finish" or "wanted". */
+    badge?: string;
     onclick?: () => void;
   }
   let {
@@ -36,6 +38,7 @@
     note,
     age,
     waiting,
+    badge,
     onclick,
   }: Props = $props();
 
@@ -49,6 +52,7 @@
     <span class="body">
       <span class="tt">{title}</span>
       {#if meta}<span class="mm">{meta}</span>{/if}
+      {#if badge}<span class="shelf">{badge}</span>{/if}
       {#if note}<span class="sn">{note}</span>{/if}
       {#if waiting}<span class="st">{waiting}</span>{/if}
     </span>
@@ -107,6 +111,18 @@
   .mm {
     font-size: 0.8125rem;
     color: var(--text-2);
+  }
+  /* The shelf badge. Quiet on purpose: it is a fact about the row, not a warning about it. */
+  .shelf {
+    justify-self: start;
+    margin-top: 0.15rem;
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    letter-spacing: 0.02em;
+    color: var(--text-2);
+    white-space: nowrap;
   }
   .sn {
     margin-top: 0.25rem;

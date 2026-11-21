@@ -76,3 +76,35 @@ func FuzzParseRating(f *testing.F) {
 		}
 	})
 }
+
+// FuzzCompletionCues feeds arbitrary text to the shelf read. The invariants are the ones the card depends on: the
+// answer is always one of the three shelves, and a phrase the cues do not know never becomes a guess.
+func FuzzCompletionCues(f *testing.F) {
+	seeds := []string{
+		"finished the lantern keeper last night, 4.5",
+		"couldn't get into it, about a hundred pages in",
+		"want to read piranesi next",
+		"i don't want to read that",
+		"finished dune and now i want to read messiah",
+		"",
+		"dnf",
+		"★★★★",
+		strings.Repeat("gave up on ", 50),
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, text string) {
+		got, ok := CompletionCues(text)
+		switch got {
+		case CompletionWantTo, CompletionFinished, CompletionAbandoned:
+		default:
+			t.Fatalf("CompletionCues(%q) = %q, which is not a shelf", text, got)
+		}
+		// A message the cues cannot read is finished and unset, never a guess at another shelf.
+		if !ok && got != CompletionFinished {
+			t.Fatalf("CompletionCues(%q) = %q with ok false", text, got)
+		}
+	})
+}
