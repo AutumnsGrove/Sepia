@@ -297,9 +297,10 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 	} else if query.Sort == domain.SortRating {
 		page, err := s.ReadQueries().ListLibraryByRating(ctx, db.ListLibraryByRatingParams{
 			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
-			BeforeRank:   rankNull(cursor.CompletionRank, cursor.ID != ""),
-			BeforeRating: int64Null(cursor.Rating), BeforeCreatedAt: stringNull(cursor.CreatedAt),
-			BeforeID: beforeID, RowLimit: int64(limit + 1),
+			BeforeRank:      rankNull(cursor.CompletionRank, cursor.ID != ""),
+			BeforeRating:    rankNull(cursor.Rating, cursor.ID != ""),
+			BeforeCreatedAt: stringNull(cursor.CreatedAt),
+			BeforeID:        beforeID, RowLimit: int64(limit + 1),
 		})
 		if err != nil {
 			return nil, domain.Cursor{}, fmt.Errorf("store: list library by rating: %w", err)
@@ -365,17 +366,10 @@ func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 	return nil
 }
 
-// int64Null turns a cursor's number into the nullable argument a first page needs. Zero is never a real key on any
-// list Sepia pages, so it reads as "no cursor".
-func int64Null(value int) sql.NullInt64 {
-	if value == 0 {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: int64(value), Valid: true}
-}
-
-// rankNull is a cursor key whose zero is a real value: an unfinished entry ranks 0, so only an empty cursor means
-// there is no key. int64Null cannot be used here, because it reads zero as absent.
+// rankNull turns a cursor's number into the nullable argument a first page needs. It takes the presence flag rather
+// than reading zero as absent, because zero is a real key on a rating-sorted library: an unfinished entry has no
+// rating, so its rating and its rank are both 0. Only an empty cursor means there is no key at all, and getting that
+// wrong ends a page early with rows still in the list.
 func rankNull(value int, present bool) sql.NullInt64 {
 	return sql.NullInt64{Int64: int64(value), Valid: present}
 }

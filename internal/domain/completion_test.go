@@ -187,7 +187,9 @@ func TestCompletionCues(t *testing.T) {
 		want Completion
 		ok   bool
 	}{
-		{"no cue", "finished the lantern keeper last night, 4.5", "", false},
+		{"no cue", "the middle dragged a bit but the end stayed with me", "", false},
+		{"finished out loud", "finished the lantern keeper last night, 4.5", CompletionFinished, true},
+		{"read it", "i read it in two nights and loved it", CompletionFinished, true},
 		{"couldn't get into it", "i couldn't get into the lantern keeper", CompletionAbandoned, true},
 		{"gave up", "i gave up on the salt road about halfway", CompletionAbandoned, true},
 		{"didn't finish", "didn't finish the bear season three", CompletionAbandoned, true},
@@ -204,7 +206,9 @@ func TestCompletionCues(t *testing.T) {
 
 		// Negation and cross-talk must not flip a card.
 		{"negated want", "i don't want to read that", "", false},
-		{"finished then want the sequel", "finished dune and now i want to read messiah", "", false},
+		{"negated finish", "i haven't finished it yet", "", false},
+		// One sentence doing two jobs is read as the work she is logging, which is the one she finished.
+		{"finished then want the sequel", "finished dune and now i want to read messiah", CompletionFinished, true},
 		{"want to read it is not a past tense", "i want to read it", CompletionWantTo, true},
 	}
 	for _, c := range cases {

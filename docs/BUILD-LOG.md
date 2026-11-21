@@ -1244,3 +1244,34 @@ shelf chips are plain chips rather than a designed set of shelves.
 
 **Live check for the operator.** None. No provider, no image, no new dependency, and the rule change was decided
 before the slice started and written into `PLAN.md` in the same change.
+
+## 2026-11-20, S21 review, four findings and an accessibility fix
+
+**Fixed from review.** Four real defects, each with a test that failed first:
+
+1. **The rating order stopped at its first unrated row.** `BeforeRating` still went through `int64Null`, which reads
+   zero as "no cursor", and every abandoned and wanted row is rated 0. A page boundary landing on one made the
+   row-value comparison NULL, so the next page came back empty and the rest of the list was never shown.
+   `TestTheRatingCursorSurvivesAPageThatEndsOnAnUnratedRow` pages four rows two at a time and saw two before the fix.
+   `int64Null` is now deleted: `rankNull` takes a presence flag, and zero is a key on both numeric keys.
+2. **S21.8 was documented but not implemented.** A work on her wanted list now goes straight to a revision of that
+   row, without the "a new entry or the old one" question, which is meaningless for a book she has not read.
+   `reviseInto` re-runs `applyParsed` on the revision, because the turn's parse ran before the card existed.
+3. **The model's `completion` argument was applied too late.** The shelf now decides what the card is asked for
+   before `fillRating`/`fillBody` run, so a model that correctly says "abandoned" when the cues missed her words is
+   not answered with "How would you rate it, out of five?".
+4. **A wanted card still drew the star control.** Only the label was inside the conditional; the `<Rating>` sat
+   outside it. The whole section is now conditional.
+
+**Two things the review did not name, found while testing the above.** `CompletionCues` could never return
+`finished`, so a wish could only become a review by tapping the shelf: it now reads "finished", "read it", "done
+with" and the rest out loud, with negation respected ("i haven't finished it yet" is not a finish). And
+`ask_reviewer` now refuses to run on a wish, because asking what she thought of a book she has not read is the same
+nudge as asking a stopped one for stars.
+
+**An accessibility gap the new test exposed.** `SessionScreen` rendered a `<div class="screen">` with no `<main>` and
+no `<h1>`: the session screen was the one screen the axe pass had never covered, because the only existing axe check
+on it ran with a modal dialog open, which narrows axe's scope. The route now owns the `<main>`, the top bar's title
+is the `<h1>`, and the card's work title is an `<h2>` rather than an `<h3>`. The component keeps a `<div>` because
+the gallery renders many frames on one page, where a landmark per frame would be invalid. The new end-to-end test
+for a wish runs a full axe pass on that screen and now passes; it did not before.

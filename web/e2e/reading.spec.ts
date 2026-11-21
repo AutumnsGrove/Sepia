@@ -92,7 +92,9 @@ test('resuming a draft returns to its card', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/s\/[^/]+$/);
   await expect(page.getByLabel('Say what you thought')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Hollow Deep' })).toBeVisible();
+  // The screen titles the card in its top bar and the card names the work under it, so both are headings.
+  await expect(page.getByRole('heading', { level: 1, name: 'Hollow Deep' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Hollow Deep' })).toBeVisible();
 });
 
 test('the library groups by month, filters by medium, and sorts', async ({ page }) => {

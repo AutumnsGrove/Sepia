@@ -120,6 +120,8 @@
   }
 </script>
 
+<!-- A div, not a main: the screen is a component the gallery renders many of on one page, so the landmark belongs
+     to the route that renders one of them. -->
 <div class="screen">
   {#if problem}
     <p class="sendproblem" role="alert">{problem}</p>
@@ -128,7 +130,7 @@
     <button type="button" class="iconbtn" aria-label="Back" onclick={handlers.onback}>
       <ArrowLeft size={22} aria-hidden="true" />
     </button>
-    <div class="t">{sessionTitle(session)}</div>
+    <h1 class="t">{sessionTitle(session)}</h1>
     {#if handlers.onmore}
       <button type="button" class="iconbtn" aria-label="More" onclick={handlers.onmore}>
         <Ellipsis size={22} aria-hidden="true" />
@@ -334,6 +336,7 @@
   }
   .topbar .t {
     flex: 1;
+    margin: 0;
     font: 500 1rem 'Lexend';
     text-align: center;
     color: var(--text);

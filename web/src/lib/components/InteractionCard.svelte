@@ -139,7 +139,9 @@
     </div>
   {:else if kind === 'choose_candidate'}
     <p class="q">Which one?</p>
-    <p class="hintline">Tap the one you finished.</p>
+    <!-- Neutral on purpose: the same card picks the work for a review, a work she stopped, and a work she means to
+         read, and "the one you finished" was not true for two of the three. -->
+    <p class="hintline">Tap the one you mean.</p>
     <div class="opts">
       {#each candidates as candidate (candidate.id)}
         <button

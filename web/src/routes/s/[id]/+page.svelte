@@ -257,14 +257,16 @@
   <title>{session.draft?.work.title ?? 'New entry'} · Sepia</title>
 </svelte:head>
 
-<SessionScreen
-  {session}
-  connection={shownConnection}
-  {handlers}
-  {pending}
-  {savedEntry}
-  {versions}
-  {caughtUp}
-  problem={sendProblem}
-  {restore}
-/>
+<main>
+  <SessionScreen
+    {session}
+    connection={shownConnection}
+    {handlers}
+    {pending}
+    {savedEntry}
+    {versions}
+    {caughtUp}
+    problem={sendProblem}
+    {restore}
+  />
+</main>
