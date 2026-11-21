@@ -1295,3 +1295,17 @@ the" unless she also said "finished" or "done with".
 said about a work she put down. The payload now carries the completion, and `revisitMeta` in `reading.ts` says
 "stopped <date>", "wanted", or "finished <date> · N stars", and never prints a zero. It is a pure function with its
 own tests rather than a line in the component.
+
+## 2026-11-20, S21 third review, the unguarded payload key
+
+**The one gap.** The fix for the abandoned revisit card was a single key in the revisit payload, and nothing tested
+it: `revisitMeta` falls back to `finished` when the field is absent, and its unit tests build the payload by hand, so
+removing the key left every test green and restored "finished <date>" for a row she put down.
+`TestTheRevisitCardCarriesTheShelf` drives a second turn into the real revisit card and asserts `previous.completion`
+is `abandoned`; it fails when the key is removed. That is the shape a payload fix needs: assert the payload the
+service actually builds, not the one a test constructs.
+
+**A latent copy of the same bug.** `session.Revisit` had no `completion` field, so `OfferRevisit` would have described
+an abandoned row as a finish. It has no production caller today, which is why the review could only call it
+non-blocking, but a path that is known to be wrong is the thing this review round already caught twice. The field is
+there now and `OfferRevisit` fills it.

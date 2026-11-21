@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
@@ -237,5 +238,74 @@ func TestSaveEntryAppliesTheModelsShelfBeforeAsking(t *testing.T) {
 	}
 	if !card.Confirmable {
 		t.Errorf("an abandoned card with her words is not confirmable: missing %v", card.Missing)
+	}
+}
+
+// The revisit card describes the entry already on the work, and an abandoned row has no rating and a date she stopped
+// on. The payload has to carry the shelf, or the card says "finished <date> · 0 stars" about a work she put down.
+// This guards the key itself: revisitMeta falls back to "finished" when it is missing, so a dropped field would
+// silently restore the old sentence with every other test still green.
+func TestTheRevisitCardCarriesTheShelf(t *testing.T) {
+	r := newRig(t, rigOptions{script: []world.ChatTurn{
+		{ToolCalls: []world.ChatToolCall{toolCall("c1", "media_lookup", `{"title":"The Lantern Keeper","medium":"book"}`)}},
+		{ToolCalls: []world.ChatToolCall{toolCall("c2", "merge_candidates", `{"candidate_id":"openlibrary|OL1W"}`)}},
+		{Text: "The card is ready."},
+	}})
+	scriptBook(r.fake)
+	r.responder.script("revisit_choice", "new_entry")
+	ctx := context.Background()
+
+	// A work she stopped, already saved, on the provider id the lookup returns.
+	if err := r.store.SaveWork(ctx, domain.Work{
+		ID: "w-ab", Medium: "book", Title: "The Lantern Keeper", Verified: true,
+		PrimaryProvider: "openlibrary", PrimaryID: "OL1W",
+	}); err != nil {
+		t.Fatalf("SaveWork: %v", err)
+	}
+	dropped := domain.Entry{
+		ID: "e-ab", WorkID: "w-ab", Status: domain.StatusDraft, Completion: domain.CompletionAbandoned,
+		Body: "the middle lost me", BodyOrigin: domain.BodyTyped, Progress: "two episodes",
+		RatingScale: domain.RatingScale, FinishedOn: "2026-11-12",
+	}
+	if err := r.store.CreateDraft(ctx, dropped); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	if _, err := r.store.SaveEntry(ctx, dropped); err != nil {
+		t.Fatalf("SaveEntry: %v", err)
+	}
+
+	sess, err := r.session.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.agent.HandleMessage(ctx, TurnInput{
+		SessionID: sess.ID, Text: "the lantern keeper was slow in the middle", ClientMsgID: "m1",
+	}); err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+
+	var previous map[string]any
+	for _, question := range r.responder.seen {
+		if question.Kind != "revisit_choice" {
+			continue
+		}
+		var payload struct {
+			Previous map[string]any `json:"previous"`
+		}
+		if err := json.Unmarshal(question.Payload, &payload); err != nil {
+			t.Fatalf("payload: %v", err)
+		}
+		previous = payload.Previous
+	}
+	if previous == nil {
+		t.Fatal("no revisit_choice was asked, so the payload cannot be checked")
+	}
+	if previous["completion"] != string(domain.CompletionAbandoned) {
+		t.Errorf("previous.completion = %v, want %q; without it the card calls this a finish",
+			previous["completion"], domain.CompletionAbandoned)
+	}
+	// A dropped work has no rating, and the card must not be handed a zero to print as stars.
+	if previous["rating_q"] != float64(0) {
+		t.Errorf("previous.rating_q = %v, want 0", previous["rating_q"])
 	}
 }

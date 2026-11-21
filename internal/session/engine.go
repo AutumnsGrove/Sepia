@@ -828,13 +828,16 @@ func (e *Engine) IncludeLeftOut(ctx context.Context, sessionID string, baseVersi
 
 // Revisit is the summary of an existing entry, which is what the revisit choice shows.
 type Revisit struct {
-	EntryID  string          `json:"entry_id"`
-	WorkID   string          `json:"work_id"`
-	Title    string          `json:"title"`
-	Rating   int             `json:"rating_q"`
-	Body     string          `json:"body,omitempty"`
-	Finished string          `json:"finished_on,omitempty"`
-	Answer   json.RawMessage `json:"-"`
+	EntryID string `json:"entry_id"`
+	WorkID  string `json:"work_id"`
+	Title   string `json:"title"`
+	Rating  int    `json:"rating_q"`
+	Body    string `json:"body,omitempty"`
+	// Completion says which shelf the previous entry is on, so the card never describes a work she stopped as a
+	// zero-star finish. The agent's own revisit payload carries the same field.
+	Completion string          `json:"completion,omitempty"`
+	Finished   string          `json:"finished_on,omitempty"`
+	Answer     json.RawMessage `json:"-"`
 }
 
 // OfferRevisit asks whether a new entry or an edit of the one already saved is wanted. She answers
@@ -842,7 +845,8 @@ type Revisit struct {
 func (e *Engine) OfferRevisit(ctx context.Context, sessionID string, previous domain.Entry, workTitle string) (domain.Interaction, error) {
 	return e.Ask(ctx, sessionID, "revisit_choice", Revisit{
 		EntryID: previous.ID, WorkID: previous.WorkID, Title: workTitle,
-		Rating: previous.Rating, Body: previous.Body, Finished: previous.FinishedOn,
+		Rating: previous.Rating, Body: previous.Body, Completion: string(previous.CompletionState()),
+		Finished: previous.FinishedOn,
 	})
 }
 
