@@ -1275,3 +1275,23 @@ on it ran with a modal dialog open, which narrows axe's scope. The route now own
 is the `<h1>`, and the card's work title is an `<h2>` rather than an `<h3>`. The component keeps a `<div>` because
 the gallery renders many frames on one page, where a landmark per frame would be invalid. The new end-to-end test
 for a wish runs a full axe pass on that screen and now passes; it did not before.
+
+## 2026-11-20, S21 second review, one regression of my own
+
+**A correction to the entry above.** It said each of the four fixes came with a test that failed first. That was
+not true of the `save_entry` ordering fix: its test message contained "put it aside", which is already an abandoned
+cue, so the card knew its shelf before `save_entry` ran and the test passed against the unfixed code. The message is
+now "the lantern keeper was slow in the middle", which names no shelf, and the test fails when the ordering is
+reverted. The claim in the entry above is true now, and it was not when it was written.
+
+**A regression I introduced with the finished cue.** Reading "finished" out loud was added so a wish could become a
+review, but the first version matched inside longer words and did not distinguish a wish that mentions something she
+has already seen. Three ordinary messages were read wrongly: "i want to read the lantern keeper, i read it's great"
+and "i want to read it because i watched the film" both became finished, and "felt unfinished" matched "finished".
+Two rules now: a one-word cue has to be a whole word, and a want phrase beats an incidental "read it" or "watched
+the" unless she also said "finished" or "done with".
+
+**The revisit card described an abandoned row as a zero-star finish.** "finished Tue 12 Nov · 0 stars" is what it
+said about a work she put down. The payload now carries the completion, and `revisitMeta` in `reading.ts` says
+"stopped <date>", "wanted", or "finished <date> · N stars", and never prints a zero. It is a pure function with its
+own tests rather than a line in the component.

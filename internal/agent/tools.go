@@ -533,7 +533,7 @@ func (s *RunState) startCard(ctx context.Context, workID string) error {
 		// The payload follows the protocol's tentative example: the previous entry, and the two choices by value.
 		resolution, askErr := s.askAny(ctx, "revisit_choice", map[string]any{
 			"previous": map[string]any{
-				"entry_id": saved.ID, "rating_q": saved.Rating,
+				"entry_id": saved.ID, "rating_q": saved.Rating, "completion": string(saved.CompletionState()),
 				"finished_on": saved.FinishedOn, "verdict": saved.Verdict,
 			},
 			"options": []map[string]string{

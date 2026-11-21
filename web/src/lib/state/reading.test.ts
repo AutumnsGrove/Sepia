@@ -12,6 +12,7 @@ import {
   groupByMonth,
   otherEntries,
   questionAnswers,
+  revisitMeta,
   sectionsFor,
   versionRows,
   waitingText,
@@ -285,5 +286,31 @@ describe('the shelves', () => {
     expect(changeBetween(entry({ progress: undefined }), entry({ progress: '100 pages' }))).toBe(
       'How far you got changed.',
     );
+  });
+});
+
+describe('the revisit line', () => {
+  it('describes a finished entry with its date and its stars', () => {
+    const line = revisitMeta({ completion: 'finished', rating_q: 18, finished_on: '2026-11-02' });
+    expect(line).toContain('finished');
+    expect(line).toContain('4.5 stars');
+    expect(line).not.toContain('0 stars');
+  });
+
+  it('never calls an unfinished row a zero-star finish', () => {
+    const abandoned = revisitMeta({
+      completion: 'abandoned',
+      rating_q: 0,
+      finished_on: '2026-11-02',
+    });
+    expect(abandoned).toContain('stopped');
+    expect(abandoned).not.toContain('finished');
+    expect(abandoned).not.toContain('stars');
+    expect(revisitMeta({ completion: 'abandoned', rating_q: 0 })).toBe("didn't finish");
+  });
+
+  it('says wanted for a work she has not read', () => {
+    expect(revisitMeta({ completion: 'want_to' })).toBe('wanted');
+    expect(revisitMeta({ completion: 'want_to', rating_q: 0 })).not.toContain('stars');
   });
 });

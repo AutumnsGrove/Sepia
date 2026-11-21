@@ -7,6 +7,7 @@
   import Rating from './Rating.svelte';
   import Tabs from './Tabs.svelte';
   import { lookupSentence } from '../session/copy';
+  import { revisitMeta } from '../state/reading';
   import { describeAnswer, questionAnswer, skippedQuestions } from '../session/answers';
   import { untrack } from 'svelte';
   import { browserStorage, loadDraft, saveDraft } from '../session/answerDrafts';
@@ -110,13 +111,6 @@
 
   function submitQuestions() {
     onanswer(questionAnswer(answers));
-  }
-
-  function previousMeta(): string {
-    const parts: string[] = [];
-    if (typeof previous.finished_on === 'string') parts.push(`finished ${previous.finished_on}`);
-    if (typeof previous.rating_q === 'number') parts.push(`${previous.rating_q / 4} stars`);
-    return parts.join(' · ');
   }
 </script>
 
@@ -238,7 +232,7 @@
   {:else if kind === 'revisit_choice'}
     <p class="q">You have logged this before.</p>
     <p class="hintline">
-      {previousMeta()}{#if typeof previous.verdict === 'string' && previous.verdict}— “{previous.verdict}”{/if}
+      {revisitMeta(previous)}{#if typeof previous.verdict === 'string' && previous.verdict}— “{previous.verdict}”{/if}
     </p>
     <div class="opts">
       {#each options as option (option.value)}

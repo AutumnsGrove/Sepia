@@ -209,6 +209,15 @@ func TestCompletionCues(t *testing.T) {
 		{"negated finish", "i haven't finished it yet", "", false},
 		// One sentence doing two jobs is read as the work she is logging, which is the one she finished.
 		{"finished then want the sequel", "finished dune and now i want to read messiah", CompletionFinished, true},
+
+		// A wish with an incidental past phrase in it is still a wish. "read it" and "watched the" appear in sentences
+		// about wanting to read or watch something, and reading those as a finish asks her to rate a book she has not
+		// opened.
+		{"wish with read it", "i want to read the lantern keeper, i read it's great", CompletionWantTo, true},
+		{"wish with watched the", "i want to read it because i watched the film", CompletionWantTo, true},
+		// A single word has to be a whole word: "unfinished" is not "finished".
+		{"unfinished", "the lantern keeper felt unfinished", "", false},
+		{"a finish inside a longer word is not a cue", "the ending left me unfulfilled and unfinished", "", false},
 		{"want to read it is not a past tense", "i want to read it", CompletionWantTo, true},
 	}
 	for _, c := range cases {
