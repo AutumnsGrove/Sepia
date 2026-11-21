@@ -34,6 +34,7 @@ S00 walking skeleton ─┬─► S01 spikes (operator keys, gates G1 G2) ──
 S09 + S12 ─► S13 deploy and update ─► S14 backups ─► [Phase 1 gate G6, live on the potato]
 Phase 2:  S15 web fallback ─┐
           S16 search and chat ├─► S17 more media (repeatable)
+          S21 wishlist and didn't finish (needs only S04, S09, S12, all built)
 Phase 3:  S18 screenshot import
 Phase 4:  S19 export, import, verify
 Later:    S20 parked
@@ -76,6 +77,7 @@ S09 needs S02, S07 and S08. S13 needs a working app (S09 and S12).
 | S18 | [Screenshot import](S18-screenshot-import.md) | 3 | planned |
 | S19 | [Export, import, verify](S19-export-import-verify.md) | 4 | planned |
 | S20 | [Parked](S20-parked.md) | 5 and 6 | parked |
+| S21 | [Wishlist and didn't finish](S21-wishlist-and-unfinished.md) | 2 | planned |
 
 ## Phase gates
 

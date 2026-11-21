@@ -357,15 +357,33 @@ func (e *Engine) WaitingAndTitle(ctx context.Context, sessionID string) (Waiting
 	if work, workErr := e.store.Work(ctx, entry.WorkID); workErr == nil {
 		title = work.Title
 	}
+	// A rating is what a finished entry needs, so a card she stopped or only put on a list is not asked for one. A wish
+	// needs nothing but the work, which the earlier pick-work check already covers.
 	return waitingReason(entry, unverified), title, nil
 }
 
-// waitingReason applies the order above. Only a rating and a body block a save (docs/ENTRY_CARD.md 2); the others
-// are what the card is asking her to look at next.
+// waitingReason applies the order above. What blocks a save depends on the shelf (docs/ENTRY_CARD.md 2): a finished
+// entry needs a rating and a body, an abandoned one a body, and a wanted one only its work. The rest are what the
+// card is asking her to look at next.
 func waitingReason(entry domain.Entry, unverified bool) WaitingReason {
+	switch entry.CompletionState() {
+	case domain.CompletionWantTo:
+		// A wish has nothing to rate and nothing to have read. The one thing worth flagging is a work whose details
+		// she has not accepted yet.
+		if unverified {
+			return WaitingFields
+		}
+		return WaitingReady
+	case domain.CompletionFinished:
+		if entry.Rating == 0 {
+			return WaitingRating
+		}
+	case domain.CompletionAbandoned:
+		// A work she stopped needs her words and nothing else, so it falls through to the body check below. Asking it
+		// for a rating would be asking her to score something she did not finish.
+	}
+	// An abandoned entry reaches here without a rating check, which is the point: it saves on her words alone.
 	switch {
-	case entry.Rating == 0:
-		return WaitingRating
 	case entry.Body == "":
 		return WaitingBody
 	case unverified:
@@ -455,7 +473,12 @@ func (e *Engine) EditDraft(ctx context.Context, sessionID string, in Edit) (Draf
 	}
 	_, _, _, err = e.store.UpdateDraft(ctx, store.UpdateDraft{
 		SessionID: sessionID, BaseVersion: in.BaseVersion, EntryID: sess.EntryID, ClientMsgID: in.ClientMsgID,
-		Mutate: func(entry *domain.Entry) { patch(entry) },
+		Mutate: func(entry *domain.Entry) {
+			patch(entry)
+			// A patch that moves the card off "abandoned" must not leave a how-far line behind: the card never shows
+			// it again, so it would travel into the saved row as an opinion about nothing.
+			*entry = entry.Normalized()
+		},
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrStaleVersion) {
@@ -503,6 +526,22 @@ func parsePatch(set map[string]json.RawMessage) (func(*domain.Entry), error) {
 				return nil, invalid(field)
 			}
 			mutators = append(mutators, func(entry *domain.Entry) { entry.Format = value })
+		case "completion":
+			var value string
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return nil, invalid(field)
+			}
+			completion, ok := domain.ParseCompletion(value)
+			if !ok {
+				return nil, invalid(field)
+			}
+			mutators = append(mutators, func(entry *domain.Entry) { entry.Completion = completion })
+		case "progress":
+			var value string
+			if err := json.Unmarshal(raw, &value); err != nil || len(value) > domain.MaxProgressLength {
+				return nil, invalid(field)
+			}
+			mutators = append(mutators, func(entry *domain.Entry) { entry.Progress = value })
 		case "finished_on":
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil {
@@ -789,13 +828,16 @@ func (e *Engine) IncludeLeftOut(ctx context.Context, sessionID string, baseVersi
 
 // Revisit is the summary of an existing entry, which is what the revisit choice shows.
 type Revisit struct {
-	EntryID  string          `json:"entry_id"`
-	WorkID   string          `json:"work_id"`
-	Title    string          `json:"title"`
-	Rating   int             `json:"rating_q"`
-	Body     string          `json:"body,omitempty"`
-	Finished string          `json:"finished_on,omitempty"`
-	Answer   json.RawMessage `json:"-"`
+	EntryID string `json:"entry_id"`
+	WorkID  string `json:"work_id"`
+	Title   string `json:"title"`
+	Rating  int    `json:"rating_q"`
+	Body    string `json:"body,omitempty"`
+	// Completion says which shelf the previous entry is on, so the card never describes a work she stopped as a
+	// zero-star finish. The agent's own revisit payload carries the same field.
+	Completion string          `json:"completion,omitempty"`
+	Finished   string          `json:"finished_on,omitempty"`
+	Answer     json.RawMessage `json:"-"`
 }
 
 // OfferRevisit asks whether a new entry or an edit of the one already saved is wanted. She answers
@@ -803,7 +845,8 @@ type Revisit struct {
 func (e *Engine) OfferRevisit(ctx context.Context, sessionID string, previous domain.Entry, workTitle string) (domain.Interaction, error) {
 	return e.Ask(ctx, sessionID, "revisit_choice", Revisit{
 		EntryID: previous.ID, WorkID: previous.WorkID, Title: workTitle,
-		Rating: previous.Rating, Body: previous.Body, Finished: previous.FinishedOn,
+		Rating: previous.Rating, Body: previous.Body, Completion: string(previous.CompletionState()),
+		Finished: previous.FinishedOn,
 	})
 }
 

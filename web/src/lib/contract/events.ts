@@ -306,6 +306,10 @@ export type Instant = string;
 export type Version = number;
 export type Medium = 'film' | 'tv' | 'book' | 'game' | 'album' | 'podcast' | 'theatre' | 'other';
 export type BodyOrigin = 'extracted' | 'typed' | 'mixed' | 'imported';
+/**
+ * What she has to say about the work, kept apart from status. want_to is a list, finished a review, abandoned a work she stopped. A finished entry needs a rating and a body, an abandoned one a body, and a wanted one only the work.
+ */
+export type Completion = 'want_to' | 'finished' | 'abandoned';
 export type BlockState = 'verified' | 'unverified' | 'accepted' | 'image_read' | 'empty';
 export type Usd = number;
 export type InteractionKind =
@@ -427,6 +431,11 @@ export interface Draft {
   body_spans?: Span[];
   format?: string;
   finished_on?: string;
+  completion: Completion;
+  /**
+   * How far she got, in her own words. Only meaningful on an abandoned entry.
+   */
+  progress?: string;
   blocks: {
     work: BlockState;
     rating: 'set' | 'empty';

@@ -1,2 +1,9 @@
 Build the draft card from exact quotes copied from her messages. It saves nothing: she confirms the card.
 It refuses a body that is not her own words, and it never sets a rating the service did not read.
+
+completion says which shelf the card is on: want_to, finished or abandoned. Leave it out to keep the shelf
+the service already read from her words. A wanted work needs only the work, an abandoned one needs a body
+and no rating, and a finished one needs both.
+
+progress_quote is how far she got, quoted from her message ("about 100 pages in", "two episodes"). It is
+only used on an abandoned card, and it is refused if it is not exactly her words. Never write one.

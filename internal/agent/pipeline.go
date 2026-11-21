@@ -120,6 +120,11 @@ func (a *Agent) applyParsed(ctx context.Context, state *RunState) error {
 			patch["format"] = mustJSON(format)
 		}
 	}
+	// The shelf is set whenever she names one, not only on a fresh card, because "actually i couldn't get into it"
+	// is a later message that changes the answer. A message that names no shelf leaves it alone.
+	if state.Parsed.CompletionFound && state.Parsed.Completion != state.Draft.Entry.CompletionState() {
+		patch["completion"] = mustJSON(string(state.Parsed.Completion))
+	}
 	if len(patch) == 0 {
 		return nil
 	}

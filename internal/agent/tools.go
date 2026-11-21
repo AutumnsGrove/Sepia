@@ -62,6 +62,14 @@ func (a *Agent) newTools() *tool.Registry {
 		Parameters: object(map[string]any{
 			"body_quotes":   map[string]any{"type": "array", "minItems": 0, "maxItems": 40, "items": map[string]any{"type": "string", "maxLength": 2000}},
 			"verdict_quote": stringProp("At most one short quote from her, or empty."),
+			"completion": map[string]any{
+				"type": "string", "enum": []string{"want_to", "finished", "abandoned"},
+				"description": "Which shelf the card is on. Leave it out to keep the one her words already named.",
+			},
+			"progress_quote": map[string]any{
+				"type": "string", "maxLength": 200,
+				"description": "How far she got, quoted from her, for an abandoned card only.",
+			},
 		}, []string{"body_quotes"}),
 		ReadOnly: false,
 	}, saveEntry))
@@ -471,7 +479,24 @@ func sameWork(stored, fetched domain.Work) bool {
 	return domain.SameWork(identity(stored), identity(fetched)) == domain.SameWorkSame
 }
 
-// startCard creates the draft, offering the revisit choice when the work already has a saved entry.
+// reviseInto opens a revision of a saved row, so the card she edits is that row rather than a second one beside it.
+//
+// The turn's parse ran before this card existed, so it has to run again for a revision: without it a wish being
+// turned into a review keeps the shelf and the rating of the wish, and she would be looking at a card that ignored
+// "finished it, 4.5". applyParsed fills only what the card is missing, so running it twice is harmless.
+func (s *RunState) reviseInto(ctx context.Context, saved domain.Entry) error {
+	draft, err := s.Agent.session.StartRevision(ctx, s.SessionID, saved)
+	if err != nil {
+		return err
+	}
+	s.Draft = &draft
+	s.Revises = saved.ID
+	return s.Agent.applyParsed(ctx, s)
+}
+
+// startCard creates the draft. A work she has already written about gets the revisit choice; a work on her wanted
+// list gets a revision of that row instead, because the wish is how the entry started and "a new entry or the old
+// one" is not a question about a book she has not read yet (docs/slices/S21-wishlist-and-unfinished.md, S21.8).
 func (s *RunState) startCard(ctx context.Context, workID string) error {
 	s.StartedCard = true
 	if s.Draft != nil {
@@ -485,18 +510,30 @@ func (s *RunState) startCard(ctx context.Context, workID string) error {
 	if err != nil {
 		return err
 	}
-	var saved *domain.Entry
+	var saved, wanted *domain.Entry
 	for i := range entries {
-		if entries[i].Status == domain.StatusSaved && !entries[i].Deleted {
-			saved = &entries[i]
-			break
+		if entries[i].Status != domain.StatusSaved || entries[i].Deleted {
+			continue
 		}
+		if entries[i].CompletionState() == domain.CompletionWantTo {
+			if wanted == nil {
+				wanted = &entries[i]
+			}
+			continue
+		}
+		if saved == nil {
+			saved = &entries[i]
+		}
+	}
+	if saved == nil && wanted != nil {
+		// The wish becomes the entry: same row, same history, no duplicate left behind on her list.
+		return s.reviseInto(ctx, *wanted)
 	}
 	if saved != nil && s.Agent.responder != nil {
 		// The payload follows the protocol's tentative example: the previous entry, and the two choices by value.
 		resolution, askErr := s.askAny(ctx, "revisit_choice", map[string]any{
 			"previous": map[string]any{
-				"entry_id": saved.ID, "rating_q": saved.Rating,
+				"entry_id": saved.ID, "rating_q": saved.Rating, "completion": string(saved.CompletionState()),
 				"finished_on": saved.FinishedOn, "verdict": saved.Verdict,
 			},
 			"options": []map[string]string{
@@ -507,13 +544,7 @@ func (s *RunState) startCard(ctx context.Context, workID string) error {
 		if askErr == nil {
 			choice, _ := decodeChoice(resolution)
 			if choice == "edit_existing" {
-				draft, revErr := s.Agent.session.StartRevision(ctx, s.SessionID, *saved)
-				if revErr != nil {
-					return revErr
-				}
-				s.Draft = &draft
-				s.Revises = saved.ID
-				return nil
+				return s.reviseInto(ctx, *saved)
 			}
 		}
 	}
@@ -521,11 +552,19 @@ func (s *RunState) startCard(ctx context.Context, workID string) error {
 }
 
 // startDraft creates a new card with the fields code already read.
+// startDraft creates the card. Everything the deterministic parse already read from her first message is set here,
+// because the card does not exist yet when applyParsed runs: the shelf, the rating, the date and the format all come
+// from her words rather than from the model.
 func (s *RunState) startDraft(ctx context.Context, workID string) error {
+	completion := domain.CompletionFinished
+	if s.Parsed.CompletionFound {
+		completion = s.Parsed.Completion
+	}
 	draft, err := s.Agent.session.StartDraft(ctx, s.SessionID, domain.Entry{
 		ID: s.Agent.newID(), WorkID: workID, Status: domain.StatusDraft,
 		Rating: s.Parsed.RatingQuarters(), RatingScale: domain.RatingScale,
 		BodyOrigin: domain.BodyTyped, Format: s.MediumFormat(), FinishedOn: s.Parsed.DateString(),
+		Completion: completion,
 	})
 	if err != nil {
 		return err
@@ -606,6 +645,14 @@ func askReviewer(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (
 	}
 	if state.Agent.banks == nil {
 		return tool.Errorf("the question banks are not set up"), nil
+	}
+	// A work she only means to read has nothing to ask about yet. The bank questions are what she thought of it, and
+	// she has not read it: asking would be the same nudge as asking a stopped book for stars.
+	if state.Draft != nil && state.Draft.Entry.CompletionState() == domain.CompletionWantTo {
+		state.AskedDescribe = true
+		return resultWithDetails(toolDetails{Summary: "A wish, so nothing to ask yet"},
+			"She only means to read this, so there is nothing to ask about it. Do not ask what she thought. "+
+				"Tell her it is on her list in one short sentence."), nil
 	}
 	medium := state.Medium
 	if medium == "" && state.Draft != nil {
@@ -762,8 +809,10 @@ func matchOptions(question banks.Question, values []string) []string {
 // --- save_entry -----------------------------------------------------------------------------------------
 
 type saveArgs struct {
-	BodyQuotes   []string `json:"body_quotes"`
-	VerdictQuote string   `json:"verdict_quote,omitempty"`
+	BodyQuotes    []string `json:"body_quotes"`
+	VerdictQuote  string   `json:"verdict_quote,omitempty"`
+	Completion    string   `json:"completion,omitempty"`
+	ProgressQuote string   `json:"progress_quote,omitempty"`
 }
 
 func saveEntry(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (tool.Result, error) {
@@ -780,13 +829,27 @@ func saveEntry(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (to
 		return tool.Errorf("pick the work first; the card has no work yet"), nil
 	}
 
-	// The rating is code's, not the model's: it comes from the parse or from her tap, never from an argument.
-	if state.Draft.Entry.Rating == 0 {
+	// The shelf is decided first, because it decides what the card is asked for. The argument is the model naming the
+	// shelf her words named, so it has to count here and not only when the patch is written further down: asking for a
+	// rating before applying it is how a stopped work ends up being asked for stars.
+	shelf := state.Draft.Entry.CompletionState()
+	if args.Completion != "" {
+		parsed, ok := domain.ParseCompletion(args.Completion)
+		if !ok {
+			return tool.Errorf("that is not a shelf; use want_to, finished or abandoned"), nil
+		}
+		shelf = parsed
+	}
+
+	// The rating is code's, not the model's: it comes from the parse or from her tap, never from an argument. Only a
+	// finished entry needs one, so a work she stopped is never asked for stars.
+	if shelf == domain.CompletionFinished && state.Draft.Entry.Rating == 0 {
 		if err := state.fillRating(ctx); err != nil {
 			return tool.Errorf("%v", err), nil
 		}
 	}
-	if len(args.BodyQuotes) == 0 {
+	// A wish needs no body at all: there is nothing she has read to have an opinion about yet.
+	if len(args.BodyQuotes) == 0 && shelf != domain.CompletionWantTo {
 		if err := state.fillBody(ctx); err != nil {
 			return tool.Errorf("%v", err), nil
 		}
@@ -796,6 +859,29 @@ func saveEntry(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (to
 			state.SourceText, args.BodyQuotes, args.VerdictQuote, "")
 		if err != nil {
 			return tool.Errorf("I could not use those words: %v. Quote her exact words.", err), nil
+		}
+		state.Draft = &draft
+	}
+
+	// The shelf and how far she got. Both are hers: the shelf is a plain choice, and "how far" is located in her own
+	// words exactly like the verdict, so a model cannot write a progress line she never said.
+	set := make(map[string]json.RawMessage, 2)
+	if args.Completion != "" {
+		set["completion"] = mustJSON(string(shelf))
+	}
+	if quote := strings.TrimSpace(args.ProgressQuote); quote != "" {
+		located := domain.LocateContext(ctx, state.SourceText, []string{quote})
+		if len(located.Spans) != 1 {
+			return tool.Errorf("I could not find how far she got in her words. Quote her exact words."), nil
+		}
+		set["progress"] = mustJSON(located.Spans[0].Text)
+	}
+	if len(set) > 0 {
+		draft, err := state.Agent.session.EditDraft(ctx, state.SessionID, session.Edit{
+			BaseVersion: state.Draft.Version, Set: set,
+		})
+		if err != nil {
+			return tool.Errorf("I could not put that on the card: %v", err), nil
 		}
 		state.Draft = &draft
 	}

@@ -169,8 +169,9 @@ func (q *Queries) CreateDecisionCall(ctx context.Context, arg CreateDecisionCall
 
 const createEntry = `-- name: CreateEntry :exec
 INSERT INTO entries (id, work_id, rating_q, rating_scale, favourite, season, verdict, body, body_origin,
-                     imported_from, body_spans_json, format, finished_on, status, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     imported_from, body_spans_json, format, completion, progress, finished_on, status, created_at,
+                     updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateEntryParams struct {
@@ -186,6 +187,8 @@ type CreateEntryParams struct {
 	ImportedFrom  string  `json:"imported_from"`
 	BodySpansJson string  `json:"body_spans_json"`
 	Format        string  `json:"format"`
+	Completion    string  `json:"completion"`
+	Progress      string  `json:"progress"`
 	FinishedOn    *string `json:"finished_on"`
 	Status        string  `json:"status"`
 	CreatedAt     string  `json:"created_at"`
@@ -206,6 +209,8 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) error 
 		arg.ImportedFrom,
 		arg.BodySpansJson,
 		arg.Format,
+		arg.Completion,
+		arg.Progress,
 		arg.FinishedOn,
 		arg.Status,
 		arg.CreatedAt,
@@ -525,7 +530,7 @@ func (q *Queries) GetClientMessage(ctx context.Context, arg GetClientMessagePara
 }
 
 const getEntry = `-- name: GetEntry :one
-SELECT id, work_id, rating_q, rating_scale, favourite, season, verdict, body, body_origin, imported_from, body_spans_json, format, finished_on, status, deleted_at, created_at, updated_at FROM entries WHERE id = ?
+SELECT id, work_id, rating_q, rating_scale, favourite, season, verdict, body, body_origin, imported_from, body_spans_json, format, finished_on, status, deleted_at, created_at, updated_at, completion, progress FROM entries WHERE id = ?
 `
 
 func (q *Queries) GetEntry(ctx context.Context, id string) (Entry, error) {
@@ -549,6 +554,8 @@ func (q *Queries) GetEntry(ctx context.Context, id string) (Entry, error) {
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Completion,
+		&i.Progress,
 	)
 	return i, err
 }
@@ -862,7 +869,7 @@ func (q *Queries) ListDecisionCalls(ctx context.Context, arg ListDecisionCallsPa
 }
 
 const listDeletedPage = `-- name: ListDeletedPage :many
-SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at FROM entries JOIN works ON works.id = entries.work_id
+SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at, entries.completion, entries.progress FROM entries JOIN works ON works.id = entries.work_id
 WHERE entries.status = 'saved' AND entries.deleted_at IS NOT NULL
   AND (?1 IS NULL OR works.medium = ?1)
   AND (?2 IS NULL OR entries.work_id = ?2)
@@ -915,6 +922,8 @@ func (q *Queries) ListDeletedPage(ctx context.Context, arg ListDeletedPageParams
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Completion,
+			&i.Progress,
 		); err != nil {
 			return nil, err
 		}
@@ -930,7 +939,7 @@ func (q *Queries) ListDeletedPage(ctx context.Context, arg ListDeletedPageParams
 }
 
 const listDrafts = `-- name: ListDrafts :many
-SELECT id, work_id, rating_q, rating_scale, favourite, season, verdict, body, body_origin, imported_from, body_spans_json, format, finished_on, status, deleted_at, created_at, updated_at FROM entries WHERE status = 'draft' AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT ?
+SELECT id, work_id, rating_q, rating_scale, favourite, season, verdict, body, body_origin, imported_from, body_spans_json, format, finished_on, status, deleted_at, created_at, updated_at, completion, progress FROM entries WHERE status = 'draft' AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT ?
 `
 
 func (q *Queries) ListDrafts(ctx context.Context, limit int64) ([]Entry, error) {
@@ -960,6 +969,8 @@ func (q *Queries) ListDrafts(ctx context.Context, limit int64) ([]Entry, error) 
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Completion,
+			&i.Progress,
 		); err != nil {
 			return nil, err
 		}
@@ -975,7 +986,7 @@ func (q *Queries) ListDrafts(ctx context.Context, limit int64) ([]Entry, error) 
 }
 
 const listEntriesOnWork = `-- name: ListEntriesOnWork :many
-SELECT id, work_id, rating_q, rating_scale, favourite, season, verdict, body, body_origin, imported_from, body_spans_json, format, finished_on, status, deleted_at, created_at, updated_at FROM entries WHERE work_id = ? AND deleted_at IS NULL ORDER BY finished_on DESC, id DESC
+SELECT id, work_id, rating_q, rating_scale, favourite, season, verdict, body, body_origin, imported_from, body_spans_json, format, finished_on, status, deleted_at, created_at, updated_at, completion, progress FROM entries WHERE work_id = ? AND deleted_at IS NULL ORDER BY finished_on DESC, id DESC
 `
 
 func (q *Queries) ListEntriesOnWork(ctx context.Context, workID string) ([]Entry, error) {
@@ -1005,6 +1016,8 @@ func (q *Queries) ListEntriesOnWork(ctx context.Context, workID string) ([]Entry
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Completion,
+			&i.Progress,
 		); err != nil {
 			return nil, err
 		}
@@ -1129,7 +1142,7 @@ func (q *Queries) ListInteractions(ctx context.Context, sessionID string) ([]Int
 }
 
 const listLibrary = `-- name: ListLibrary :many
-SELECT id, work_id, rating_q, rating_scale, favourite, season, verdict, body, body_origin, imported_from, body_spans_json, format, finished_on, status, deleted_at, created_at, updated_at FROM entries
+SELECT id, work_id, rating_q, rating_scale, favourite, season, verdict, body, body_origin, imported_from, body_spans_json, format, finished_on, status, deleted_at, created_at, updated_at, completion, progress FROM entries
 WHERE status = 'saved' AND deleted_at IS NULL
   AND (? IS NULL OR (finished_on, id) < (?, ?))
 ORDER BY finished_on DESC, id DESC
@@ -1179,6 +1192,8 @@ func (q *Queries) ListLibrary(ctx context.Context, arg ListLibraryParams) ([]Ent
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Completion,
+			&i.Progress,
 		); err != nil {
 			return nil, err
 		}
@@ -1194,37 +1209,52 @@ func (q *Queries) ListLibrary(ctx context.Context, arg ListLibraryParams) ([]Ent
 }
 
 const listLibraryByRating = `-- name: ListLibraryByRating :many
-SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at FROM entries JOIN works ON works.id = entries.work_id
+SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at, entries.completion, entries.progress FROM entries JOIN works ON works.id = entries.work_id
 WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
   AND (?1 IS NULL OR works.medium = ?1)
   AND (?2 IS NULL OR entries.favourite = ?2)
   AND (?3 IS NULL OR entries.work_id = ?3)
-  AND (?4 IS NULL
-       OR (entries.rating_q, entries.created_at, entries.id)
-          < (CAST(?5 AS INTEGER), CAST(?6 AS TEXT),
-             ?4))
-ORDER BY entries.rating_q DESC, entries.created_at DESC, entries.id DESC
-LIMIT ?7
+  AND CASE ?4
+        WHEN 'want_to' THEN entries.completion = 'want_to'
+        WHEN 'finished' THEN entries.completion = 'finished'
+        WHEN 'abandoned' THEN entries.completion = 'abandoned'
+        ELSE entries.completion <> 'want_to'
+      END
+  AND (?5 IS NULL
+       OR ((CASE WHEN entries.completion = 'finished' THEN 1 ELSE 0 END),
+           entries.rating_q, entries.created_at, entries.id)
+          < (CAST(?6 AS INTEGER), CAST(?7 AS INTEGER),
+             CAST(?8 AS TEXT), ?5))
+ORDER BY (entries.completion = 'finished') DESC, entries.rating_q DESC, entries.created_at DESC, entries.id DESC
+LIMIT ?9
 `
 
 type ListLibraryByRatingParams struct {
 	Medium          interface{}    `json:"medium"`
 	Favourite       interface{}    `json:"favourite"`
 	WorkID          interface{}    `json:"work_id"`
+	Shelf           interface{}    `json:"shelf"`
 	BeforeID        interface{}    `json:"before_id"`
+	BeforeRank      sql.NullInt64  `json:"before_rank"`
 	BeforeRating    sql.NullInt64  `json:"before_rating"`
 	BeforeCreatedAt sql.NullString `json:"before_created_at"`
 	RowLimit        int64          `json:"row_limit"`
 }
 
-// The same library, highest rating first. The order is rating_q then created_at then id because all three are never
-// null, so a page can neither repeat nor skip a row even when a saved entry has no finish date.
+// The same library, highest rating first. The order is finished before unfinished, then rating_q, created_at and id.
+//
+// The leading finished key is the shelf rule decided in S21: an unfinished entry has no rating to rank by, so it
+// follows the rated ones instead of being scattered through them by a zero rating_q. created_at rather than
+// finished_on breaks the tie inside a rating because a saved entry may have no finish date, and a cursor comparison
+// against null skips a row.
 func (q *Queries) ListLibraryByRating(ctx context.Context, arg ListLibraryByRatingParams) ([]Entry, error) {
 	rows, err := q.db.QueryContext(ctx, listLibraryByRating,
 		arg.Medium,
 		arg.Favourite,
 		arg.WorkID,
+		arg.Shelf,
 		arg.BeforeID,
+		arg.BeforeRank,
 		arg.BeforeRating,
 		arg.BeforeCreatedAt,
 		arg.RowLimit,
@@ -1254,6 +1284,8 @@ func (q *Queries) ListLibraryByRating(ctx context.Context, arg ListLibraryByRati
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Completion,
+			&i.Progress,
 		); err != nil {
 			return nil, err
 		}
@@ -1269,38 +1301,50 @@ func (q *Queries) ListLibraryByRating(ctx context.Context, arg ListLibraryByRati
 }
 
 const listLibraryPage = `-- name: ListLibraryPage :many
-SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at FROM entries JOIN works ON works.id = entries.work_id
+SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at, entries.completion, entries.progress FROM entries JOIN works ON works.id = entries.work_id
 WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
   AND (?1 IS NULL OR works.medium = ?1)
   AND (?2 IS NULL OR entries.favourite = ?2)
   AND (?3 IS NULL OR entries.work_id = ?3)
-  AND (?4 IS NULL
-       OR (?5 IS NOT NULL
+  AND CASE ?4
+        WHEN 'want_to' THEN entries.completion = 'want_to'
+        WHEN 'finished' THEN entries.completion = 'finished'
+        WHEN 'abandoned' THEN entries.completion = 'abandoned'
+        ELSE entries.completion <> 'want_to'
+      END
+  AND (?5 IS NULL
+       OR (?6 IS NOT NULL
            AND (entries.finished_on IS NULL
-                OR (entries.finished_on, entries.id) < (?5, ?4)))
-       OR (?5 IS NULL
-           AND entries.finished_on IS NULL AND entries.id < ?4))
+                OR (entries.finished_on, entries.id) < (?6, ?5)))
+       OR (?6 IS NULL
+           AND entries.finished_on IS NULL AND entries.id < ?5))
 ORDER BY entries.finished_on DESC, entries.id DESC
-LIMIT ?6
+LIMIT ?7
 `
 
 type ListLibraryPageParams struct {
 	Medium           interface{} `json:"medium"`
 	Favourite        interface{} `json:"favourite"`
 	WorkID           interface{} `json:"work_id"`
+	Shelf            interface{} `json:"shelf"`
 	BeforeID         interface{} `json:"before_id"`
 	BeforeFinishedOn interface{} `json:"before_finished_on"`
 	RowLimit         int64       `json:"row_limit"`
 }
 
-// The library, newest finished first, with its filters: medium (on the work), favourite, and work. Cursor pagination
-// on (finished_on, id), the same order as the index. An entry saved without a finish date sorts last, which is where
-// SQLite puts a null in a descending order, and the cursor carries whether the row it names had one.
+// The library, newest finished first, with its filters: medium (on the work), favourite, work, and shelf. Cursor
+// pagination on (finished_on, id), the same order as the index. An entry saved without a finish date sorts last,
+// which is where SQLite puts a null in a descending order, and the cursor carries whether the row it names had one.
+//
+// The shelf is a CASE rather than a plain equality so that an unnamed shelf means the library proper: everything she
+// has reviewed, which is finished and abandoned but not a wish. A work she only means to read has no finish date and
+// is not a review, so it is one chip away rather than mixed into the list she scans.
 func (q *Queries) ListLibraryPage(ctx context.Context, arg ListLibraryPageParams) ([]Entry, error) {
 	rows, err := q.db.QueryContext(ctx, listLibraryPage,
 		arg.Medium,
 		arg.Favourite,
 		arg.WorkID,
+		arg.Shelf,
 		arg.BeforeID,
 		arg.BeforeFinishedOn,
 		arg.RowLimit,
@@ -1330,6 +1374,8 @@ func (q *Queries) ListLibraryPage(ctx context.Context, arg ListLibraryPageParams
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Completion,
+			&i.Progress,
 		); err != nil {
 			return nil, err
 		}
@@ -1807,7 +1853,7 @@ func (q *Queries) RevisionTarget(ctx context.Context, id string) (string, error)
 const saveEntry = `-- name: SaveEntry :execresult
 UPDATE entries
 SET work_id = ?, rating_q = ?, rating_scale = ?, favourite = ?, season = ?, verdict = ?, body = ?, body_origin = ?,
-    body_spans_json = ?, format = ?, finished_on = ?, status = 'saved', updated_at = ?
+    body_spans_json = ?, format = ?, completion = ?, progress = ?, finished_on = ?, status = 'saved', updated_at = ?
 WHERE id = ? AND status IN ('draft', 'saved')
 `
 
@@ -1822,6 +1868,8 @@ type SaveEntryParams struct {
 	BodyOrigin    string  `json:"body_origin"`
 	BodySpansJson string  `json:"body_spans_json"`
 	Format        string  `json:"format"`
+	Completion    string  `json:"completion"`
+	Progress      string  `json:"progress"`
 	FinishedOn    *string `json:"finished_on"`
 	UpdatedAt     string  `json:"updated_at"`
 	ID            string  `json:"id"`
@@ -1843,6 +1891,8 @@ func (q *Queries) SaveEntry(ctx context.Context, arg SaveEntryParams) (sql.Resul
 		arg.BodyOrigin,
 		arg.BodySpansJson,
 		arg.Format,
+		arg.Completion,
+		arg.Progress,
 		arg.FinishedOn,
 		arg.UpdatedAt,
 		arg.ID,
@@ -1915,7 +1965,7 @@ func (q *Queries) SoftDeleteEntry(ctx context.Context, arg SoftDeleteEntryParams
 const updateDraft = `-- name: UpdateDraft :execresult
 UPDATE entries
 SET work_id = ?, rating_q = ?, rating_scale = ?, favourite = ?, season = ?, verdict = ?, body = ?, body_origin = ?,
-    body_spans_json = ?, format = ?, finished_on = ?, updated_at = ?
+    body_spans_json = ?, format = ?, completion = ?, progress = ?, finished_on = ?, updated_at = ?
 WHERE id = ? AND status = 'draft'
 `
 
@@ -1930,6 +1980,8 @@ type UpdateDraftParams struct {
 	BodyOrigin    string  `json:"body_origin"`
 	BodySpansJson string  `json:"body_spans_json"`
 	Format        string  `json:"format"`
+	Completion    string  `json:"completion"`
+	Progress      string  `json:"progress"`
 	FinishedOn    *string `json:"finished_on"`
 	UpdatedAt     string  `json:"updated_at"`
 	ID            string  `json:"id"`
@@ -1948,6 +2000,8 @@ func (q *Queries) UpdateDraft(ctx context.Context, arg UpdateDraftParams) (sql.R
 		arg.BodyOrigin,
 		arg.BodySpansJson,
 		arg.Format,
+		arg.Completion,
+		arg.Progress,
 		arg.FinishedOn,
 		arg.UpdatedAt,
 		arg.ID,

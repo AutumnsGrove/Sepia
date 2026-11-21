@@ -70,8 +70,14 @@ type Entry struct {
 	BodySpans    []Span     `json:"body_spans,omitempty"`
 	ImportedFrom string     `json:"imported_from,omitempty"`
 	Format       string     `json:"format,omitempty"`
-	FinishedOn   string     `json:"finished_on,omitempty"`
-	Status       Status     `json:"status"`
+	// Completion is what she has to say about the work: a wish, a finished review, or a work she put down. It is a
+	// second dimension beside Status, which is only the lifecycle of the card.
+	Completion Completion `json:"completion"`
+	// Progress is "how far I got", in her own words. It is stored only for an abandoned entry and cleared by
+	// Normalized everywhere else.
+	Progress   string `json:"progress,omitempty"`
+	FinishedOn string `json:"finished_on,omitempty"`
+	Status     Status `json:"status"`
 	// Deleted is the soft delete, which never erases a row. DeletedAt is when it happened, empty when it did not:
 	// the Deleted list orders by it and the app says "deleted on" from it.
 	Deleted   bool      `json:"deleted,omitempty"`
@@ -92,50 +98,63 @@ func (e *GuardError) Error() string { return e.Code + ": " + e.Message }
 
 // The stable codes a save can be refused with.
 const (
-	CodeRatingRequired     = "rating_required"
-	CodeBodyRequired       = "body_required"
-	CodeBodyTooLong        = "body_too_long"
-	CodeBodyNotYourWords   = "body_not_your_words"
-	CodeBodyOriginInvalid  = "body_origin_invalid"
-	CodeVerdictTooLong     = "verdict_too_long"
-	CodeVerdictNotYourWord = "verdict_not_your_words"
-	CodeDateInvalid        = "date_invalid"
+	CodeRatingRequired       = "rating_required"
+	CodeBodyRequired         = "body_required"
+	CodeBodyTooLong          = "body_too_long"
+	CodeBodyNotYourWords     = "body_not_your_words"
+	CodeBodyOriginInvalid    = "body_origin_invalid"
+	CodeVerdictTooLong       = "verdict_too_long"
+	CodeVerdictNotYourWord   = "verdict_not_your_words"
+	CodeDateInvalid          = "date_invalid"
+	CodeCompletionInvalid    = "completion_invalid"
+	CodeProgressTooLong      = "progress_too_long"
+	CodeProgressNotYourWords = "progress_not_your_words"
 )
 
 // ValidateForSave is the rule the whole project exists for: nothing saves without a rating and a body made of the
 // operator's own words. sourceText is the concatenation of her messages in the session; it is empty for a typed
 // or imported body, which needs no proof because she supplied it.
 func ValidateForSave(e Entry, sourceText string) error {
-	if !ValidRating(e.Rating) {
+	if !validCompletion(e.Completion) {
+		return &GuardError{Code: CodeCompletionInvalid, Message: "That is not how far you got."}
+	}
+	// What is required depends on the shelf (PLAN.md 2, docs/ENTRY_CARD.md 2): a finished entry needs a rating and a
+	// body, an abandoned one a body, and a wanted one nothing but the work.
+	completion := e.CompletionState()
+	if completion == CompletionFinished && !ValidRating(e.Rating) {
 		return &GuardError{Code: CodeRatingRequired, Message: "Add a rating before saving."}
 	}
-	if strings.TrimSpace(e.Body) == "" {
+	hasBody := strings.TrimSpace(e.Body) != ""
+	if completion != CompletionWantTo && !hasBody {
 		return &GuardError{Code: CodeBodyRequired, Message: "Add a few words of your own before saving."}
 	}
 	if len(e.Body) > MaxBodyLength {
 		return &GuardError{Code: CodeBodyTooLong, Message: "That is longer than a review can be."}
 	}
-	if err := validOrigin(e.BodyOrigin); err != nil {
-		return err
-	}
 
-	switch e.BodyOrigin {
-	case BodyExtracted:
-		if len(e.BodySpans) == 0 {
-			return &GuardError{Code: CodeBodyNotYourWords, Message: "The body has to come from what you wrote."}
+	// A wish can carry no body, and an entry with no body has nothing whose origin needs proving.
+	if hasBody {
+		if err := validOrigin(e.BodyOrigin); err != nil {
+			return err
 		}
-		if !SpansContained(sourceText, e.BodySpans) {
-			return &GuardError{Code: CodeBodyNotYourWords, Message: "The body has to come from what you wrote."}
+		switch e.BodyOrigin {
+		case BodyExtracted:
+			if len(e.BodySpans) == 0 {
+				return &GuardError{Code: CodeBodyNotYourWords, Message: "The body has to come from what you wrote."}
+			}
+			if !SpansContained(sourceText, e.BodySpans) {
+				return &GuardError{Code: CodeBodyNotYourWords, Message: "The body has to come from what you wrote."}
+			}
+			if Compose(sourceText, e.BodySpans) != e.Body {
+				return &GuardError{Code: CodeBodyNotYourWords, Message: "The body has to be exactly the words you wrote."}
+			}
+		case BodyMixed:
+			if len(e.BodySpans) == 0 || !SpansContained(sourceText, e.BodySpans) {
+				return &GuardError{Code: CodeBodyNotYourWords, Message: "The extracted part of the body has to come from what you wrote."}
+			}
+		case BodyTyped, BodyImported:
+			// Her own typing, or a transcription of her own screenshot that she accepted. Nothing to prove here.
 		}
-		if Compose(sourceText, e.BodySpans) != e.Body {
-			return &GuardError{Code: CodeBodyNotYourWords, Message: "The body has to be exactly the words you wrote."}
-		}
-	case BodyMixed:
-		if len(e.BodySpans) == 0 || !SpansContained(sourceText, e.BodySpans) {
-			return &GuardError{Code: CodeBodyNotYourWords, Message: "The extracted part of the body has to come from what you wrote."}
-		}
-	case BodyTyped, BodyImported:
-		// Her own typing, or a transcription of her own screenshot that she accepted. Nothing to prove here.
 	}
 
 	if e.Verdict != "" {
@@ -144,6 +163,16 @@ func ValidateForSave(e Entry, sourceText string) error {
 		}
 		if e.BodyOrigin == BodyExtracted && !ContainedIn(sourceText, e.Verdict) {
 			return &GuardError{Code: CodeVerdictNotYourWord, Message: "The verdict has to come from what you wrote."}
+		}
+	}
+
+	// How far she got is her words too, and it only means anything on a work she stopped.
+	if completion == CompletionAbandoned && e.Progress != "" {
+		if len(e.Progress) > MaxProgressLength {
+			return &GuardError{Code: CodeProgressTooLong, Message: "That is longer than a line about how far you got."}
+		}
+		if e.BodyOrigin == BodyExtracted && !ContainedIn(sourceText, e.Progress) {
+			return &GuardError{Code: CodeProgressNotYourWords, Message: "How far you got has to come from what you wrote."}
 		}
 	}
 
@@ -192,7 +221,9 @@ func Diff(before, after Entry) []Change {
 	}
 
 	add("rating", FormatRating(before.Rating), FormatRating(after.Rating))
+	add("completion", string(before.CompletionState()), string(after.CompletionState()))
 	add("body", before.Body, after.Body)
+	add("progress", before.Progress, after.Progress)
 	add("verdict", before.Verdict, after.Verdict)
 	add("format", before.Format, after.Format)
 	add("finished_on", before.FinishedOn, after.FinishedOn)

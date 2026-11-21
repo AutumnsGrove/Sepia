@@ -220,10 +220,14 @@ type Cursor struct {
 	// FinishedOn is the last row's local finish date on the newest-first library. It is empty when that row had no
 	// date, which is also where the undated tail of the list begins.
 	FinishedOn string
-	// Rating and CreatedAt are the first two keys of the rating-sorted library. CreatedAt rather than FinishedOn,
-	// because a saved entry may have no finish date and a cursor comparison against null skips a row.
+	// Rating and CreatedAt are the first two keys of the rating-sorted library after CompletionRank. CreatedAt rather
+	// than FinishedOn, because a saved entry may have no finish date and a cursor comparison against null skips a row.
 	Rating    int
 	CreatedAt string
+	// CompletionRank is 1 for a finished entry and 0 for one she stopped or only wants to read. It leads the rating
+	// order, because an unfinished entry has no rating to rank by and follows the rated ones instead of sitting in
+	// among them at zero. Its zero is a real key, so only an empty ID means "no key at all".
+	CompletionRank int
 	// DeletedAt is the first key of the Deleted list, newest deletion first.
 	DeletedAt string
 	// ID is the last row's id, which breaks ties on every list.
@@ -253,7 +257,11 @@ type LibraryQuery struct {
 	Favourite *bool
 	// Work is the timeline of one work, empty for every work.
 	Work string
-	Sort LibrarySort
+	// Shelf is the completion the list is filtered to. Empty is the library proper: everything she has reviewed,
+	// which is finished and abandoned but not a wish, because a wish is not a review and has no finish date to
+	// group by. A named shelf shows exactly that one.
+	Shelf Completion
+	Sort  LibrarySort
 	// Deleted switches the list from the library to the Deleted one, which holds only the soft-deleted rows.
 	Deleted bool
 }
