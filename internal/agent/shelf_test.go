@@ -129,3 +129,111 @@ func TestPipelineWantedFlow(t *testing.T) {
 		t.Errorf("a wanted card is not confirmable: missing %v", card.Missing)
 	}
 }
+
+// A work on her wanted list is not a revisit. The wish is how the entry started, so writing the review has to revise
+// that row rather than open a second one beside it, and "a new entry or the old one" is not a question about a book
+// she has not read yet (S21.8).
+func TestAWishedWorkIsRevisedIntoTheEntry(t *testing.T) {
+	r := newRig(t, rigOptions{script: []world.ChatTurn{
+		{ToolCalls: []world.ChatToolCall{toolCall("c1", "media_lookup", `{"title":"The Lantern Keeper","medium":"book"}`)}},
+		{ToolCalls: []world.ChatToolCall{toolCall("c2", "merge_candidates", `{"candidate_id":"openlibrary|OL1W"}`)}},
+		{ToolCalls: []world.ChatToolCall{toolCall("c3", "save_entry",
+			`{"body_quotes":["the middle dragged a bit but the end stayed with me"],"verdict_quote":"stayed with me"}`)}},
+		{Text: "The card is ready."},
+	}})
+	scriptBook(r.fake)
+	ctx := context.Background()
+
+	// The wish, on the same provider id the lookup will return, so the merge reuses this work.
+	if err := r.store.SaveWork(ctx, domain.Work{
+		ID: "w-wish", Medium: "book", Title: "The Lantern Keeper", Verified: true,
+		PrimaryProvider: "openlibrary", PrimaryID: "OL1W",
+	}); err != nil {
+		t.Fatalf("SaveWork: %v", err)
+	}
+	wish := domain.Entry{
+		ID: "e-wish", WorkID: "w-wish", Status: domain.StatusDraft, Completion: domain.CompletionWantTo,
+		BodyOrigin: domain.BodyTyped, RatingScale: domain.RatingScale,
+	}
+	if err := r.store.CreateDraft(ctx, wish); err != nil {
+		t.Fatalf("CreateDraft: %v", err)
+	}
+	if _, err := r.store.SaveEntry(ctx, wish); err != nil {
+		t.Fatalf("SaveEntry: %v", err)
+	}
+
+	sess, err := r.session.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := r.agent.HandleMessage(ctx, TurnInput{
+		SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1",
+	})
+	if err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if out.Draft == nil {
+		t.Fatal("no draft card")
+	}
+	// The card is a revision of the wish, not a second entry.
+	if out.Revises != "e-wish" {
+		t.Errorf("Revises = %q, want the wished row", out.Revises)
+	}
+	// She said she finished it, so the wish becomes a review without her having to find the shelf control.
+	if out.Draft.Entry.Completion != domain.CompletionFinished {
+		t.Errorf("completion = %q, want %q", out.Draft.Entry.Completion, domain.CompletionFinished)
+	}
+	if out.Draft.Entry.Rating != 18 {
+		t.Errorf("rating = %d, want 18", out.Draft.Entry.Rating)
+	}
+
+	// And there is still one saved wish, unchanged, until she confirms.
+	still, err := r.store.Entry(ctx, "e-wish")
+	if err != nil {
+		t.Fatalf("Entry: %v", err)
+	}
+	if still.Completion != domain.CompletionWantTo || still.Status != domain.StatusSaved {
+		t.Errorf("the wished row changed before the confirm: %+v", still)
+	}
+}
+
+// The model naming the shelf has to decide what the card asks for. If the cues miss her words but the model says
+// "abandoned", asking for a rating is the exact nudge this slice removed.
+func TestSaveEntryAppliesTheModelsShelfBeforeAsking(t *testing.T) {
+	// A message whose cues name nothing: no "couldn't", no "gave up", no "want to".
+	const flat = "the lantern keeper was slow and i put it aside"
+	r := newRig(t, rigOptions{script: []world.ChatTurn{
+		{ToolCalls: []world.ChatToolCall{toolCall("c1", "media_lookup", `{"title":"The Lantern Keeper","medium":"book"}`)}},
+		{ToolCalls: []world.ChatToolCall{toolCall("c2", "merge_candidates", `{"candidate_id":"openlibrary|OL1W"}`)}},
+		{ToolCalls: []world.ChatToolCall{toolCall("c3", "save_entry",
+			`{"body_quotes":["the lantern keeper was slow and i put it aside"],"completion":"abandoned"}`)}},
+		{Text: "The card is ready."},
+	}})
+	scriptBook(r.fake)
+	ctx := context.Background()
+
+	sess, err := r.session.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := r.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: flat, ClientMsgID: "m1"})
+	if err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if out.Draft == nil {
+		t.Fatal("save_entry failed before it could apply the model's shelf")
+	}
+	if out.Draft.Entry.Completion != domain.CompletionAbandoned {
+		t.Fatalf("completion = %q, want %q", out.Draft.Entry.Completion, domain.CompletionAbandoned)
+	}
+	if out.Draft.Entry.Body == "" {
+		t.Error("no body: the card was asked for a rating before the shelf was applied")
+	}
+	card, err := r.session.Card(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Card: %v", err)
+	}
+	if !card.Confirmable {
+		t.Errorf("an abandoned card with her words is not confirmable: missing %v", card.Missing)
+	}
+}

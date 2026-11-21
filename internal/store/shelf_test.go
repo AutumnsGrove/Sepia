@@ -256,3 +256,54 @@ func TestUpgradingFromBeforeTheShelvesKeepsEveryRowFinished(t *testing.T) {
 		t.Fatalf("entry = %+v, want the row unchanged", entry)
 	}
 }
+
+// A page boundary that lands on an unrated row is the case the zero-is-a-real-key rule exists for. Before this, the
+// rating key went through int64Null, which reads 0 as "no cursor": the next page's row-value comparison became NULL
+// and the page came back empty, silently ending a list that had more in it.
+func TestTheRatingCursorSurvivesAPageThatEndsOnAnUnratedRow(t *testing.T) {
+	s := openTest(t)
+	seed(t, s)
+	ctx := context.Background()
+
+	// Three abandoned rows, all rated 0, with the seeded finished row (18) leading the order.
+	rows := []struct{ id, finished string }{{"e-ab1", "2026-11-01"}, {"e-ab2", "2026-11-02"}, {"e-ab3", "2026-11-03"}}
+	for _, row := range rows {
+		if err := raw(t, s, `INSERT INTO entries
+			(id, work_id, rating_q, rating_scale, body, body_origin, completion, progress, finished_on, status,
+			 created_at, updated_at)
+			VALUES (?, 'w1', 0, 'quarter_stars_20', 'some words', 'typed', 'abandoned', 'two episodes', ?, 'saved',
+			        '2026-11-01T00:00:00Z', '2026-11-01T00:00:00Z')`, row.id, row.finished); err != nil {
+			t.Fatalf("insert %s: %v", row.id, err)
+		}
+	}
+
+	seen := make([]string, 0, 4)
+	cursor := domain.Cursor{}
+	for page := 0; page < 10; page++ {
+		entries, next, err := s.LibraryPage(ctx, domain.LibraryQuery{Sort: domain.SortRating}, cursor, 2)
+		if err != nil {
+			t.Fatalf("page %d: %v", page, err)
+		}
+		for _, entry := range entries {
+			seen = append(seen, entry.ID)
+		}
+		if next.Empty() {
+			break
+		}
+		cursor = next
+	}
+	if len(seen) != 4 {
+		t.Fatalf("paging the rating order saw %v, want four rows", seen)
+	}
+	// The rated row leads, the unrated ones follow, and no row appears twice.
+	if seen[0] != "e1" {
+		t.Errorf("first row = %q, want the rated one", seen[0])
+	}
+	unique := map[string]bool{}
+	for _, id := range seen {
+		if unique[id] {
+			t.Fatalf("%s appeared twice in %v", id, seen)
+		}
+		unique[id] = true
+	}
+}

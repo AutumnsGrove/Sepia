@@ -135,11 +135,12 @@ var wantPhrases = []string{
 	"should watch",
 }
 
-// pastPhrases mark a message as being about something she has already been through. They exist to stop one sentence
-// from doing two jobs: "finished dune and now i want to read messiah" is a finished review that mentions a wish, not
-// a wish. The want phrase's own words are masked out before this is checked, because "want to read it" contains
-// "read it".
-var pastPhrases = []string{
+// finishedPhrases name the ordinary case out loud. They do two jobs. They stop one sentence from becoming two:
+// "finished dune and now i want to read messiah" is a finished review that mentions a wish, not a wish. And they let
+// a card that started as a wish become a review, because without them only a tap on the shelf could move it, and she
+// would have said "finished it" for nothing. The want phrase's own words are masked out before they are checked,
+// because "want to read it" contains "read it".
+var finishedPhrases = []string{
 	"finished",
 	"done with",
 	"read it",
@@ -164,10 +165,18 @@ func CompletionCues(text string) (Completion, bool) {
 		return CompletionAbandoned, true
 	}
 
-	if spans := phraseSpans(lower, wantPhrases); len(spans) > 0 {
-		if !anyPhrase(blank(lower, spans), pastPhrases) {
-			return CompletionWantTo, true
-		}
+	wantSpans := phraseSpans(lower, wantPhrases)
+	masked := lower
+	if len(wantSpans) > 0 {
+		masked = blank(lower, wantSpans)
+	}
+	if len(wantSpans) > 0 && !anyPhrase(masked, finishedPhrases) {
+		return CompletionWantTo, true
+	}
+	// She said she finished it. On a fresh card this is the default anyway; on a card that started as a wish it is the
+	// only thing that moves it to a review without her having to find the shelf control.
+	if anyPhrase(masked, finishedPhrases) {
+		return CompletionFinished, true
 	}
 	return CompletionFinished, false
 }

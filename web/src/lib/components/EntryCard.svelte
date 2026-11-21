@@ -140,7 +140,8 @@
   <section class="work">
     <Cover title={draft.work.title} url={draft.work.cover_url ?? null} variant="sand" size="lg" />
     <div>
-      <h3>{draft.work.title}</h3>
+      <!-- Level two: the screen owns the h1, so the card's own title sits one step below it. -->
+      <h2>{draft.work.title}</h2>
       <p class="meta">
         {#if draft.work.year}{draft.work.year} ·
         {/if}
@@ -216,8 +217,8 @@
     </div>
   {/if}
 
-  <section>
-    {#if showRating}
+  {#if showRating}
+    <section>
       <p class="lbl">
         <span>
           Rating
@@ -237,14 +238,14 @@
           </button>
         {/if}
       </p>
-    {/if}
-    <Rating
-      quarters={draft.rating.quarters}
-      readonly={!editable}
-      onchange={(quarters) => onedit?.({ rating: quarters })}
-      label="Your rating"
-    />
-  </section>
+      <Rating
+        quarters={draft.rating.quarters}
+        readonly={!editable}
+        onchange={(quarters) => onedit?.({ rating: quarters })}
+        label="Your rating"
+      />
+    </section>
+  {/if}
 
   <section>
     <p class="lbl">Your words</p>
@@ -502,7 +503,7 @@
     gap: 1rem;
     align-items: start;
   }
-  h3 {
+  h2 {
     margin: 0;
     font:
       500 1.625rem/1.12 'Fraunces',
