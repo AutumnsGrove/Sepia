@@ -62,6 +62,8 @@ type Entry struct {
 	DeletedAt     *string `json:"deleted_at"`
 	CreatedAt     string  `json:"created_at"`
 	UpdatedAt     string  `json:"updated_at"`
+	Completion    string  `json:"completion"`
+	Progress      string  `json:"progress"`
 }
 
 type EntryRevision struct {

@@ -83,6 +83,11 @@ export interface LibraryQuery {
   favourite?: boolean;
   /** One work's entries: the timeline under a saved entry. */
   work?: string;
+  /**
+   * The shelf. Omitted is the library proper: everything she has reviewed, which is finished and abandoned but not a
+   * work she only means to read.
+   */
+  completion?: components['schemas']['Completion'];
   /** The order: newest finished first, or highest rating first. */
   sort?: components['schemas']['LibrarySort'];
   /** True is the Deleted list, which holds only the soft-deleted entries. */

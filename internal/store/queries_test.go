@@ -36,7 +36,7 @@ func TestGeneratedQueriesAgainstTheRealSchema(t *testing.T) {
 		return q.CreateEntry(ctx, db.CreateEntryParams{
 			ID: "e1", WorkID: "w1", RatingQ: 18, RatingScale: "quarter_stars_20",
 			Favourite: 0, Verdict: "would read again", Body: "the world felt so lived in",
-			BodyOrigin: "extracted", BodySpansJson: "[]", Format: "paperback",
+			BodyOrigin: "extracted", BodySpansJson: "[]", Format: "paperback", Completion: "finished",
 			FinishedOn: ptr("2026-10-29"), Status: "saved", CreatedAt: at, UpdatedAt: at,
 		})
 	}); err != nil {
@@ -66,7 +66,8 @@ func TestGeneratedQueriesAgainstTheRealSchema(t *testing.T) {
 	if draftErr := s.InTx(ctx, func(q *db.Queries) error {
 		return q.CreateEntry(ctx, db.CreateEntryParams{
 			ID: "e2", WorkID: "w1", RatingQ: 18, RatingScale: "quarter_stars_20",
-			Body: "a draft", BodyOrigin: "typed", Status: "draft", CreatedAt: at, UpdatedAt: at,
+			Body: "a draft", BodyOrigin: "typed", Completion: "finished", Status: "draft", CreatedAt: at,
+			UpdatedAt: at,
 		})
 	}); draftErr != nil {
 		t.Fatal(draftErr)

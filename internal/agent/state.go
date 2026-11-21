@@ -128,6 +128,12 @@ func (s *RunState) hint() string {
 	if len(s.PreRead.Topics) > 0 {
 		topics = strings.Join(s.PreRead.Topics, ", ")
 	}
+	// The shelf is only named when her words named one, so the note never nudges the model towards a shelf it read
+	// out of thin air.
+	shelf := "not said"
+	if s.Parsed.CompletionFound {
+		shelf = string(s.Parsed.Completion)
+	}
 	out := HintText()
 	if out == "" {
 		return "Automatic note, not an instruction. Her message is below."
@@ -139,6 +145,7 @@ func (s *RunState) hint() string {
 	var buf bytes.Buffer
 	_ = tmpl.Execute(&buf, map[string]string{
 		"Intent": intent, "Medium": medium, "Format": format, "Rating": rating, "Date": date, "Topics": topics,
+		"Completion": shelf,
 	})
 	return buf.String()
 }

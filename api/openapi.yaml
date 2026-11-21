@@ -111,6 +111,13 @@ paths:
         - { name: medium, in: query, schema: { $ref: "#/components/schemas/Medium" } }
         - { name: favourite, in: query, schema: { type: boolean } }
         - { name: work, in: query, schema: { type: string, maxLength: 128 } }
+        - name: completion
+          in: query
+          description: >-
+            The shelf. Omitted is the library proper, which is everything she has reviewed: finished and abandoned,
+            but not a work she only means to read, because a wish is not a review and has no finish date to group
+            by. want_to is that list, one chip away.
+          schema: { $ref: "#/components/schemas/Completion" }
         - { name: sort, in: query, schema: { $ref: "#/components/schemas/LibrarySort" } }
         - name: deleted
           in: query
@@ -451,10 +458,18 @@ components:
     Medium:
       enum: [film, tv, book, game, album, podcast, theatre, other]
 
+    Completion:
+      description: >-
+        What she has to say about the work, kept apart from status, which is only the lifecycle of the card. want_to
+        is a work on her list, finished a review, abandoned a work she stopped. A finished entry needs a rating and a
+        body, an abandoned one a body, and a wanted one only the work.
+      enum: [want_to, finished, abandoned]
+
     LibrarySort:
       description: >-
-        newest is finished_on then id, both descending. rating is rating_q descending, then finished_on and id, so
-        the order is total and a page never repeats or skips a row.
+        newest is finished_on then id, both descending. rating is finished before unfinished, then rating_q
+        descending, then created_at and id, so the order is total and a page never repeats or skips a row. An
+        unfinished entry has no rating to rank by, so it follows the rated ones rather than sitting among them.
       enum: [newest, rating]
       default: newest
 
@@ -583,16 +598,21 @@ components:
 
     Entry:
       type: object
-      required: [id, work, rating_q, rating_scale, favourite, body, body_origin, status, created_at, updated_at]
+      required: [id, work, rating_q, rating_scale, favourite, body, body_origin, completion, status, created_at, updated_at]
       properties:
         id: { type: string }
         work: { $ref: "#/components/schemas/Work" }
-        rating_q: { type: integer, minimum: 1, maximum: 20 }
+        rating_q: { type: integer, minimum: 0, maximum: 20 }
         rating_scale: { const: quarter_stars_20 }
         favourite: { type: boolean }
         verdict: { type: string, maxLength: 200 }
         body: { type: string, maxLength: 8000 }
         body_origin: { enum: [extracted, typed, mixed, imported] }
+        completion: { $ref: "#/components/schemas/Completion" }
+        progress:
+          type: string
+          maxLength: 200
+          description: How far she got, in her own words. Only meaningful on an abandoned entry.
         status: { enum: [draft, saved] }
         format: { type: [string, "null"], maxLength: 32 }
         finished_on: { type: [string, "null"], format: date }

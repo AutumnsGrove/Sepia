@@ -47,6 +47,11 @@
       "copy": "That is longer than a review can be."
     },
     {
+      "code": "completion_invalid",
+      "status": 422,
+      "copy": "That is not how far you got."
+    },
+    {
       "code": "date_invalid",
       "status": 422,
       "copy": "That is not a date."
@@ -115,6 +120,16 @@
       "code": "payload_too_large",
       "status": 413,
       "copy": "That is too big to send."
+    },
+    {
+      "code": "progress_not_your_words",
+      "status": 422,
+      "copy": "How far you got has to come from what you wrote."
+    },
+    {
+      "code": "progress_too_long",
+      "status": 422,
+      "copy": "That is longer than a line about how far you got."
     },
     {
       "code": "queue_full",

@@ -155,6 +155,8 @@ type wireCard struct {
 	BodyOrigin string           `json:"body_origin"`
 	BodySpans  []domain.Span    `json:"body_spans,omitempty"`
 	Format     string           `json:"format,omitempty"`
+	Completion string           `json:"completion"`
+	Progress   string           `json:"progress,omitempty"`
 	FinishedOn string           `json:"finished_on,omitempty"`
 	Blocks     wireBlocks       `json:"blocks"`
 	LeftOut    []wireSegment    `json:"left_out,omitempty"`
@@ -188,6 +190,8 @@ func (s *Server) wireCardOf(card session.Card) wireCard {
 		Body:       entry.Body,
 		BodyOrigin: string(entry.BodyOrigin),
 		Format:     entry.Format,
+		Completion: string(entry.CompletionState()),
+		Progress:   entry.Progress,
 		FinishedOn: entry.FinishedOn,
 		Blocks:     wireBlocksOf(entry, card.Work, card.Answers, card.Sources),
 	}
@@ -275,7 +279,7 @@ func wireBlocksOf(entry domain.Entry, work domain.Work, answers []domain.Answer,
 	if entry.Body != "" {
 		blocks.Body = string(entry.BodyOrigin)
 	}
-	if entry.Format != "" || entry.FinishedOn != "" {
+	if entry.Format != "" || entry.FinishedOn != "" || entry.Progress != "" {
 		blocks.Facts = "parsed"
 	}
 	answered, skipped := false, false
@@ -539,6 +543,8 @@ type wireEntry struct {
 	BodyOrigin  string       `json:"body_origin"`
 	Status      string       `json:"status"`
 	Format      string       `json:"format,omitempty"`
+	Completion  string       `json:"completion"`
+	Progress    string       `json:"progress,omitempty"`
 	FinishedOn  string       `json:"finished_on,omitempty"`
 	Season      *int         `json:"season,omitempty"`
 	Answers     []wireAnswer `json:"answers,omitempty"`
@@ -554,8 +560,8 @@ func wireEntryOf(view session.EntryView) wireEntry {
 		ID: entry.ID, Work: wireWorkOf(view.Work), RatingQ: entry.Rating, RatingScale: domain.RatingScale,
 		Favourite: entry.Favourite, Verdict: entry.Verdict, Body: entry.Body,
 		BodyOrigin: string(entry.BodyOrigin), Status: string(entry.Status), Format: entry.Format,
-		FinishedOn: entry.FinishedOn,
-		Season:     entry.Season, CreatedAt: instant(entry.CreatedAt), UpdatedAt: instant(entry.UpdatedAt),
+		Completion: string(entry.CompletionState()), Progress: entry.Progress, FinishedOn: entry.FinishedOn,
+		Season: entry.Season, CreatedAt: instant(entry.CreatedAt), UpdatedAt: instant(entry.UpdatedAt),
 	}
 	if !entry.DeletedAt.IsZero() {
 		out.DeletedAt = instant(entry.DeletedAt)

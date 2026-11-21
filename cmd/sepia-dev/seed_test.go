@@ -148,6 +148,7 @@ func TestSeedEntryValidation(t *testing.T) {
 		got := domain.Entry{
 			WorkID: seedWorkID(entry.Title), Rating: entry.Rating, RatingScale: domain.RatingScale,
 			Body: entry.Body, BodyOrigin: domain.BodyTyped, FinishedOn: entry.FinishedOn,
+			Completion: domain.Completion(entry.Completion), Progress: entry.Progress,
 			Status: domain.StatusDraft,
 		}
 		if err := domain.ValidateForSave(got, ""); err != nil {

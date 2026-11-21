@@ -48,20 +48,27 @@ func TestTheRebuildKeepsRowsAndRules(t *testing.T) {
 	ctx := context.Background()
 	seed(t, s)
 
-	// Rebuild again over live data, the way 0004 did, and check the copy.
+	// Rebuild again over live data, the way 0004 did, and check the copy. 0004 rebuilt the table as it was then, so
+	// everything added to entries since has to follow it the same way the real migrations do. Otherwise this test
+	// would assert a schema the app no longer has, which is the exact failure the rebuild rule exists to catch.
 	body, err := migrationsFS.ReadFile("migrations/0004_allow_unrated_drafts.sql")
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
 	}
-	off, sql, err := parsePragma(string(body))
+	off, rebuildSQL, err := parsePragma(string(body))
 	if err != nil || !off {
 		t.Fatalf("parse 0004 = %v, %v", off, err)
 	}
+	later, err := migrationsFS.ReadFile("migrations/0009_completion.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	rebuildSQL += "\n" + string(later)
 	version, err := s.Version(ctx)
 	if err != nil {
 		t.Fatalf("Version: %v", err)
 	}
-	if applyErr := s.apply(ctx, migration{version: version + 1, name: "rebuild_again", sql: sql, foreignKeysOff: true}); applyErr != nil {
+	if applyErr := s.apply(ctx, migration{version: version + 1, name: "rebuild_again", sql: rebuildSQL, foreignKeysOff: true}); applyErr != nil {
 		t.Fatalf("apply rebuild: %v", applyErr)
 	}
 
@@ -71,6 +78,10 @@ func TestTheRebuildKeepsRowsAndRules(t *testing.T) {
 	}
 	if entry.Rating != 18 || entry.Body != "loved it" {
 		t.Errorf("entry = %+v, want the rows copied", entry)
+	}
+	// A row that existed before the shelves did is a finished review, not a wish and not a stopped one.
+	if entry.Completion != domain.CompletionFinished {
+		t.Errorf("completion after the rebuild = %q, want %q", entry.Completion, domain.CompletionFinished)
 	}
 
 	// 0 is a draft with no rating yet.

@@ -65,6 +65,7 @@ func (s *Store) UpdateDraft(ctx context.Context, u UpdateDraft) (domain.Entry, i
 			RatingQ: int64(entry.Rating), RatingScale: entry.RatingScale, Favourite: boolToInt(entry.Favourite),
 			Season: seasonPtr(entry.Season), Verdict: entry.Verdict, Body: entry.Body,
 			BodyOrigin: string(entry.BodyOrigin), BodySpansJson: string(spans), Format: entry.Format,
+			Completion: string(entry.CompletionState()), Progress: entry.Normalized().Progress,
 			FinishedOn: nullableString(entry.FinishedOn), UpdatedAt: now.Format(timeLayout), ID: u.EntryID,
 		})
 		if err != nil {

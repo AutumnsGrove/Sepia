@@ -1217,3 +1217,30 @@ failure, not a second workflow that owns the truth.
 **`SEPIA_SCREENSHOTS` was the first name and it could not work.** The dev server refuses an unknown `SEPIA_` key, and
 the e2e environment rides along into every web server Playwright starts, so the run died with `config: unknown key
 SEPIA_SCREENSHOTS`. The variable is `SCREENSHOTS=1`, and `shot.ts` says why it is not prefixed.
+
+## 2026-11-20, S21.1-S21.8, wishlist and didn't finish
+
+**Built.** An entry now has a `completion` of `want_to`, `finished` or `abandoned`, a second dimension beside
+`status`; `entries.progress` holds one line of how far she got, in her own words (migration `0009`). The save
+guard relaxed to match (`PLAN.md` 2, `ENTRY_CARD.md` 2): a finished entry needs a rating and a body, an
+abandoned one a body, a wanted one only its work. `domain.CompletionCues` reads "couldn't get into it", "gave
+up", "dnf", "want to read" and the like in plain code, never a model. The library gained a shelf filter and one
+`Wanted` chip; abandoned rows show a `didn't finish` badge, wanted rows `wanted`, and a finished row still shows
+none. Logging a review for a wanted work revises that row rather than adding a second.
+
+**What is true now.** `GET /api/entries?completion=` filters by shelf, and an omitted shelf is everything she
+reviewed, finished and abandoned but not a wish. The rating order puts finished rows first and the unrated tail
+after them; its cursor grew a fourth key, and a three-key cursor from an older build is refused rather than
+half-read. `save_entry` takes `completion` and `progress_quote`, the second located in her messages exactly like
+the verdict, so a model cannot write a how-far line she never said. `save_entry` also stopped demanding a rating
+for a work she stopped, which was the first bug the abandoned flow caught.
+
+**What the next agent should know.** The rating order's leading key is `(completion = 'finished')`, not a second
+column, so nothing needs a backfill. `CompletionState()` reads an empty value as `finished`, which is why every
+entry literal and stored row written before this slice is still valid and why the migration's `DEFAULT` is the
+whole of the data change. Two things are deliberately left to issue #31, the library design refresh: the
+undated tail of the newest order (wanted rows) is still ordered by id rather than by when she added it, and the
+shelf chips are plain chips rather than a designed set of shelves.
+
+**Live check for the operator.** None. No provider, no image, no new dependency, and the rule change was decided
+before the slice started and written into `PLAN.md` in the same change.

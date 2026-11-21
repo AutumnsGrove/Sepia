@@ -353,6 +353,16 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a work Sepia knows.")
 		return
 	}
+	// An unnamed shelf is the library proper: everything she has reviewed, not the list of things she means to read.
+	var shelf domain.Completion
+	if raw := query.Get("completion"); raw != "" {
+		parsed, known := domain.ParseCompletion(raw)
+		if !known {
+			writeError(w, http.StatusBadRequest, "invalid_value", "That is not a shelf Sepia knows.")
+			return
+		}
+		shelf = parsed
+	}
 	limit, ok := queryLimit(r)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a page size.")
@@ -361,9 +371,10 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 	// The order decides how many keys the cursor carries, and the filters are part of what it was made for.
 	keys := 2
 	if sort == domain.SortRating && !deleted {
-		keys = 3
+		keys = 4
 	}
-	signature := cursorSignature("entries", medium, boolText(favourite), work, string(sort), strconv.FormatBool(deleted))
+	signature := cursorSignature("entries", medium, boolText(favourite), work, string(shelf), string(sort),
+		strconv.FormatBool(deleted))
 	parts, ok := boundCursor(query.Get("cursor"), signature, keys)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a cursor Sepia gave you.")
@@ -375,19 +386,24 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		case deleted:
 			cursor = domain.Cursor{DeletedAt: parts[0], ID: parts[1]}
 		case sort == domain.SortRating:
-			rating, err := strconv.Atoi(parts[0])
+			rank, rankErr := strconv.Atoi(parts[0])
+			rating, err := strconv.Atoi(parts[1])
+			if rankErr != nil || (rank != 0 && rank != 1) {
+				writeError(w, http.StatusBadRequest, "invalid_value", "That is not a cursor Sepia gave you.")
+				return
+			}
 			if err != nil {
 				writeError(w, http.StatusBadRequest, "invalid_value", "That is not a cursor Sepia gave you.")
 				return
 			}
-			cursor = domain.Cursor{Rating: rating, CreatedAt: parts[1], ID: parts[2]}
+			cursor = domain.Cursor{Rating: rating, CreatedAt: parts[2], ID: parts[3], CompletionRank: rank}
 		default:
 			cursor = domain.Cursor{FinishedOn: parts[0], ID: parts[1]}
 		}
 	}
 	ctx := r.Context()
 	entries, next, err := s.engine.Library(ctx, domain.LibraryQuery{
-		Medium: medium, Favourite: favourite, Work: work, Sort: sort, Deleted: deleted,
+		Medium: medium, Favourite: favourite, Work: work, Shelf: shelf, Sort: sort, Deleted: deleted,
 	}, cursor, limit)
 	if err != nil {
 		s.restError(w, err)
@@ -409,7 +425,8 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		case deleted:
 			encoded = encodeCursor(signature, next.DeletedAt, next.ID)
 		case sort == domain.SortRating:
-			encoded = encodeCursor(signature, strconv.Itoa(next.Rating), next.CreatedAt, next.ID)
+			encoded = encodeCursor(signature, strconv.Itoa(next.CompletionRank), strconv.Itoa(next.Rating),
+				next.CreatedAt, next.ID)
 		default:
 			encoded = encodeCursor(signature, next.FinishedOn, next.ID)
 		}

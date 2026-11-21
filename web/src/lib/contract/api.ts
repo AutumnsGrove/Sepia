@@ -401,7 +401,12 @@ export interface components {
         /** @enum {unknown} */
         Medium: "film" | "tv" | "book" | "game" | "album" | "podcast" | "theatre" | "other";
         /**
-         * @description newest is finished_on then id, both descending. rating is rating_q descending, then finished_on and id, so the order is total and a page never repeats or skips a row.
+         * @description What she has to say about the work, kept apart from status, which is only the lifecycle of the card. want_to is a work on her list, finished a review, abandoned a work she stopped. A finished entry needs a rating and a body, an abandoned one a body, and a wanted one only the work.
+         * @enum {unknown}
+         */
+        Completion: "want_to" | "finished" | "abandoned";
+        /**
+         * @description newest is finished_on then id, both descending. rating is finished before unfinished, then rating_q descending, then created_at and id, so the order is total and a page never repeats or skips a row. An unfinished entry has no rating to rank by, so it follows the rated ones rather than sitting among them.
          * @default newest
          * @enum {unknown}
          */
@@ -498,6 +503,9 @@ export interface components {
             body: string;
             /** @enum {unknown} */
             body_origin: "extracted" | "typed" | "mixed" | "imported";
+            completion: components["schemas"]["Completion"];
+            /** @description How far she got, in her own words. Only meaningful on an abandoned entry. */
+            progress?: string;
             /** @enum {unknown} */
             status: "draft" | "saved";
             format?: string | null;
@@ -810,6 +818,8 @@ export interface operations {
                 medium?: components["schemas"]["Medium"];
                 favourite?: boolean;
                 work?: string;
+                /** @description The shelf. Omitted is the library proper, which is everything she has reviewed: finished and abandoned, but not a work she only means to read, because a wish is not a review and has no finish date to group by. want_to is that list, one chip away. */
+                completion?: components["schemas"]["Completion"];
                 sort?: components["schemas"]["LibrarySort"];
                 /** @description false is the library, which hides deleted entries. true is the Deleted list, which holds only them. A deleted entry is never paged with the entries that are still there. */
                 deleted?: boolean;

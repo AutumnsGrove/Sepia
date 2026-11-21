@@ -1,0 +1,2 @@
+go test fuzz v1
+string("couldn't get into it, about a hundred pages in")

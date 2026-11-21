@@ -15,6 +15,7 @@
   import { uiCopy } from '../session/copy';
   import { whatWillChange } from '../session/diff';
   import { dateText, mediumText } from '../session/format';
+  import { completionBadge, dateLabel } from '../state/reading';
   import Button from './Button.svelte';
   import Cover from './Cover.svelte';
   import Rating from './Rating.svelte';
@@ -86,6 +87,14 @@
   const webFields = $derived(unverified.filter((field) => field.from_image !== true));
   const missing = $derived((draft.missing ?? []) as string[]);
   const needsRating = $derived(missing.includes('rating'));
+  const badge = $derived(completionBadge({ completion: draft.completion }));
+  // A work she only means to read has nothing to rate, so the block is not shown at all rather than shown empty.
+  const showRating = $derived(draft.completion !== 'want_to');
+  const shelfOptions = [
+    { value: 'finished', label: 'Finished' },
+    { value: 'abandoned', label: "Didn't finish" },
+    { value: 'want_to', label: 'Want to' },
+  ] as const;
   const tagAnswers = $derived(
     (draft.answers ?? []).filter(
       (answer) => answer.answer_type === 'tags' && (answer.values ?? []).length > 0,
@@ -156,6 +165,21 @@
           <span>{draft.work.primary_provider || 'Matched'}</span>
         </span>
       {/if}
+      {#if editable}
+        <div class="shelf" role="group" aria-label="How far you got">
+          {#each shelfOptions as option (option.value)}
+            <button
+              type="button"
+              aria-pressed={draft.completion === option.value}
+              onclick={() => onedit?.({ completion: option.value })}
+            >
+              {option.label}
+            </button>
+          {/each}
+        </div>
+      {:else if badge}
+        <span class="shelfbadge">{badge}</span>
+      {/if}
     </div>
   </section>
 
@@ -193,25 +217,27 @@
   {/if}
 
   <section>
-    <p class="lbl">
-      <span>
-        Rating
-        {#if needsRating}<span class="tag u needed"
-            ><CircleDashed size={14} aria-hidden="true" />{uiCopy.needed}</span
-          >{/if}
-      </span>
-      {#if editable}
-        <button
-          type="button"
-          class="fav"
-          aria-pressed={draft.rating.favourite}
-          aria-label="Favourite"
-          onclick={() => onedit?.({ favourite: !draft.rating.favourite })}
-        >
-          <Heart size={22} aria-hidden="true" />
-        </button>
-      {/if}
-    </p>
+    {#if showRating}
+      <p class="lbl">
+        <span>
+          Rating
+          {#if needsRating}<span class="tag u needed"
+              ><CircleDashed size={14} aria-hidden="true" />{uiCopy.needed}</span
+            >{/if}
+        </span>
+        {#if editable}
+          <button
+            type="button"
+            class="fav"
+            aria-pressed={draft.rating.favourite}
+            aria-label="Favourite"
+            onclick={() => onedit?.({ favourite: !draft.rating.favourite })}
+          >
+            <Heart size={22} aria-hidden="true" />
+          </button>
+        {/if}
+      </p>
+    {/if}
     <Rating
       quarters={draft.rating.quarters}
       readonly={!editable}
@@ -310,10 +336,10 @@
       {/if}
       {#if editingDate}
         <label class="fact">
-          <span class="k">Finished</span>
+          <span class="k">{dateLabel(draft)}</span>
           <input
             type="date"
-            aria-label="Finished on"
+            aria-label="{dateLabel(draft)} on"
             value={draft.finished_on ?? ''}
             onchange={(event) => {
               editingDate = false;
@@ -329,11 +355,31 @@
           disabled={!editable}
           onclick={() => (editingDate = true)}
         >
-          <span class="k">Finished</span>
+          <span class="k">{dateLabel(draft)}</span>
           <span class="val" class:empty={!draft.finished_on}>{dateText(draft.finished_on)}</span>
         </button>
       {/if}
     </div>
+    {#if draft.completion === 'abandoned'}
+      <p class="lbl">How far</p>
+      <div class="facts">
+        <label class="fact">
+          <span class="k">How far</span>
+          <input
+            type="text"
+            maxlength="200"
+            aria-label="How far you got"
+            placeholder="about 100 pages in"
+            value={draft.progress ?? ''}
+            disabled={!editable}
+            onchange={(event) => {
+              const value = event.currentTarget.value;
+              if (value !== (draft.progress ?? '')) onedit?.({ progress: value });
+            }}
+          />
+        </label>
+      </div>
+    {/if}
   </section>
 
   {#if tagAnswers.length > 0 || plainAnswers.length > 0}
@@ -410,6 +456,36 @@
 </article>
 
 <style>
+  /* The shelf switch: three plain choices, and the one she is on is filled. It is a fact about the card, not a
+     rating, so it never looks like a score. */
+  .shelf {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.55rem;
+  }
+  .shelf button {
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: none;
+    color: var(--text-2);
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .shelf button[aria-pressed='true'] {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .shelfbadge {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.05rem 0.45rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    color: var(--text-2);
+  }
   .card {
     background: var(--panel);
     border: 1px solid var(--line);
