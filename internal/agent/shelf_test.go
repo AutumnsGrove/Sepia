@@ -200,13 +200,15 @@ func TestAWishedWorkIsRevisedIntoTheEntry(t *testing.T) {
 // The model naming the shelf has to decide what the card asks for. If the cues miss her words but the model says
 // "abandoned", asking for a rating is the exact nudge this slice removed.
 func TestSaveEntryAppliesTheModelsShelfBeforeAsking(t *testing.T) {
-	// A message whose cues name nothing: no "couldn't", no "gave up", no "want to".
-	const flat = "the lantern keeper was slow and i put it aside"
+	// A message whose cues name nothing: no "couldn't", no "gave up", no "want to", no "finished", and nothing that
+	// looks like one. "put it aside" would be an abandoned cue, and then the card would already know its shelf and
+	// this test would pass with the fix reverted.
+	const flat = "the lantern keeper was slow in the middle"
 	r := newRig(t, rigOptions{script: []world.ChatTurn{
 		{ToolCalls: []world.ChatToolCall{toolCall("c1", "media_lookup", `{"title":"The Lantern Keeper","medium":"book"}`)}},
 		{ToolCalls: []world.ChatToolCall{toolCall("c2", "merge_candidates", `{"candidate_id":"openlibrary|OL1W"}`)}},
 		{ToolCalls: []world.ChatToolCall{toolCall("c3", "save_entry",
-			`{"body_quotes":["the lantern keeper was slow and i put it aside"],"completion":"abandoned"}`)}},
+			`{"body_quotes":["the lantern keeper was slow in the middle"],"completion":"abandoned"}`)}},
 		{Text: "The card is ready."},
 	}})
 	scriptBook(r.fake)

@@ -1,5 +1,5 @@
 import type { Entry, Revision } from '../api/client';
-import { mediumText, ratingText } from '../session/format';
+import { dateText, mediumText, ratingText } from '../session/format';
 
 /**
  * The reading screens' derived state. Each function is pure and tested here rather than in a component: the month a
@@ -89,6 +89,39 @@ export function entryMeta(entry: Entry, thisYear: number): string {
   const date = shortDate(entry.finished_on, thisYear);
   if (!medium) return date;
   return date ? `${medium} · ${date}` : medium;
+}
+
+/** The saved entry a revisit card is describing, as the socket sends it. */
+export interface RevisitPrevious {
+  rating_q?: number;
+  finished_on?: string;
+  verdict?: string;
+  completion?: string;
+}
+
+/**
+ * One line about the entry already on a work, for the revisit card. An unfinished row has no rating and its date is
+ * the day she stopped, so it is never described as a zero-star finish: "finished Tue 12 Nov · 0 stars" was what an
+ * abandoned row said before this.
+ */
+export function revisitMeta(previous: RevisitPrevious): string {
+  const shelf = previous.completion ?? 'finished';
+  const parts: string[] = [];
+  if (shelf === 'want_to') {
+    parts.push('wanted');
+  } else if (shelf === 'abandoned') {
+    parts.push(
+      previous.finished_on ? `stopped ${dateText(previous.finished_on)}` : "didn't finish",
+    );
+  } else if (previous.finished_on) {
+    parts.push(`finished ${dateText(previous.finished_on)}`);
+  }
+  // Only a finished row has stars. A wish and a dropped work have none, and printing a zero would be a score it
+  // never had.
+  if (shelf === 'finished' && typeof previous.rating_q === 'number' && previous.rating_q > 0) {
+    parts.push(`${previous.rating_q / 4} stars`);
+  }
+  return parts.join(' · ');
 }
 
 /** The quiet badge a row or a card carries, or empty for an ordinary finished review. */

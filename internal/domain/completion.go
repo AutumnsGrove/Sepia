@@ -135,14 +135,20 @@ var wantPhrases = []string{
 	"should watch",
 }
 
-// finishedPhrases name the ordinary case out loud. They do two jobs. They stop one sentence from becoming two:
-// "finished dune and now i want to read messiah" is a finished review that mentions a wish, not a wish. And they let
-// a card that started as a wish become a review, because without them only a tap on the shelf could move it, and she
-// would have said "finished it" for nothing. The want phrase's own words are masked out before they are checked,
-// because "want to read it" contains "read it".
-var finishedPhrases = []string{
+// saidFinishedPhrases are her saying she finished something, out loud. They are the strong form: they beat a want
+// phrase in the same sentence, because "finished dune and now i want to read messiah" is a finished review that
+// mentions a wish. They are also what lets a card that started as a wish become a review, since without them only a
+// tap on the shelf could move it and she would have said "finished it" for nothing.
+var saidFinishedPhrases = []string{
 	"finished",
 	"done with",
+}
+
+// pastPhrases are the weaker ways a sentence can be about something she has already been through. They are not
+// enough on their own to beat a want phrase, because the same words turn up in sentences about wanting: "i want to
+// read it because i watched the film" is a wish, not a finish. The want phrase's own words are masked out before
+// these are checked, because "want to read it" contains "read it".
+var pastPhrases = []string{
 	"read it",
 	"read this",
 	"read that",
@@ -170,12 +176,14 @@ func CompletionCues(text string) (Completion, bool) {
 	if len(wantSpans) > 0 {
 		masked = blank(lower, wantSpans)
 	}
-	if len(wantSpans) > 0 && !anyPhrase(masked, finishedPhrases) {
+	// A wish wins unless she said, out loud, that she finished something. An incidental "read it" is not enough:
+	// those words appear in sentences about wanting to read.
+	if len(wantSpans) > 0 && !anyPhrase(masked, saidFinishedPhrases) {
 		return CompletionWantTo, true
 	}
-	// She said she finished it. On a fresh card this is the default anyway; on a card that started as a wish it is the
-	// only thing that moves it to a review without her having to find the shelf control.
-	if anyPhrase(masked, finishedPhrases) {
+	// She finished it. On a fresh card this is the default anyway; on a card that started as a wish it is the only
+	// thing that moves it to a review without her having to find the shelf control.
+	if anyPhrase(masked, saidFinishedPhrases) || anyPhrase(masked, pastPhrases) {
 		return CompletionFinished, true
 	}
 	return CompletionFinished, false
@@ -197,7 +205,10 @@ func phraseSpans(lower string, phrases []string) []span {
 			}
 			start := from + index
 			end := start + len(phrase)
-			if !negated(lower, start) {
+			// A one-word phrase has to be a whole word, or "finished" matches inside "unfinished". A phrase of several
+			// words is specific enough on its own.
+			whole := strings.ContainsRune(phrase, ' ') || wholeWordAt(lower, start, end)
+			if whole && !negated(lower, start) {
 				out = append(out, span{start: start, end: end})
 			}
 			from = end
@@ -208,6 +219,22 @@ func phraseSpans(lower string, phrases []string) []span {
 
 func anyPhrase(lower string, phrases []string) bool {
 	return len(phraseSpans(lower, phrases)) > 0
+}
+
+// wholeWordAt reports whether the bytes either side of a match are word boundaries, so a one-word cue cannot match a
+// fragment of a longer word.
+func wholeWordAt(text string, start, end int) bool {
+	if start > 0 && isWordByte(text[start-1]) {
+		return false
+	}
+	if end < len(text) && isWordByte(text[end]) {
+		return false
+	}
+	return true
+}
+
+func isWordByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '\''
 }
 
 // negated reports whether a negator sits immediately before the phrase. The window is short on purpose: "finished
