@@ -63,11 +63,14 @@ fixture it used (synthetic or public-domain metadata only, never a real review) 
 ## Gates
 
 **G1** before the first call that spends money: which service, the expected cost in cents, a request for the key.
-**G2** before reading any real screenshot.
+**G2** before reading any real screenshot. Answered 2026-11-22 for the four screenshots in
+[`../spikes/01.6-vision.md`](../spikes/01.6-vision.md): they stayed outside the repository, and only findings were
+written down. **G7** (added later, before an image reaches a model) is answered in
+[`../handoffs/2026-11-22-G7-vision-spike.md`](../handoffs/2026-11-22-G7-vision-spike.md).
 
 ## Open questions
 
-- Which five Fable screenshots (the operator picks; they stay outside the repo).
+- ~~Which five Fable screenshots~~ **Answered 2026-11-22:** four, chosen by the operator, kept outside the repo.
 - Whether the operator wants the spike keys separate from the production keys (recommended).
 
 ## Done when
