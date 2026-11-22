@@ -472,7 +472,7 @@ and the standing rules are in [`docs/BUILD.md`](docs/BUILD.md).
 - **UI mockups of every screen: done** (40 frames across seven pages in [`mockups/`](mockups/)). Phase 0 only re-checks them on a real phone.
 - Pull a handful of real Open Library works and editions (a series volume, a translated book, an audiobook
   edition) and write down which fields are reliable: first publication year, series, ISBNs, covers.
-- Test the pinned model on real Fable screenshots (star icons, small type, dates) and record what it gets wrong. **Done 2026-11-22** for the list view: title, creator, rating and date were read exactly on four screenshots. The review-body half dropped out of scope when the same test showed a written review is not viewable outside its compose screen.
+- Test the pinned model on real Fable screenshots (star icons, small type, dates) and record what it gets wrong. **Done 2026-11-22** for the list view: title, creator, rating and date were read exactly on four screenshots. The review-body half dropped out of scope on her report that a written review is not viewable outside its compose screen (her report, not a measurement).
 - Read TMDB's image and attribution terms and write the cover-caching decision down.
 - Write the first **fixture corpus** (about 30 sample messages with expected parse, expected decision outcome
   and expected tool sequence), then run the pre-read and the pinned model against it. Set the first decision
