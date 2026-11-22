@@ -415,7 +415,8 @@ func mergeCandidates(ctx context.Context, raw json.RawMessage, tctx *tool.Contex
 		return state.lookupFailed(ctx, lookupArgs{Medium: state.Medium, Title: title}, err)
 	}
 	result.Source.Trust = domain.TrustVerified
-	result = state.Agent.attachCover(ctx, result)
+	// A cover that cannot be fetched is not a failed fetch: the card is built and draws its stand-in.
+	result, _ = state.Agent.attachCover(ctx, result)
 
 	workID, err := state.saveWork(ctx, result)
 	if err != nil {
@@ -432,6 +433,10 @@ func mergeCandidates(ctx context.Context, raw json.RawMessage, tctx *tool.Contex
 		result.Work.Title, result.Work.Year, result.Work.Medium), nil
 }
 
+// ErrCoverGone is the definitive answer: the provider no longer has a cover for this work, so the stored copy must not
+// be served again. It is what the read path needs to tell "try again later" from "this poster is gone for good".
+var ErrCoverGone = errors.New("the provider has no cover for this work")
+
 // RefreshCover re-reads a work from its provider and replaces a cover that has outlived the 180 days G3 allows.
 //
 // It is the read half of the freshness rule: the server calls it when a stored cover is too old to serve, so a work
@@ -447,11 +452,13 @@ func (a *Agent) RefreshCover(ctx context.Context, work domain.Work) (domain.Work
 	}
 	result, err := a.finder.Fetch(ctx, work.PrimaryProvider, work.PrimaryID)
 	if err != nil {
-		return work, err
+		return work, definitive(err)
 	}
-	refreshed := a.attachCover(ctx, result)
-	if refreshed.Work.CoverPath == "" {
-		return work, errors.New("the provider has no cover for this work")
+	refreshed, err := a.attachCover(ctx, result)
+	if err != nil {
+		// The fetch worked and the cover did not: either the provider names none, or the one it names cannot be
+		// used. Both are answers, not outages.
+		return work, definitive(err)
 	}
 	// Only the cover is the provider's answer here, and only the cover is written: this runs as a background job, so
 	// the work it read may be older than the row by the time the provider has answered twice.
@@ -461,6 +468,20 @@ func (a *Agent) RefreshCover(ctx context.Context, work domain.Work) (domain.Work
 	work.CoverPath = refreshed.Work.CoverPath
 	work.CoverSource = refreshed.Work.CoverSource
 	return work, nil
+}
+
+// ForgetCoverPath clears the cover reference a stored file name belongs to, which is what the read path does when the
+// provider says the cover is gone: the file is deleted by whoever owns the data directory, and the row must stop
+// naming it.
+func (a *Agent) ForgetCoverPath(ctx context.Context, coverPath string) error {
+	work, err := a.store.WorkByCoverPath(ctx, coverPath)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return a.store.SetWorkCover(ctx, work.ID, "", "")
 }
 
 // RefreshCoverByPath refreshes the cover a stored file name belongs to, which is what the cover route needs: the
@@ -484,21 +505,36 @@ func (a *Agent) RefreshCoverByPath(ctx context.Context, coverPath string) error 
 //
 // This runs on fetch rather than on every image request: a fetch is what happens when she logs a work, which is the
 // "next use" the freshness rule reads, and the server keeps serving a stored cover without calling a provider.
-func (a *Agent) attachCover(ctx context.Context, result providers.Result) providers.Result {
+func (a *Agent) attachCover(ctx context.Context, result providers.Result) (providers.Result, error) {
 	// No early return on an empty URL: Finder.Cover checks a stored cover for freshness before it looks at the
 	// URL, so a work whose provider has stopped advertising a poster still recovers the copy already on disk.
 	if a.finder == nil {
-		return result
+		return result, errors.New("the metadata services are not set up")
 	}
 	cover, err := a.finder.Cover(ctx, result.Provider, result.ProviderID, result.CoverURL)
 	if err != nil {
-		return result
+		return result, err
 	}
 	result.Source.CoverPath = cover.Path
 	result.Source.CoverSource = result.Provider
 	result.Work.CoverPath = cover.Path
 	result.Work.CoverSource = result.Provider
-	return result
+	return result, nil
+}
+
+// definitive reports whether a cover failure is an answer rather than an outage. The provider having no cover, or
+// sending something that is not a usable image, means the stored copy must go; a 5xx, a timeout or a missing key means
+// try again later, and the copy on disk keeps being served in the meantime.
+func definitive(err error) error {
+	var typed *providers.Error
+	if !errors.As(err, &typed) {
+		return err
+	}
+	switch typed.Reason {
+	case providers.ReasonNotFound, providers.ReasonNotAnImage, providers.ReasonCoverTooBig:
+		return fmt.Errorf("%w: %s", ErrCoverGone, typed.Reason)
+	}
+	return err
 }
 
 // saveWork stores the fetched work, reusing a work the library already knows so a second review of the same thing
