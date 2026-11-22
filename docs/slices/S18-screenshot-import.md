@@ -42,6 +42,9 @@ and `body_origin = imported` exist in the schema. The decisions layer takes text
 - Entries record `imported_from`. `body_origin = imported` stays in the schema and is **not** used by this slice,
   because no body is imported; an imported entry's body starts empty and is typed if she wants one. Bank questions
   are not asked for an import unless something required is missing.
+- **A finished entry may have no body** (decided 2026-11-22, `PLAN.md` 2 and [`../ENTRY_CARD.md`](../ENTRY_CARD.md)
+  2). Without that, this slice could not save anything: an imported row is a rated finish with no body, and the save
+  guard used to refuse exactly that shape.
 - Images go to the pinned model through OpenRouter only after the user attaches them.
 
 ## Scope
