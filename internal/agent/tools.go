@@ -453,12 +453,13 @@ func (a *Agent) RefreshCover(ctx context.Context, work domain.Work) (domain.Work
 	if refreshed.Work.CoverPath == "" {
 		return work, errors.New("the provider has no cover for this work")
 	}
-	// Only the cover is the provider's answer here; the work keeps its own identity and fields.
-	work.CoverPath = refreshed.Work.CoverPath
-	work.CoverSource = refreshed.Work.CoverSource
-	if err := a.store.SaveWork(ctx, work); err != nil {
+	// Only the cover is the provider's answer here, and only the cover is written: this runs as a background job, so
+	// the work it read may be older than the row by the time the provider has answered twice.
+	if err := a.store.SetWorkCover(ctx, work.ID, refreshed.Work.CoverPath, refreshed.Work.CoverSource); err != nil {
 		return work, err
 	}
+	work.CoverPath = refreshed.Work.CoverPath
+	work.CoverSource = refreshed.Work.CoverSource
 	return work, nil
 }
 
