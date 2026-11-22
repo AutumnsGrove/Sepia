@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,10 +13,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
+	"github.com/AutumnsGrove/sepia/internal/providers"
 	"github.com/AutumnsGrove/sepia/internal/session"
 	"github.com/AutumnsGrove/sepia/internal/store"
+	"github.com/AutumnsGrove/sepia/internal/world"
 )
 
 // The REST half: every route on the happy path, every refusal, and the two sad shapes a page can produce (a gone
@@ -772,5 +776,234 @@ func TestSessionListNamesTheDraftWork(t *testing.T) {
 	decode(t, one, &read)
 	if read.Title != "The Lantern Keeper" {
 		t.Errorf("one session's title = %q, want the work", read.Title)
+	}
+}
+
+// A stored cover has to reach the client as a URL it can actually load. The agent writes covers/<provider>-<id>.<ext>
+// when it fetches a work; the payload has to name that file, and the server has to serve it, or the card shows its
+// stand-in forever and the R2 mirror has nothing to copy.
+func TestAWorkWithACoverServesItsURL(t *testing.T) {
+	rig := newSocketRig(t)
+	defer rig.close()
+	ctx := context.Background()
+
+	coverBytes := world.SamplePoster()
+	dir := filepath.Join(rig.dataDir, "covers")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tmdb-movie-303.png"), coverBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work := domain.Work{
+		ID: "w2", Medium: "film", Title: "The Quarry Line", Verified: true,
+		CoverPath: "covers/tmdb-movie-303.png", CoverSource: "tmdb",
+	}
+	if err := rig.db.SaveWork(ctx, work); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/api/works/w2", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("work detail = %d: %s", rec.Code, rec.Body)
+	}
+	var detail struct {
+		CoverURL string `json:"cover_url"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if detail.CoverURL != "/covers/tmdb-movie-303.png" {
+		t.Fatalf("cover_url = %q, want /covers/tmdb-movie-303.png", detail.CoverURL)
+	}
+
+	served := doJSON(t, rig.server.Config.Handler, http.MethodGet, detail.CoverURL, nil)
+	if served.Code != http.StatusOK {
+		t.Fatalf("%s = %d: the payload named a file the server will not serve", detail.CoverURL, served.Code)
+	}
+	if !bytes.Equal(served.Body.Bytes(), coverBytes) {
+		t.Error("the served cover is not the stored file")
+	}
+}
+
+// G3 says a cover older than 180 days is refreshed on its next use, and a use is a read. The stale poster keeps being
+// served (the library should keep its posters offline) with no-cache, and the work is re-read so the next request finds
+// a fresh one.
+func TestACoverPastItsWindowIsServedWhileItIsRefreshed(t *testing.T) {
+	// The flow rig, not the bare one: this path needs an agent with a finder, because the refresh re-reads the work.
+	rig := newFlowRig(t)
+	defer rig.close()
+	ctx := context.Background()
+
+	dir := filepath.Join(rig.dataDir, "covers")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	name := "tmdb-movie-101.png"
+	file := filepath.Join(dir, name)
+	if err := os.WriteFile(file, world.SamplePoster(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := rig.inner.now().Add(-providers.CoverMaxAge - 24*time.Hour)
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatal(err)
+	}
+	work := domain.Work{
+		ID: "w3", Medium: "film", Title: "The Lantern Keeper", Verified: true,
+		CoverPath: "covers/" + name, CoverSource: "tmdb",
+		PrimaryProvider: "tmdb", PrimaryID: "movie:101",
+	}
+	if err := rig.db.SaveWork(ctx, work); err != nil {
+		t.Fatal(err)
+	}
+
+	// A stale cover is still served: the board is offline most of the time and the library should keep its posters.
+	rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stale cover = %d, want 200 while the refresh runs", rec.Code)
+	}
+	if cache := rec.Header().Get("Cache-Control"); cache != "no-cache" {
+		t.Errorf("stale cover Cache-Control = %q, want no-cache so the browser revalidates", cache)
+	}
+
+	// The refresh runs in the background, so wait for it rather than sleeping a fixed time. The refresh writes the
+	// file with the provider client's clock, which in this rig is the same fixed clock.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		info, statErr := os.Stat(file)
+		if statErr == nil && rig.inner.now().Sub(info.ModTime()) < providers.CoverMaxAge {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the stale cover was never refreshed")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil); rec.Code != http.StatusOK {
+		t.Fatalf("refreshed cover = %d, want 200", rec.Code)
+	}
+}
+
+// A fresh cover costs no provider call at all: the age check is the whole of the freshness rule on this path.
+func TestAFreshCoverIsServedWithoutAskingTheProvider(t *testing.T) {
+	rig := newSocketRig(t)
+	defer rig.close()
+
+	dir := filepath.Join(rig.dataDir, "covers")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	name := "tmdb-movie-404.png"
+	cover := world.SamplePoster()
+	if err := os.WriteFile(filepath.Join(dir, name), cover, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil)
+	if rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), cover) {
+		t.Fatalf("fresh cover = %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// A cover that cannot be refreshed must not be retried on every read. The realistic case is a poster the provider has
+// stopped serving: the fetch succeeds, the image download fails, the file stays stale, and without a retry window every
+// render of that page becomes another pair of provider calls. One attempt, then quiet until the window passes.
+func TestAFailedRefreshIsNotRetriedOnEveryRead(t *testing.T) {
+	rig := newFlowRig(t)
+	defer rig.close()
+	ctx := context.Background()
+
+	dir := filepath.Join(rig.dataDir, "covers")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	name := "tmdb-movie-101.png"
+	file := filepath.Join(dir, name)
+	if err := os.WriteFile(file, world.SamplePoster(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := rig.inner.now().Add(-providers.CoverMaxAge - 24*time.Hour)
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatal(err)
+	}
+	// The provider still answers, and the poster it names is gone: the refresh fails and the file stays stale.
+	rig.tmdb.SetFault("/t/p/w92/lantern.jpg", world.FaultError)
+	work := domain.Work{
+		ID: "w-retry", Medium: "film", Title: "The Lantern Keeper", Verified: true,
+		CoverPath: "covers/" + name, CoverSource: "tmdb",
+		PrimaryProvider: "tmdb", PrimaryID: "movie:101",
+	}
+	if err := rig.db.SaveWork(ctx, work); err != nil {
+		t.Fatal(err)
+	}
+
+	for range 3 {
+		if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil); rec.Code != http.StatusOK {
+			t.Fatalf("stale cover = %d, want 200", rec.Code)
+		}
+		// Give a triggered refresh time to reach the world before the next read.
+		time.Sleep(150 * time.Millisecond)
+	}
+	downloads := 0
+	for _, request := range rig.tmdb.Requests() {
+		if strings.HasSuffix(request.Path, "lantern.jpg") {
+			downloads++
+		}
+	}
+	if got := downloads; got != 1 {
+		t.Errorf("cover downloads = %d after three reads, want 1: a failed refresh was retried on every read", got)
+	}
+}
+
+// What enforces G3's cap is the purge, not withholding an image that is still on disk: when the provider answers that
+// the cover is gone, the file goes and the row stops naming it, so no TMDB content outlives the six months.
+func TestACoverTheProviderDisownsIsPurged(t *testing.T) {
+	rig := newFlowRig(t)
+	defer rig.close()
+	ctx := context.Background()
+
+	dir := filepath.Join(rig.dataDir, "covers")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	name := "tmdb-movie-101.png"
+	file := filepath.Join(dir, name)
+	if err := os.WriteFile(file, world.SamplePoster(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := rig.inner.now().Add(-providers.CoverMaxAge - 24*time.Hour)
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatal(err)
+	}
+	// The provider has never heard of this id: a not-found is an answer, not an outage.
+	rig.tmdb.SetFault("/movie/101", world.FaultNotFound)
+	work := domain.Work{
+		ID: "w-gone", Medium: "film", Title: "The Lantern Keeper", Verified: true,
+		CoverPath: "covers/" + name, CoverSource: "tmdb",
+		PrimaryProvider: "tmdb", PrimaryID: "movie:101",
+	}
+	if err := rig.db.SaveWork(ctx, work); err != nil {
+		t.Fatal(err)
+	}
+
+	if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil); rec.Code != http.StatusOK {
+		t.Fatalf("stale cover = %d, want 200 while the refresh runs", rec.Code)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, statErr := os.Stat(file); errors.Is(statErr, os.ErrNotExist) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the disowned cover was never deleted")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	got, err := rig.db.Work(ctx, work.ID)
+	if err != nil {
+		t.Fatalf("Work: %v", err)
+	}
+	if got.CoverPath != "" {
+		t.Errorf("cover path = %q, want it cleared once the file is gone", got.CoverPath)
 	}
 }

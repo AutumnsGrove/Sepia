@@ -20,6 +20,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/agent"
@@ -92,6 +93,7 @@ func newServer(cfg config.Config, deps Deps, log *slog.Logger, assets fs.FS) *Se
 	s := &Server{
 		cfg: cfg, log: log, assets: assets, engine: deps.Engine, model: deps.Agent, now: now, base: base,
 		responder: deps.Responder, update: update.New(cfg.UpdateDir, versionString(), now), backups: deps.Backups,
+		coverRefresh: &inflight{keys: map[string]bool{}, tried: map[string]time.Time{}},
 	}
 	s.hub = newHub(s)
 	if deps.Live != nil {
@@ -117,7 +119,50 @@ type Server struct {
 	// backups is the app's half of the backup flow (S14). It reads the host script's receipts and writes the
 	// on-demand request; it never takes a snapshot itself.
 	backups *backup.Service
+	// coverRefresh is the set of covers this process is already refreshing, with when each was last tried. A page full
+	// of stale posters asks the provider once per poster per retry window rather than once per request.
+	coverRefresh *inflight
 }
+
+// inflight runs one background job per key, and remembers when each last ran.
+//
+// Guarding only the running set is not enough: a cover that can never be refreshed (a poster the provider has stopped
+// serving, or a work row that is gone) would fail, end, and be retried by the next request, so a page holding a few of
+// them turns every render into provider traffic. A key is therefore not tried again until the retry window has passed.
+type inflight struct {
+	mu    sync.Mutex
+	keys  map[string]bool
+	tried map[string]time.Time
+}
+
+// begin reports whether this caller should run the job: not already running, and not tried within the window.
+func (i *inflight) begin(key string, now time.Time) bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.keys[key] {
+		return false
+	}
+	if at, ok := i.tried[key]; ok && now.Sub(at) < coverRetryAfter {
+		return false
+	}
+	i.keys[key] = true
+	i.tried[key] = now
+	return true
+}
+
+func (i *inflight) done(key string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	delete(i.keys, key)
+}
+
+// coverRefreshTimeout bounds one background refresh. It is generous because nobody is waiting for it: the request
+// that triggered it was already answered with a stand-in.
+const coverRefreshTimeout = 30 * time.Second
+
+// coverRetryAfter is how long a cover that failed to refresh is left alone. Long enough that a stale poster cannot
+// turn reads into provider traffic, short enough that a provider outage does not lose the cover for a day.
+const coverRetryAfter = 15 * time.Minute
 
 // routes assembles the chain. Order matters: recover, then the access log, then headers, then the Host check on
 // everything, then the Origin check on state changes, then the route.
@@ -333,9 +378,78 @@ func (s *Server) serveCover(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
 		return
 	}
+	// G3's rule is that a cover older than 180 days is refreshed on its next use, and a use is a read. A stale file is
+	// still served — the board is usually offline and the library should keep its posters — but it is served with
+	// no-cache so the browser revalidates rather than holding a copy of its own, and the work is refreshed in the
+	// background. When the provider answers that the cover is gone, the refresh purges the file instead: that is what
+	// stops TMDB content outliving the cap, rather than withholding an image that is still on disk.
+	if s.now().Sub(info.ModTime()) >= providers.CoverMaxAge {
+		w.Header().Set("Cache-Control", "no-cache")
+		s.refreshCover(r.Context(), path.Join(providers.CoverDir, name))
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+	}
 	w.Header().Set("Content-Type", coverType(name))
-	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeContent(w, r, name, info.ModTime(), f)
+}
+
+// purgeCover deletes a cover the provider says it no longer has, and clears the row's reference to it. This is the
+// half that enforces the cap: a file the provider has disowned must not stay in data/covers/ for the next six months.
+// The context is the refresh's, which is already detached from the request that triggered it.
+func (s *Server) purgeCover(ctx context.Context, coverPath string) {
+	s.removeCoverFile(coverPath)
+	if err := s.model.ForgetCoverPath(ctx, coverPath); err != nil && s.log != nil {
+		s.log.Warn("cover reference not cleared", "cover", coverPath, "reason", err)
+	}
+}
+
+// removeCoverFile deletes one stored cover, resolving it exactly the way the serve route does: the directory and the
+// file are both resolved and the file must sit under the directory, so a name that is not a bare file name cannot
+// reach outside it. The path arrives from the request that found the cover stale, so it is never trusted as a path.
+func (s *Server) removeCoverFile(coverPath string) {
+	name := path.Base(coverPath)
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\\`+"\x00") {
+		return
+	}
+	dir := filepath.Join(s.cfg.DataDir, providers.CoverDir)
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return
+	}
+	resolvedFile, err := filepath.EvalSymlinks(filepath.Join(dir, name))
+	if err != nil || !strings.HasPrefix(resolvedFile, resolvedDir+string(os.PathSeparator)) {
+		return
+	}
+	if err := os.Remove(resolvedFile); err != nil && !errors.Is(err, os.ErrNotExist) && s.log != nil {
+		s.log.Warn("cover purge failed", "cover", coverPath, "reason", err)
+	}
+}
+
+// refreshCover replaces a cover that has outlived G3's 180 days. It runs in the background on the server's base
+// context, because the request that found it stale has already been answered, and a failure is only logged: the
+// next request finds the file just as stale and tries again.
+func (s *Server) refreshCover(requestCtx context.Context, coverPath string) {
+	if s.model == nil || s.coverRefresh == nil {
+		return
+	}
+	if !s.coverRefresh.begin(coverPath, s.now()) {
+		return
+	}
+	go func() {
+		defer s.coverRefresh.done(coverPath)
+		// The request that found the cover stale has already been answered, so its cancellation must not abort the
+		// refresh; its values are kept, which is what a trace or a logger in the chain would need.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(requestCtx), coverRefreshTimeout)
+		defer cancel()
+		err := s.model.RefreshCoverByPath(ctx, coverPath)
+		switch {
+		case err == nil:
+		case errors.Is(err, agent.ErrCoverGone):
+			s.purgeCover(ctx, coverPath)
+		case s.log != nil:
+			s.log.Warn("cover refresh failed", "cover", coverPath, "reason", err)
+		}
+	}()
 }
 
 func coverType(name string) string {

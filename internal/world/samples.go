@@ -1,5 +1,12 @@
 package world
 
+import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/png"
+)
+
 // The sample world `sepia-dev` runs against. The fixtures are invented and deliberately dull so that a frontend test
 // can type a fixed sentence and get a card, without a key, a network or a real review (docs/BUILD.md invariant 10).
 //
@@ -38,6 +45,37 @@ func SampleTMDB() map[string][]byte {
 	  "external_ids": {"imdb_id": "tt0000202", "tvdb_id": 500202}}`),
 		"/configuration": []byte(`{"images": {"secure_base_url": "https://img.example/t/p/",
 	  "poster_sizes": ["w92", "w342", "original"]}}`),
+	}
+}
+
+// SamplePoster is a small, valid image for the invented posters the fixtures name. The fixtures say JPEG because
+// the real ones do; the bytes are PNG and the content type says so, because the cover rule trusts the header and
+// never the file name.
+func SamplePoster() []byte {
+	img := image.NewRGBA(image.Rect(0, 0, 92, 138))
+	for y := range 138 {
+		for x := range 92 {
+			img.Set(x, y, color.RGBA{R: 0x2a, G: 0x33, B: 0x2c, A: 0xff})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		panic("world: the sample poster cannot be encoded: " + err.Error())
+	}
+	return buf.Bytes()
+}
+
+// LoadCovers gives every invented poster path an image, so a cover download in the sample world gets an image
+// instead of the JSON echo. It is how `sepia-dev` shows a real cover and how the agent tests exercise the
+// download without a network.
+func (s *Server) LoadCovers() {
+	poster := SamplePoster()
+	for _, path := range []string{
+		"/t/p/w92/lantern.jpg", "/t/p/w342/lantern.jpg",
+		"/t/p/w92/quarry.jpg", "/t/p/w342/quarry.jpg",
+		"/covers/b/id/123-L.jpg", "/covers/b/id/123-M.jpg",
+	} {
+		s.SetBodyType(path, "image/png", poster)
 	}
 }
 

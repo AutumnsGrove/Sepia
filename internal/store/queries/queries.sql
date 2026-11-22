@@ -18,6 +18,12 @@ WHERE id = ?;
 -- name: FindWorksByTitle :many
 SELECT * FROM works WHERE medium = ? AND title = ? ORDER BY year DESC, id;
 
+-- name: FindWorkByCoverPath :one
+SELECT * FROM works WHERE cover_path = ?;
+
+-- name: UpdateWorkCover :exec
+UPDATE works SET cover_path = ?, cover_source = ?, updated_at = ? WHERE id = ?;
+
 -- name: CreateWorkSource :exec
 INSERT INTO work_sources (id, work_id, provider, provider_id, raw_json, trust, citations_json,
                           polaris_thread_id, fetched_at)

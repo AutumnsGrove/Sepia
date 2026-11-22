@@ -459,6 +459,32 @@ func (q *Queries) DeleteCompactedEvents(ctx context.Context, arg DeleteCompacted
 	return err
 }
 
+const findWorkByCoverPath = `-- name: FindWorkByCoverPath :one
+SELECT id, medium, title, original_title, year, creator_json, details_json, cover_path, cover_source, primary_provider, primary_id, verified, created_at, updated_at FROM works WHERE cover_path = ?
+`
+
+func (q *Queries) FindWorkByCoverPath(ctx context.Context, coverPath string) (Work, error) {
+	row := q.db.QueryRowContext(ctx, findWorkByCoverPath, coverPath)
+	var i Work
+	err := row.Scan(
+		&i.ID,
+		&i.Medium,
+		&i.Title,
+		&i.OriginalTitle,
+		&i.Year,
+		&i.CreatorJson,
+		&i.DetailsJson,
+		&i.CoverPath,
+		&i.CoverSource,
+		&i.PrimaryProvider,
+		&i.PrimaryID,
+		&i.Verified,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const findWorksByTitle = `-- name: FindWorksByTitle :many
 SELECT id, medium, title, original_title, year, creator_json, details_json, cover_path, cover_source, primary_provider, primary_id, verified, created_at, updated_at FROM works WHERE medium = ? AND title = ? ORDER BY year DESC, id
 `
@@ -2057,6 +2083,27 @@ func (q *Queries) UpdateWork(ctx context.Context, arg UpdateWorkParams) error {
 		arg.PrimaryProvider,
 		arg.PrimaryID,
 		arg.Verified,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateWorkCover = `-- name: UpdateWorkCover :exec
+UPDATE works SET cover_path = ?, cover_source = ?, updated_at = ? WHERE id = ?
+`
+
+type UpdateWorkCoverParams struct {
+	CoverPath   string `json:"cover_path"`
+	CoverSource string `json:"cover_source"`
+	UpdatedAt   string `json:"updated_at"`
+	ID          string `json:"id"`
+}
+
+func (q *Queries) UpdateWorkCover(ctx context.Context, arg UpdateWorkCoverParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkCover,
+		arg.CoverPath,
+		arg.CoverSource,
 		arg.UpdatedAt,
 		arg.ID,
 	)

@@ -35,6 +35,7 @@ type Querier interface {
 	CreateWork(ctx context.Context, arg CreateWorkParams) error
 	CreateWorkSource(ctx context.Context, arg CreateWorkSourceParams) error
 	DeleteCompactedEvents(ctx context.Context, arg DeleteCompactedEventsParams) error
+	FindWorkByCoverPath(ctx context.Context, coverPath string) (Work, error)
 	FindWorksByTitle(ctx context.Context, arg FindWorksByTitleParams) ([]Work, error)
 	GetClientMessage(ctx context.Context, arg GetClientMessageParams) (ClientMessage, error)
 	GetEntry(ctx context.Context, id string) (Entry, error)
@@ -120,6 +121,7 @@ type Querier interface {
 	UpdateDraft(ctx context.Context, arg UpdateDraftParams) (sql.Result, error)
 	UpdateSessionMessages(ctx context.Context, arg UpdateSessionMessagesParams) error
 	UpdateWork(ctx context.Context, arg UpdateWorkParams) error
+	UpdateWorkCover(ctx context.Context, arg UpdateWorkCoverParams) error
 	// Settings are a small map of switches, not history: the previous value is not kept, because it is a preference,
 	// not a review.
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error

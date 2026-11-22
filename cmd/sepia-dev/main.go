@@ -147,10 +147,12 @@ func run(ctx context.Context, environ []string, stderr io.Writer) error {
 	tmdb := world.Start("tmdb", clock)
 	defer tmdb.Close()
 	tmdb.LoadBodies(world.SampleTMDB())
+	tmdb.LoadCovers()
 
 	ol := world.Start("openlibrary", clock)
 	defer ol.Close()
 	ol.LoadBodies(world.SampleOpenLibrary())
+	ol.LoadCovers()
 
 	reading := world.NewDecisions(clock)
 	if scenario == "split" {
