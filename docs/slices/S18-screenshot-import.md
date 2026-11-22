@@ -42,9 +42,11 @@ and `body_origin = imported` exist in the schema. The decisions layer takes text
 - Entries record `imported_from`. `body_origin = imported` stays in the schema and is **not** used by this slice,
   because no body is imported; an imported entry's body starts empty and is typed if she wants one. Bank questions
   are not asked for an import unless something required is missing.
-- **A finished entry may have no body** (decided 2026-11-22, `PLAN.md` 2 and [`../ENTRY_CARD.md`](../ENTRY_CARD.md)
-  2). Without that, this slice could not save anything: an imported row is a rated finish with no body, and the save
-  guard used to refuse exactly that shape.
+- **A finished entry may have no body**, and **this slice depends on that rule landing first**. An imported row is a
+  rated finish with no body, and on the base this branch is cut from, `PLAN.md` 2, [`../ENTRY_CARD.md`](../ENTRY_CARD.md)
+  2 and `ValidateForSave` all still require one, so nothing this slice produces can be confirmed yet. The change is
+  **PR #36** (guard, `PLAN.md`, `ENTRY_CARD.md` and their tests, decided 2026-11-22 by Autumn); S18 merges after it, and
+  if #36 is ever dropped, this slice needs a different body-less shape rather than this one.
 - Images go to the pinned model through OpenRouter only after the user attaches them.
 
 ## Scope
