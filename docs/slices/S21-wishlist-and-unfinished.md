@@ -34,7 +34,8 @@ recorded as decisions below; nothing in this section is an assumption.
 - An entry has a `completion` of `want_to`, `finished` or `abandoned`. It is a second dimension, kept apart
   from `status` (`draft | saved`), because one is the lifecycle of a card and the other is what she has to say
   about the work.
-- A finished entry still needs a rating and a body. An abandoned entry needs a body and no rating. A wanted
+- A finished entry still needs a rating, and its body is optional (relaxed 2026-11-22, see below). An
+  abandoned entry needs a body and no rating. A wanted
   entry needs neither, only the work and her confirm tap.
 - `finished_on` keeps its column and its name in the database and the API. The card relabels it: "Finished" for
   a finished entry, "Stopped" for an abandoned one. There is no second date column.
@@ -114,7 +115,8 @@ Answered by Autumn on 2026-11-20, in the batch before the slice started.
 1. **Three states, on one table.** `want_to`, `finished`, `abandoned` as a `completion` column on `entries`,
    not a separate wanted table. A wish inherits soft delete, revisions, the answers and the whole list plumbing
    that already exists, and "edit the wish into the entry" needs the row to be the same row.
-2. **The rating rule relaxes, and it is written down.** A finished entry still needs a rating and a body. An
+2. **The rating rule relaxes, and it is written down.** A finished entry still needs a rating; its body became
+   optional on 2026-11-22, when S18's import turned out to produce exactly that shape. An
    abandoned entry needs a body. A wanted entry needs neither. `PLAN.md` 11 rule 6 and `ENTRY_CARD.md` 2 are
    updated in the same commit, because a spec that says otherwise would be trigger T11.
 3. **One date column, two labels.** `finished_on` keeps its name in the schema and the API and gains no sibling.
