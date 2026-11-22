@@ -12,8 +12,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
+	"github.com/AutumnsGrove/sepia/internal/providers"
 	"github.com/AutumnsGrove/sepia/internal/session"
 	"github.com/AutumnsGrove/sepia/internal/store"
 	"github.com/AutumnsGrove/sepia/internal/world"
@@ -820,5 +822,80 @@ func TestAWorkWithACoverServesItsURL(t *testing.T) {
 	}
 	if !bytes.Equal(served.Body.Bytes(), coverBytes) {
 		t.Error("the served cover is not the stored file")
+	}
+}
+
+// G3 says a cover older than 180 days is refreshed on its next use, and a use is a read. A stale poster must not be
+// served (that would keep TMDB content past its six-month cap), and the work it belongs to must be re-read so the
+// next request finds a fresh one.
+func TestACoverPastItsWindowIsNotServedAndIsRefreshed(t *testing.T) {
+	// The flow rig, not the bare one: this path needs an agent with a finder, because the refresh re-reads the work.
+	rig := newFlowRig(t)
+	defer rig.close()
+	ctx := context.Background()
+
+	dir := filepath.Join(rig.dataDir, "covers")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	name := "tmdb-movie-101.png"
+	file := filepath.Join(dir, name)
+	if err := os.WriteFile(file, world.SamplePoster(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := rig.inner.now().Add(-providers.CoverMaxAge - 24*time.Hour)
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatal(err)
+	}
+	work := domain.Work{
+		ID: "w3", Medium: "film", Title: "The Lantern Keeper", Verified: true,
+		CoverPath: "covers/" + name, CoverSource: "tmdb",
+		PrimaryProvider: "tmdb", PrimaryID: "movie:101",
+	}
+	if err := rig.db.SaveWork(ctx, work); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("stale cover = %d, want 404 so the card draws its stand-in", rec.Code)
+	}
+
+	// The refresh runs in the background, so wait for it rather than sleeping a fixed time. The refresh writes the
+	// file with the provider client's clock, which in this rig is the same fixed clock.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		info, statErr := os.Stat(file)
+		if statErr == nil && rig.inner.now().Sub(info.ModTime()) < providers.CoverMaxAge {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the stale cover was never refreshed")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil); rec.Code != http.StatusOK {
+		t.Fatalf("refreshed cover = %d, want 200", rec.Code)
+	}
+}
+
+// A fresh cover costs no provider call at all: the age check is the whole of the freshness rule on this path.
+func TestAFreshCoverIsServedWithoutAskingTheProvider(t *testing.T) {
+	rig := newSocketRig(t)
+	defer rig.close()
+
+	dir := filepath.Join(rig.dataDir, "covers")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	name := "tmdb-movie-404.png"
+	cover := world.SamplePoster()
+	if err := os.WriteFile(filepath.Join(dir, name), cover, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil)
+	if rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), cover) {
+		t.Fatalf("fresh cover = %d %q", rec.Code, rec.Body.String())
 	}
 }

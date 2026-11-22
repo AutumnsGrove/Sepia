@@ -35,6 +35,7 @@ type Querier interface {
 	CreateWork(ctx context.Context, arg CreateWorkParams) error
 	CreateWorkSource(ctx context.Context, arg CreateWorkSourceParams) error
 	DeleteCompactedEvents(ctx context.Context, arg DeleteCompactedEventsParams) error
+	FindWorkByCoverPath(ctx context.Context, coverPath string) (Work, error)
 	FindWorksByTitle(ctx context.Context, arg FindWorksByTitleParams) ([]Work, error)
 	GetClientMessage(ctx context.Context, arg GetClientMessageParams) (ClientMessage, error)
 	GetEntry(ctx context.Context, id string) (Entry, error)

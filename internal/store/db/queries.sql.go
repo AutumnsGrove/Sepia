@@ -459,6 +459,32 @@ func (q *Queries) DeleteCompactedEvents(ctx context.Context, arg DeleteCompacted
 	return err
 }
 
+const findWorkByCoverPath = `-- name: FindWorkByCoverPath :one
+SELECT id, medium, title, original_title, year, creator_json, details_json, cover_path, cover_source, primary_provider, primary_id, verified, created_at, updated_at FROM works WHERE cover_path = ?
+`
+
+func (q *Queries) FindWorkByCoverPath(ctx context.Context, coverPath string) (Work, error) {
+	row := q.db.QueryRowContext(ctx, findWorkByCoverPath, coverPath)
+	var i Work
+	err := row.Scan(
+		&i.ID,
+		&i.Medium,
+		&i.Title,
+		&i.OriginalTitle,
+		&i.Year,
+		&i.CreatorJson,
+		&i.DetailsJson,
+		&i.CoverPath,
+		&i.CoverSource,
+		&i.PrimaryProvider,
+		&i.PrimaryID,
+		&i.Verified,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const findWorksByTitle = `-- name: FindWorksByTitle :many
 SELECT id, medium, title, original_title, year, creator_json, details_json, cover_path, cover_source, primary_provider, primary_id, verified, created_at, updated_at FROM works WHERE medium = ? AND title = ? ORDER BY year DESC, id
 `
