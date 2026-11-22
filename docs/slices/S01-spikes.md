@@ -41,9 +41,11 @@ cost), the decision, and what it changes in the plan.
    requirements.
 5. **S01.5 The pinned model.** Run the pinned chat model on five scripted flows to see tool-calling behaviour,
    spans quoting accuracy, and cost per turn. Confirm it honours aliases refusal.
-6. **S01.6 Vision.** Try the pinned model on about five of the operator's real Fable screenshots (star icons,
-   small type, a review across two images). Record what it gets wrong. (**G2**: the screenshots stay outside the
-   repo, and only findings are written down.)
+6. **S01.6 Vision.** Try the pinned model on the operator's real Fable screenshots (star icons, small type,
+   dates, and a list carrying several works). Record what it gets wrong. **Run 2026-11-22** on four screenshots: the
+   finding is [`../spikes/01.6-vision.md`](../spikes/01.6-vision.md). The review-body half dropped out of scope when
+   she reported that a written review is not viewable outside its compose screen, so there is no two-image case to
+   test. (**G2**: the screenshots stay outside the repo, and only findings are written down.)
 7. **S01.7 TMDB terms.** Read TMDB's image and attribution terms and state what caching is allowed. (Input to **G3**
    in S06.)
 
@@ -61,11 +63,14 @@ fixture it used (synthetic or public-domain metadata only, never a real review) 
 ## Gates
 
 **G1** before the first call that spends money: which service, the expected cost in cents, a request for the key.
-**G2** before reading any real screenshot.
+**G2** before reading any real screenshot. Answered 2026-11-22 for the four screenshots in
+[`../spikes/01.6-vision.md`](../spikes/01.6-vision.md): they stayed outside the repository, and only findings were
+written down. **G7** (added later, before an image reaches a model) is answered in
+[`../handoffs/2026-11-22-G7-vision-spike.md`](../handoffs/2026-11-22-G7-vision-spike.md).
 
 ## Open questions
 
-- Which five Fable screenshots (the operator picks; they stay outside the repo).
+- ~~Which five Fable screenshots~~ **Answered 2026-11-22:** four, chosen by the operator, kept outside the repo.
 - Whether the operator wants the spike keys separate from the production keys (recommended).
 
 ## Done when

@@ -137,18 +137,23 @@ For the Phase 0 corpus, so this behaviour has tests before it has code:
 
 A review brought in from screenshots (the Fable migration) uses the same card with three differences.
 
-- **The "original" is a transcription.** The model reads the image into text, and the body spans are
-  taken from that transcription. Because the transcription step is where a word could slip, **the
-  screenshot is shown beside the card** so I can compare against the real source.
+- **Nothing is transcribed into the body.** An import brings the work, the rating and the date, and the body
+  starts empty: a written Fable review is not viewable outside the screen it was written on, so a screenshot
+  has no review text in it to read. If I write something later it is my own words, by typing or by the
+  normal extraction. **The screenshot is shown beside the card** anyway, because it is the source the four
+  fields were read from.
 - **Fields read from the image carry a marker** (the rating and date as shown, the title, the creator)
   and need my tap, like unverified web fields. The `save_entry` guard accepts a value read from an
   attached image as my own input only once I have accepted it.
-- **The entry records where it came from:** `body_origin = imported` and `imported_from` (for example
-  `fable`). The screenshots stay with the entry as its source and are mirrored to R2.
+- **The entry records where it came from:** `imported_from` (for example `fable`). The screenshots stay
+  with the entry as its source and are mirrored to R2. `body_origin = imported` stays in the schema and is
+  not used by an import, because no body is imported.
 - Bank questions are not asked for an import unless something required is missing; a review written
   months ago is not re-interviewed. A missing date or an ambiguous title is a `fill_gap` or
   `choose_candidate` interaction as usual.
 
-Fixture cases: a rating drawn as star icons; a review split across two images; a screenshot that is not a
-review at all; a transcription that differs from the image by one word (caught by the side-by-side, not
-by code).
+Fixture cases: a rating drawn as star icons, including quarter steps; a row with no rating at all; a **list**
+screenshot with three or four works on it, which is what her own screenshots are; a screenshot that is not a review at
+all; and a partly occluded row, where the model may invent a fragment instead of saying it cannot read it (measured
+2026-11-22, [`spikes/01.6-vision.md`](spikes/01.6-vision.md)). Whether one screenshot becomes several cards is an open
+scope question in [`slices/S18-screenshot-import.md`](slices/S18-screenshot-import.md), not a decision this card assumes.
