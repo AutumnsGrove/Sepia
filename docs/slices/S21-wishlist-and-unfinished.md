@@ -51,8 +51,9 @@ Each stage is one sitting and leaves `make check` passing.
 
 1. **S21.1 Domain.** `domain.Completion` with its three values and a `CompletionState()` that reads an empty
    value as `finished`, so every existing `domain.Entry` literal and stored row stays valid. `Entry` gains
-   `Completion` and `Progress`. `ValidateForSave` relaxes to: body always required except for a wish, rating
-   required only when finished, `progress` bounded and containment-checked like the verdict. `Diff` gains both
+   `Completion` and `Progress`. `ValidateForSave` relaxes to: rating required only when finished, body
+   required only for an abandonment (relaxed again 2026-11-22, when a rated finish with no body turned out to be
+   the shape an import produces), `progress` bounded and containment-checked like the verdict. `Diff` gains both
    fields.
 2. **S21.2 Deterministic cues.** `domain.CompletionCues(text)` reads the phrases a person actually writes
    ("couldn't get into it", "gave up on it", "dnf", "didn't finish", "want to read", "on my list") into one
