@@ -24,7 +24,7 @@ Specs only: [`../ENTRY_CARD.md`](../ENTRY_CARD.md) (spans, rating, required fiel
   is the original's exact wording; a span with no close match is dropped and shown as left out; overlaps merge.
   The verdict is a span or empty. Typed text counts as the user's own input.
 - Merge rules per field and **what counts as one work** ([`../../PLAN.md`](../../PLAN.md) 7).
-- `save` requires a rating and a non-empty body made of the user's own words.
+- `save` requires a rating, and a non-empty body for an abandonment; a finish may have no body at all (2026-11-22).
 - Dates resolve against the **phone's** date and timezone, passed in.
 
 ## Scope

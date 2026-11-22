@@ -848,9 +848,12 @@ func saveEntry(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (to
 			return tool.Errorf("%v", err), nil
 		}
 	}
-	// A wish needs no body at all: there is nothing she has read to have an opinion about yet.
+	// A wish needs no body at all: there is nothing she has read to have an opinion about yet. She is asked once for
+	// her words when she gave none, and a finish does not refuse the card when she has no more to say: a rated
+	// finish with nothing written about it is a real entry, and an imported one is exactly that. An abandonment
+	// still stops here, because there the body is the reason she stopped.
 	if len(args.BodyQuotes) == 0 && shelf != domain.CompletionWantTo {
-		if err := state.fillBody(ctx); err != nil {
+		if err := state.fillBody(ctx); err != nil && shelf == domain.CompletionAbandoned {
 			return tool.Errorf("%v", err), nil
 		}
 	}
