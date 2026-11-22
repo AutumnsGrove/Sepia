@@ -176,3 +176,50 @@ func TestAFreshCoverIsNotFetchedAgain(t *testing.T) {
 			got, providers.CoverMaxAge)
 	}
 }
+
+// The book half: Open Library's covers live at <base>/b/id/<id>-<size>.jpg, so the sample world has to answer
+// that shape or every book keeps its stand-in. The film fixture's paths do not prove the book one.
+func TestABookFetchStoresItsCover(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+
+	result, err := r.finder.Fetch(context.Background(), providers.ProviderOpenLibrary, "OL1W")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if result.CoverURL == "" {
+		t.Fatal("the sample work has no cover URL")
+	}
+	got := r.agent.attachCover(context.Background(), result)
+	if got.Work.CoverPath == "" {
+		t.Fatalf("no cover stored for %s: the world does not serve %s", result.Work.Title, result.CoverURL)
+	}
+	if _, err := os.Stat(filepath.Join(r.dataDir, filepath.FromSlash(got.Work.CoverPath))); err != nil {
+		t.Fatalf("the cover file was not written: %v", err)
+	}
+}
+
+// A cover already on the work is not erased by a fetch that cannot replace it. The file stays under data/covers/,
+// so dropping the path would leave the card on its stand-in with the image sitting right there.
+func TestAStaleCoverSurvivesAnOutage(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+	scriptFilm(r.fake)
+
+	first := saveOneFilm(t, r)
+	if first.CoverPath == "" {
+		t.Fatal("no cover on the first fetch")
+	}
+	// Stale, so the next fetch has to try the network again; and the network is down when it does.
+	old := r.clock.Now().Add(-providers.CoverMaxAge - 24*time.Hour)
+	if err := os.Chtimes(coverOnDisk(r, first), old, old); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+	r.tmdb.SetFault("/t/p/w92/lantern.jpg", world.FaultError)
+
+	second := saveOneFilm(t, r)
+	if second.CoverPath != first.CoverPath {
+		t.Errorf("cover path = %q after a failed refresh, want the stored %q", second.CoverPath, first.CoverPath)
+	}
+	if _, err := os.Stat(coverOnDisk(r, second)); err != nil {
+		t.Errorf("the stored cover went missing: %v", err)
+	}
+}
