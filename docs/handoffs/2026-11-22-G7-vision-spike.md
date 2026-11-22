@@ -146,4 +146,7 @@ came in at a fifth of the ceiling. The per-call numbers and the grading are in
 
 What does not change: the copy lives in `~/sepia-spike-shots/` with mode 0700, outside the repository; the finding
 records mistakes by field and category and never quotes her review text; the spike's own copies are deleted when the
-measurement is written up; `spikes/s01.6-vision/` holds the request shape and the scoring sheet and nothing else.
+measurement is written up; and the harness and the scoring sheet live in the finding itself
+([`../spikes/01.6-vision.md`](../spikes/01.6-vision.md)), because the architecture test would reject a `spikes/`
+package that names a provider endpoint, so the runnable part stayed outside the module at
+`~/sepia-spike-shots/spike/` and is not in the repository at all.
