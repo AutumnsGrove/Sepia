@@ -9,7 +9,16 @@ confirms. One session per title, any number of images. The originals are kept as
 ## Depends on
 
 S11 (the session UI), S08 (the agent), S04 (`media`), S14 (backups, so the originals are protected), and the
-S01.6 findings on how the pinned model reads screenshots. Phase 3.
+S01.6 finding ([`../spikes/01.6-vision.md`](../spikes/01.6-vision.md)). Phase 3.
+
+**Open, and it decides S18's shape (T10, waiting on Autumn).** The finding measured title, creator, quarter-star
+rating and date off four real screenshots, exactly, and found no review body to measure. She then reported that a
+written Fable review is not viewable outside the screen it was written on, so **body text may not be recoverable from
+screenshots at all**. If that holds, what this slice can import is the *work* (title, creator, rating, date) and not
+the review, which is smaller than `PLAN.md` describes: the transcription-as-original idea, the body spans and the
+fidelity check would all go with it. Do not build S18.3's body path until she has decided, and record the answer in
+`PLAN.md` and here. Two schema fixes from the same finding do not depend on that decision: `unreadable` must be
+bounded, and an absent field needs an explicit value rather than an empty string with 90-99 confidence.
 
 ## Where we start
 
