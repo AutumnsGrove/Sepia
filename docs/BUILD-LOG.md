@@ -1309,3 +1309,31 @@ service actually builds, not the one a test constructs.
 an abandoned row as a finish. It has no production caller today, which is why the review could only call it
 non-blocking, but a path that is known to be wrong is the thing this review round already caught twice. The field is
 there now and `OfferRevisit` fills it.
+
+## 2026-11-22, G8, the phase 1 review
+
+**What this is.** No code. A phase review written the way the gate asks for it: the whole phase, checked against the
+tree and the live board rather than against the log, with the live checks listed as the operator's. It is
+[`handoffs/2026-11-22-G8-phase-1-review.md`](handoffs/2026-11-22-G8-phase-1-review.md), and Autumn cleared it the same
+day, choosing to close the phase rather than wait for a real entry to exist first.
+
+**What the review found, in one line each.**
+
+- Two of the phase's three exit conditions hold live: the board updates itself (an `ok` at 18:37Z today, digest
+  `19a85eb…`) and the nightly backup reaches R2 (2.47 MB, 08:30Z daily, three receipts). The third has never
+  happened: `GET /api/entries` on the board is empty, and the one real session has waited on `needs_rating` since
+  2026-11-15.
+- **`providers.Finder.Cover` has no production caller.** The agent wires `Lookup` and `Fetch` and never `Cover`, so
+  `Work.CoverPath` is never set, `wireWorkOf` never emits a `cover_url`, and `Cover.svelte`'s stand-in is the only
+  cover the app has ever drawn. S06 says covers ship in that slice and S06 is marked `done`; that status is the one
+  optimistic line in the table. The symptom that made it visible is the R2 `covers` target being `skipped` every
+  night with "the covers has no directory yet".
+- Phase 0's gate was never closed either: S01 is `planned` and `docs/spikes/` does not exist. Reading the shipped
+  code is now enough to write the findings the spikes were meant to produce, except for S01.6.
+
+**What the next agent should know.** A green CI is not phase evidence. CI runs against `internal/world`; the board
+runs the real model, the real providers and R2, so the three conditions in the phase table are the only phase
+evidence that means anything. The review read counts and identifiers from `GET /api/…` and no review text.
+
+**Live check for the operator.** Finish the draft on the potato, or log something small from `/new`, then check the
+library. That is the phase's headline condition and it is the one thing this review cannot do for her.
