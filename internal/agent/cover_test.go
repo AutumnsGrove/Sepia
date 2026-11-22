@@ -223,3 +223,27 @@ func TestAStaleCoverSurvivesAnOutage(t *testing.T) {
 		t.Errorf("the stored cover went missing: %v", err)
 	}
 }
+
+// A provider that has stopped advertising a poster must not cost the copy already on disk. Finder.Cover checks the
+// stored file before it looks at the URL, so the empty-URL case has to reach it rather than returning early.
+func TestAStoredCoverSurvivesThePosterDisappearing(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+	scriptFilm(r.fake)
+
+	stored := saveOneFilm(t, r)
+	if stored.CoverPath == "" {
+		t.Fatal("no cover on the first fetch")
+	}
+
+	ctx := context.Background()
+	result, err := r.finder.Fetch(ctx, providers.ProviderTMDB, "movie:101")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	// The provider's answer with its poster path removed: the work still comes back, with no cover URL at all.
+	result.CoverURL = ""
+	got := r.agent.attachCover(ctx, result)
+	if got.Work.CoverPath != stored.CoverPath {
+		t.Errorf("cover path = %q with no cover URL, want the stored %q", got.Work.CoverPath, stored.CoverPath)
+	}
+}
