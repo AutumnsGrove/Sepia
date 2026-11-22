@@ -331,6 +331,27 @@ func TestDecodeArgsIsStrict(t *testing.T) {
 	}
 }
 
+// The model reads the system prompt and save_entry's own description together, and the shelf rule has to agree in
+// both: a description that still asked for a body on a finish would keep it waiting for words she does not have, and
+// a card that could be saved would never be saved. This caught exactly that drift once.
+func TestTheShelfRuleReadsTheSameInEveryPrompt(t *testing.T) {
+	stale := []string{"a finished one needs both", "needs a rating and a body", "body always required except for a wish"}
+	files := map[string]string{
+		"system":                SystemPrompt(),
+		"tool_save_entry":       toolDescription("save_entry"),
+		"tool_ask_reviewer":     toolDescription("ask_reviewer"),
+		"tool_media_lookup":     toolDescription("media_lookup"),
+		"tool_merge_candidates": toolDescription("merge_candidates"),
+	}
+	for name, body := range files {
+		for _, wrong := range stale {
+			if strings.Contains(strings.ToLower(body), wrong) {
+				t.Errorf("%s still says %q; a finish needs a rating and its body is optional (PLAN.md 2)", name, wrong)
+			}
+		}
+	}
+}
+
 func TestPromptsNeverInviteWriting(t *testing.T) {
 	body := SystemPrompt()
 	if body == "" {

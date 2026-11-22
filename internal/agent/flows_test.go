@@ -835,6 +835,8 @@ func TestPipelineARatedFinishWithNoWordsIsACard(t *testing.T) {
 	r := newRig(t, rigOptions{script: script})
 	scriptFilm(r.fake)
 	r.responder.script("choose_candidate", "tmdb|movie:101")
+	// She is asked once, and says nothing more: the skip she would send is a null answer.
+	r.responder.script("fill_gap", nil)
 
 	ctx := context.Background()
 	sess, err := r.session.CreateEntry(ctx)
@@ -858,5 +860,16 @@ func TestPipelineARatedFinishWithNoWordsIsACard(t *testing.T) {
 	// The button and the commit ask the same question, so this is the one that decides both.
 	if ok, missing := domain.CanConfirm(out.Draft.Entry, ""); !ok {
 		t.Errorf("the card is not confirmable: missing %v", missing)
+	}
+	// "Asked once, and a no is an answer": the question was put to her, so the card did not appear without her
+	// having had the chance to say something.
+	asked := false
+	for _, question := range r.responder.seen {
+		if question.Kind == "fill_gap" {
+			asked = true
+		}
+	}
+	if !asked {
+		t.Error("she was never asked what she thought")
 	}
 }
