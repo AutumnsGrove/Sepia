@@ -22,7 +22,7 @@ nothing is half-finished. The potato is on `r160.c3e3662`, and it updated itself
   `agent` is not one of the floored packages; it measured 78.6%.
 - 170 Go files (51,364 lines), 747 `Test`/`Fuzz` functions including **13 fuzz targets**, 19 Vitest files (161 tests), 6 Playwright
   specs at 168 tests over Chromium and WebKit on a phone viewport, 7 mockup pages and 130 committed pixel baselines.
-- 9 migrations, 12 `CREATE TRIGGER` statements across `0001`, `0003` and `0004`, and a limits table with 45 rows.
+- 9 migrations, 12 `CREATE TRIGGER` statements across `0001`, `0003` and `0004`, and a limits table with 43 bounds.
 
 **Phase 0's gate was never formally closed**, and this review says so rather than quietly inheriting the debt: S01
 (the spikes) is still `planned` and `docs/spikes/` does not exist. Section 5 has the detail.
@@ -68,7 +68,7 @@ A phase gate is the place to check the rules that must never bend, in the code r
 | **Nothing is ever hard-deleted** | The database's own triggers, in the migrations, not just the repository layer | `TestVerifyTriggersOnAFreshStore`, `TestRawDeleteIsRefusedOnEveryProtectedTable`, `TestDoctorTriggerListMatchesTheSchema` |
 | **My words are mine** | Spans are located in her messages; a model's `completion`, rating and verdict are refused unless contained in her text | `internal/agent` containment tests, `internal/session` guards |
 | **No live provider in CI** | `make guard` (gitleaks, embed placeholder, fuzz seeds, no live provider in tests) | `guard` job, green |
-| **Bounded everything** | The limits table in `STANDARDS.md`, 45 rows, one per bound | The per-limit tests in `store`, `providers`, `server`, `agent`, `backup` |
+| **Bounded everything** | The limits table in `STANDARDS.md`, 43 bounds, one row each | The per-limit tests in `store`, `providers`, `server`, `agent`, `backup` |
 | **Pure Go, no cgo** | `nocgo` job builds every package with `CGO_ENABLED=0` | `nocgo`, green |
 | **One dependency per slice, with an entry** | `STACK.md`; T9 makes an unlisted dependency a build failure | `archtest` dependency rule, `deps` job |
 
@@ -95,8 +95,8 @@ and `Fetch` (`internal/agent/tools.go:202`, `:406`), never `Cover`, so `domain.W
 nothing looks broken; there are simply no posters, and `data/covers/` has never existed on the board, which is why
 R2's covers target is skipped every night.
 
-S06's plan says *"Covers ship in this slice"*, its Done-when includes a stored cover, and S06 is marked `done`. This
-is the one place the status table is optimistic. The work is small: fetch the cover when a work is fetched, set
+S06's plan says *"Covers ship in this slice"* (decision 1) and its happy route names "a stored snapshot and cover", yet
+S06 is marked `done`. This is the one place the status table is optimistic. The work is small: fetch the cover when a work is fetched, set
 `CoverPath`, and let the read-time freshness check do the rest. It needs a decision on the gate-before-cost, because
 it is the first thing that writes images to the board's disk.
 
@@ -170,8 +170,8 @@ Autumn answered the three questions put to her, in this order and these words in
    6.2 is now a follow-up she owns rather than a gate that blocks phase 2. Phase 2 may start.
 2. **The cover finding (5.2)** is recorded for a follow-up slice rather than fixed in this change; the recommendation
    in 6.3 stands (after S01.6, so both image paths are designed together).
-3. **S01 (5.3)** gets its write-up alongside the vision spike. Only S01.6 exists in `docs/spikes/` so far; S01.1 to
-   S01.5 are still owed, and the slice table says so rather than implying the whole slice is done.
+3. **S01 (5.3)** gets its write-up alongside the vision spike: S01.6 is answered and written up in the stacked change,
+   and S01.1 to S01.5 are still owed. The slice table says so rather than implying the whole slice is done.
 
 Nothing in this branch changed after the answer: the review above is the record of what was true when the gate was
 answered, and the two gaps it names are open work, not silent. The draft on the potato is still waiting on a rating.

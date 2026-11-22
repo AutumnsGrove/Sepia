@@ -83,8 +83,8 @@ S09 needs S02, S07 and S08. S13 needs a working app (S09 and S12).
 **Open, and not yet owned by a slice.** [#31](https://github.com/AutumnsGrove/Sepia/issues/31) decides how the
 three shelves are laid out and the ordering of the undated tail (wanted rows sort by id rather than by when they were
 added). Read it before touching either. **S06's cover download** is built, bounded and tested but nothing calls it, so
-no cover has ever been stored on the board and S06's Done-when is not met; the phase 1 review records why and what the
-small fix is.
+no cover has ever been stored on the board, so S06's decision that "covers ship in this slice" and its happy route's
+stored cover are both unmet; the phase 1 review records why and what the small fix is.
 
 ## Phase gates
 
