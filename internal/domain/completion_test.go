@@ -10,6 +10,18 @@ import (
 // lifecycle of the card. These tests are the ones that say a dropped book can be saved without a rating and a book
 // she means to read can be saved without anything but the work.
 
+// finishedEntry is a rated book with nothing written about it: the shape her imported library arrives in.
+func finishedEntry(t *testing.T) Entry {
+	t.Helper()
+	return Entry{
+		Completion:  CompletionFinished,
+		Rating:      17, // 4.25 stars in quarter steps
+		FinishedOn:  "2026-11-19",
+		Status:      StatusDraft,
+		RatingScale: RatingScale,
+	}
+}
+
 // abandonedEntry is a dropped book: her words, no rating, and how far she got.
 func abandonedEntry(t *testing.T) Entry {
 	t.Helper()
@@ -64,6 +76,27 @@ func TestValidateForSaveAbandonedNeedsNoRating(t *testing.T) {
 	ok, missing := CanConfirm(e, abandonSource)
 	if !ok || len(missing) != 0 {
 		t.Fatalf("CanConfirm = %v %v, want true", ok, missing)
+	}
+}
+
+// A finished entry with a rating and no body is a real thing she has: her whole imported library is exactly that
+// shape, finished and rated with nothing written. The body is optional for a finish (PLAN.md 2, decided 2026-11-22);
+// it is still required for an abandonment, where the body is the reason she stopped.
+func TestValidateForSaveFinishedNeedsNoBody(t *testing.T) {
+	e := finishedEntry(t)
+	e.Body = ""
+	e.BodySpans = nil
+	if err := ValidateForSave(e, ""); err != nil {
+		t.Fatalf("a rated finish with no body was refused: %v", err)
+	}
+	if ok, missing := CanConfirm(e, ""); !ok || len(missing) != 0 {
+		t.Fatalf("CanConfirm = %v %v, want true with nothing missing", ok, missing)
+	}
+	// The rating is still not optional: a finish with neither a body nor a rating is an empty verdict.
+	e.Rating = 0
+	var guard *GuardError
+	if err := ValidateForSave(e, ""); !errors.As(err, &guard) || guard.Code != CodeRatingRequired {
+		t.Fatalf("err = %v, want %s", err, CodeRatingRequired)
 	}
 }
 
