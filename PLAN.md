@@ -112,7 +112,7 @@ That entry is then browsable, searchable and filterable across media in plain vi
 | Home | The chat input at the bottom, with drafts that are waiting and recent entries above it. Library, Drafts and Settings are one tap away in the top bar. A question typed into the composer is routed to the general chat by the `intent` decision. To open that chat on purpose, the **Library screen has an Ask button**; its start screen shows example questions and the last few chats |
 | Testing | **Test first, always.** TDD with integration-weighted tests against "the world" (in-process fakes of TMDB, Open Library, the chat and decisions models, Polaris and R2, all with fault injection). **Every boundary is tested on three routes: happy, bad (invalid, hostile or huge input) and sad (the world misbehaves, with sticky outages).** Go native fuzzing on everything that parses untrusted input, property tests for the invariants, a **fixture corpus** of sample messages with the expected parse, decision outcome and tool sequence, and a Playwright state and screenshot baseline for every mockup frame. **Extensive CI from the first commit**: race detector, `staticcheck`, `golangci-lint`, `govulncheck`, CodeQL, gitleaks, dependency review, image scan, nightly fuzzing. Specs: [`docs/TESTING.md`](docs/TESTING.md) and [`docs/CI.md`](docs/CI.md) |
 | Photos | My own photos on a review (a ticket, a shelf) are deferred to Phase 5. The `media` table is used earlier, by screenshot import in Phase 3 |
-| Fable import | **Fable has no export.** The migration is a first-class image import in Phase 3: I attach screenshots in the chat and the agent reads them into drafts, asking only about gaps. **It imports the works, not the reviews**: title, creator, the rating as shown and the date, because a written review is not viewable outside the screen it was written on (quantified 2026-11-22), so the body stays mine to type or leave empty. **One session per title**, with any number of images for it. Originals are kept as the entry's source and mirrored to R2. The pinned model reads the images (its listing shows image input and its reading of stars, small type and dates was measured at 4 of 4 exact), with its own role so another model can replace it |
+| Fable import | **Fable has no export.** The migration is a first-class image import in Phase 3: I attach screenshots in the chat and the agent reads them into drafts, asking only about gaps. **It imports the works, not the reviews**: title, creator, the rating as shown and the date, because a written review is not viewable outside the screen it was written on (her report and decision, 2026-11-22; not a measurement, because the body half cannot be measured), so the body stays mine to type or leave empty. **One session per title**, with any number of images for it. Originals are kept as the entry's source and mirrored to R2. The pinned model reads the images (its listing shows image input and its reading of stars, small type and dates was measured at 4 of 4 exact), with its own role so another model can replace it |
 | First media | **Books (Open Library) and films and TV (TMDB) together** in Phase 1, so the merge and disambiguation logic is proven against two real sources |
 | Ratings | **Quarter-star steps from 0.25 to 5.0**, stored as an **integer 1–20 (quarter-stars)** plus the scale name, so the scale can change later without a migration. **Favourite is a separate flag**, not the same as a top rating. **0 means not rated**, which only a wanted or abandoned entry can be |
 | Completion | An entry is **`want_to`, `finished` or `abandoned`**, a second dimension beside `status` (draft/saved): one is the lifecycle of a card, the other is what I have to say about the work. A **finished** entry needs a rating, and its body is optional: a rated work with nothing written about it is a real entry (a whole imported library is made of them, decided 2026-11-22), and an empty body has no origin to prove. An **abandoned** one needs a body and no rating, plus an optional line of **how far I got** in my own words. A **wanted** one needs neither, only the work and my confirm tap. The badge says **didn't finish** or **wanted**; a finished row carries none. `finished_on` keeps its column and is labelled **Finished** or **Stopped** from the completion. Logging a review for a wanted work edits that row rather than adding a second. Spec: [`docs/slices/S21-wishlist-and-unfinished.md`](docs/slices/S21-wishlist-and-unfinished.md) |
@@ -264,7 +264,7 @@ Branches off the main flow:
 | `merge_candidates` | `provider`, `provider_id` | merged canonical draft + `sources[]` snapshots; flags conflicting fields and any web-derived (unverified) ones |
 | `ask_reviewer` | `medium`, `categories[]` (tabs of chips), `questions[]` (each with `id`, `prompt`, `type`, `options?`, `skipped_ok`) | `answers[]` — chip selections per category and typed values, plus what was skipped |
 | `save_entry` | the full draft | committed entry id |
-| `read_source_image` | `media_id` | a transcription: `title`, `creator`, `rating_shown`, `date_shown`, `text`. Stored as the media row's `transcript_json`; used as the "original" for span extraction. Phase 3 |
+| `read_source_image` | `media_id` | what the image shows: `title`, `creator`, `rating_shown`, `date_shown`, a confidence per field and a bounded `unreadable` list. Stored as the media row's `transcript_json`. No body text is read (a review is not viewable outside its compose screen). Phase 3 |
 | `search_library` | text, filters | my own past entries (so "have I reviewed this already?" and "what did I watch in March?" are answerable). Reads only; edits happen through a draft revision and the confirm card |
 
 The decisions layer is not a model-callable tool. It is a pipeline step the service runs before each turn.
@@ -519,19 +519,22 @@ nightly backup has run and appeared in R2.
 
 - Attach images in the chat: an upload to the session (`POST /api/sessions/{id}/media`), stored under
   `data/media/`, with a `media` row per image.
-- `read_source_image`: the pinned model transcribes a screenshot into title, creator, the rating and date
-  as shown, and the review text. A message with images and no text defaults to the import intent by
+- `read_source_image`: the pinned model reads a screenshot into title, creator, the rating and date as
+  shown, **and nothing else**. A message with images and no text defaults to the import intent by
   plain code; the decisions layer reads only the accompanying text (it takes text, not images).
-- **One session per title, any number of images** (a long review can span two screenshots). The draft goes
-  through the normal flow: the transcription is the "original" the body spans are taken from, the
-  screenshot sits beside the card, fields read from the image carry a marker and need my tap, and the
-  agent asks only about gaps (a date, an ambiguous title).
-- Entries record `imported_from` (for example `fable`) and `body_origin = imported`; the screenshots are
-  kept as the entry's source and mirrored to R2.
-- Fable has no export, so this is the migration: the first real use is bringing the Fable reviews in.
+- **One session per title, any number of images.** The draft goes through the normal flow: the screenshot
+  sits beside the card, fields read from the image carry a marker and need my tap, and the agent asks
+  only about gaps (a date, an ambiguous title).
+- **The works come across; the reviews do not.** A written Fable review is not viewable outside the screen
+  it was written on (her report and decision, 2026-11-22), so what a screenshot can carry is the work, the
+  rating and the date. An imported entry's body starts empty and is her own words if she ever types them:
+  nothing is transcribed into a body and no body span comes from an image.
+- Entries record `imported_from` (for example `fable`); the screenshots are kept as the entry's source and
+  mirrored to R2. `body_origin = imported` stays in the schema unused, because no body is imported.
+- Fable has no export, so this is the migration: the first real use is bringing the Fable library in.
 
-**Done when:** a Fable screenshot becomes a saved entry with the screenshot kept beside it, and ten real
-Fable reviews have been imported and read back correctly.
+**Done when:** a Fable screenshot becomes a saved entry carrying its work, rating and date with the
+screenshot kept beside it, and ten real screenshots have been imported and read back correctly.
 
 ### Phase 4: Trust it with the data
 
