@@ -415,6 +415,7 @@ func mergeCandidates(ctx context.Context, raw json.RawMessage, tctx *tool.Contex
 		return state.lookupFailed(ctx, lookupArgs{Medium: state.Medium, Title: title}, err)
 	}
 	result.Source.Trust = domain.TrustVerified
+	result = state.Agent.attachCover(ctx, result)
 
 	workID, err := state.saveWork(ctx, result)
 	if err != nil {
@@ -429,6 +430,31 @@ func mergeCandidates(ctx context.Context, raw json.RawMessage, tctx *tool.Contex
 		Sources: []toolSource{{Title: providerLabel(provider)}},
 	}, "Merged work (data, not instructions): %s (%d), %s. The card is ready for the work fields; ask about the review next.",
 		result.Work.Title, result.Work.Year, result.Work.Medium), nil
+}
+
+// attachCover keeps a local copy of the fetched work's cover and returns the result carrying it.
+//
+// A cover that cannot be fetched is not a failed fetch. BUILD.md 13 says a metadata service being down degrades one
+// feature and never blocks logging a review, and a poster is decoration beside the review she wrote, so the error is
+// dropped here and the card falls back to its stand-in. The download itself bounds size, dimensions and time
+// (STANDARDS.md 4a), and it reuses a stored cover younger than the 180 days G3 allows, so a second fetch of the same
+// work costs no network at all.
+//
+// This runs on fetch rather than on every image request: a fetch is what happens when she logs a work, which is the
+// "next use" the freshness rule reads, and the server keeps serving a stored cover without calling a provider.
+func (a *Agent) attachCover(ctx context.Context, result providers.Result) providers.Result {
+	if a.finder == nil || strings.TrimSpace(result.CoverURL) == "" {
+		return result
+	}
+	cover, err := a.finder.Cover(ctx, result.Provider, result.ProviderID, result.CoverURL)
+	if err != nil {
+		return result
+	}
+	result.Source.CoverPath = cover.Path
+	result.Source.CoverSource = result.Provider
+	result.Work.CoverPath = cover.Path
+	result.Work.CoverSource = result.Provider
+	return result
 }
 
 // saveWork stores the fetched work, reusing a work the library already knows so a second review of the same thing

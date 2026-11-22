@@ -60,6 +60,26 @@ request. **Properties:** normalisation never panics; a re-fetch of the same id y
 
 **G3** before covers are final: what the terms say about caching and attribution, and the decision they imply.
 
+## Where the cover download runs (wired 2026-11-22)
+
+`Finder.Cover` was built, bounded and tested in S06, and nothing called it: `Work.CoverPath` was never set, so
+`wireWorkOf` never emitted a `cover_url`, no cover was ever stored, and the nightly R2 mirror skipped its `covers`
+target because `data/covers/` never existed. The caller is now `Agent.attachCover`, run by the `merge_candidates`
+tool after a successful fetch, because:
+
+- **The provider stays a metadata client.** `Fetch` returns the remote `CoverURL` and nothing else; downloading an
+  image is a different concern, with a different size cap and a different failure mode, and putting it in `Fetch`
+  would make every provider test do I/O against an image host.
+- **The fetch is the "next use" G3 reads.** A fetch happens when a work is logged, which is the same moment a cover
+  is first needed, so freshness needs no background job: `Cover` returns a stored file younger than 180 days without
+  a request, and replaces an older one.
+- **A cover failure is not a fetch failure.** The error is dropped, the work keeps no cover, and the card draws its
+  stand-in. A poster is decoration beside a review she has written (BUILD.md 13).
+
+The server needed no change: `/covers/<name>` already served a stored file with a safe name and a content type, it
+was only ever serving an empty directory.
+
+
 ## Decisions (recorded 2026-11-01, before the slice started)
 
 1. **G3 is answered** in [`../handoffs/2026-11-01-G3-tmdb-terms.md`](../handoffs/2026-11-01-G3-tmdb-terms.md):

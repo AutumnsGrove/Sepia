@@ -165,6 +165,8 @@ type socketRig struct {
 	db     *store.Store
 	engine *session.Engine
 	host   string
+	// dataDir is the server's data directory, so a test can put a cover where the server will look for one.
+	dataDir string
 }
 
 func newSocketRig(t *testing.T) *socketRig {
@@ -197,7 +199,8 @@ func newSocketRig(t *testing.T) *socketRig {
 		t.Fatal(err)
 	}
 	host := ln.Addr().String()
-	cfg := config.Config{AllowedHosts: []string{host, "localhost:8893"}, Addr: host, DataDir: t.TempDir()}
+	dataDir := t.TempDir()
+	cfg := config.Config{AllowedHosts: []string{host, "localhost:8893"}, Addr: host, DataDir: dataDir}
 	inner := newServer(cfg, Deps{Engine: engine, Agent: model, Live: live, Now: clock},
 		slog.New(slog.DiscardHandler), nil)
 	srv := &httptest.Server{
@@ -205,7 +208,7 @@ func newSocketRig(t *testing.T) *socketRig {
 		Config:   &http.Server{Handler: inner.routes()},
 	}
 	srv.Start()
-	return &socketRig{t: t, server: srv, inner: inner, db: db, engine: engine, host: host}
+	return &socketRig{t: t, server: srv, inner: inner, db: db, engine: engine, host: host, dataDir: dataDir}
 }
 
 func (r *socketRig) close() { r.server.Close() }

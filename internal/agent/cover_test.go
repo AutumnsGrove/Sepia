@@ -1,0 +1,178 @@
+package agent
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/AutumnsGrove/sepia/internal/domain"
+	"github.com/AutumnsGrove/sepia/internal/providers"
+	"github.com/AutumnsGrove/sepia/internal/world"
+)
+
+// The cover half of S06 that shipped without a caller: a fetched work becomes a work with a cover on disk, so
+// the card's work payload can name one and the R2 mirror has something to copy.
+//
+// The route that matters most is the sad one. A cover is decoration beside a review she has written, so an image
+// host being down must never cost her the card: a failed download drops the cover and nothing else.
+
+// filmScript is the smallest turn that ends with a card on a film: look up, merge the candidate she tapped, save.
+func filmScript() []world.ChatTurn {
+	return []world.ChatTurn{
+		{ToolCalls: []world.ChatToolCall{toolCall("c1", "media_lookup", `{"title":"The Lantern Keeper","medium":"film"}`)}},
+		{ToolCalls: []world.ChatToolCall{toolCall("c2", "merge_candidates", `{"candidate_id":"tmdb|movie:101"}`)}},
+		{ToolCalls: []world.ChatToolCall{toolCall("c3", "save_entry", `{"body_quotes":["the ending landed but it was too long"],"verdict_quote":"the ending landed"}`)}},
+		{Text: "Ready."},
+	}
+}
+
+// saveOneFilm runs one whole turn on the film sentence and returns the work it stored. Each call is its own
+// session, so a second call exercises a second fetch of the same work.
+func saveOneFilm(t *testing.T, r *rig) domain.Work {
+	t.Helper()
+	ctx := context.Background()
+	r.responder.script("choose_candidate", "tmdb|movie:101")
+	text := "watched the lantern keeper on netflix last night, 3.5/5, the ending landed but it was too long"
+	sess, err := r.session.CreateEntry(ctx)
+	if err != nil {
+		t.Fatalf("CreateEntry: %v", err)
+	}
+	out, err := r.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: text, ClientMsgID: "m1"})
+	if err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if out.Draft == nil {
+		t.Fatal("no card: a cover problem must not cost her the card")
+	}
+	work, err := r.store.Work(ctx, out.Draft.Entry.WorkID)
+	if err != nil {
+		t.Fatalf("Work: %v", err)
+	}
+	return work
+}
+
+// coverOnDisk is the stored cover's full path, or "" when the work has none.
+func coverOnDisk(r *rig, work domain.Work) string {
+	if work.CoverPath == "" {
+		return ""
+	}
+	return filepath.Join(r.dataDir, filepath.FromSlash(work.CoverPath))
+}
+
+// coverRequests counts the downloads of the fixture's poster, which is the only cover path these tests touch.
+func coverRequests(srv *world.Server) int {
+	n := 0
+	for _, req := range srv.Requests() {
+		if strings.HasSuffix(req.Path, "lantern.jpg") {
+			n++
+		}
+	}
+	return n
+}
+
+func TestAFetchedWorkKeepsItsCover(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+	scriptFilm(r.fake)
+
+	work := saveOneFilm(t, r)
+	if work.CoverPath == "" {
+		t.Fatal("the work has no cover path: the fetch path does not download one")
+	}
+	if !strings.HasPrefix(work.CoverPath, providers.CoverDir+"/") {
+		t.Errorf("cover path = %q, want it relative to the data directory under %s/", work.CoverPath, providers.CoverDir)
+	}
+	if work.CoverSource != providers.ProviderTMDB {
+		t.Errorf("cover source = %q, want %q", work.CoverSource, providers.ProviderTMDB)
+	}
+	info, err := os.Stat(coverOnDisk(r, work))
+	if err != nil {
+		t.Fatalf("the cover file was not written: %v", err)
+	}
+	if info.Size() == 0 {
+		t.Error("the cover file is empty")
+	}
+}
+
+func TestAFailedCoverLeavesTheWorkWithoutOne(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+	scriptFilm(r.fake)
+	r.tmdb.SetFault("/t/p/w92/lantern.jpg", world.FaultError)
+
+	work := saveOneFilm(t, r)
+	if work.CoverPath != "" {
+		t.Errorf("cover path = %q, want none: the image host answered 503", work.CoverPath)
+	}
+	// The download has to have been tried, or this test proves nothing: a path that never asks for a cover also
+	// ends up with none.
+	if got := coverRequests(r.tmdb); got != 1 {
+		t.Errorf("cover requests = %d, want 1: the fetch path did not try the download", got)
+	}
+	if file := coverOnDisk(r, work); file != "" {
+		if _, err := os.Stat(file); err == nil {
+			t.Errorf("%s was written even though the download failed", file)
+		}
+	}
+}
+
+func TestASecondAttemptGetsTheCoverAfterTheOutage(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+	scriptFilm(r.fake)
+	r.tmdb.SetFault("/t/p/w92/lantern.jpg", world.FaultError)
+
+	if work := saveOneFilm(t, r); work.CoverPath != "" {
+		t.Fatalf("cover path = %q on the first attempt, want none during the outage", work.CoverPath)
+	}
+	if got := coverRequests(r.tmdb); got != 1 {
+		t.Fatalf("cover requests = %d, want 1: the first attempt did not try the download", got)
+	}
+	r.tmdb.ClearFault("/t/p/w92/lantern.jpg")
+
+	// The same work, fetched again. A failed download is not remembered as a verdict about the cover.
+	if work := saveOneFilm(t, r); work.CoverPath == "" {
+		t.Error("no cover after the outage cleared: a failed download was treated as final")
+	}
+}
+
+func TestAStaleCoverIsFetchedAgain(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+	scriptFilm(r.fake)
+
+	work := saveOneFilm(t, r)
+	file := coverOnDisk(r, work)
+	if file == "" {
+		t.Fatal("no cover to age")
+	}
+	// 181 days: one day past the cap G3 set, so the next use must fetch it again.
+	old := r.clock.Now().Add(-providers.CoverMaxAge - 24*time.Hour)
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+	before := coverRequests(r.tmdb)
+
+	if got := saveOneFilm(t, r); got.CoverPath == "" {
+		t.Fatal("the stale cover was not fetched again")
+	}
+	if after := coverRequests(r.tmdb); after <= before {
+		t.Errorf("cover requests = %d, want more than %d: a cover older than %v must be fetched again",
+			after, before, providers.CoverMaxAge)
+	}
+}
+
+func TestAFreshCoverIsNotFetchedAgain(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+	scriptFilm(r.fake)
+
+	if work := saveOneFilm(t, r); work.CoverPath == "" {
+		t.Fatal("no cover on the first fetch")
+	}
+	if got := saveOneFilm(t, r); got.CoverPath == "" {
+		t.Fatal("the fresh cover was not reused")
+	}
+	if got := coverRequests(r.tmdb); got != 1 {
+		t.Errorf("cover requests = %d, want 1: a cover younger than %v must not be downloaded again",
+			got, providers.CoverMaxAge)
+	}
+}

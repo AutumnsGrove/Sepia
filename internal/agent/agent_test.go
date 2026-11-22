@@ -76,6 +76,8 @@ type rig struct {
 	finder    *providers.Finder
 	responder *scriptedResponder
 	clock     *world.FixedClock
+	// dataDir is where the finder stores covers. The cover tests read the file the finder wrote.
+	dataDir string
 }
 
 type rigOptions struct {
@@ -127,6 +129,7 @@ func newRig(t *testing.T, opts rigOptions) *rig {
 	tmdb.SetBody("/search/tv", []byte(tmdbTVSearch))
 	tmdb.SetBody("/tv/202", []byte(tmdbTVDetail))
 	tmdb.SetBody("/configuration", []byte(tmdbConfig))
+	tmdb.LoadCovers()
 
 	ol := world.Start("openlibrary", clock)
 	t.Cleanup(ol.Close)
@@ -134,12 +137,14 @@ func newRig(t *testing.T, opts rigOptions) *rig {
 	ol.SetBody("/works/OL1W.json", []byte(olWork))
 	ol.SetBody("/works/OL1W/editions.json", []byte(olEditions))
 	ol.SetBody("/authors/OL9A.json", []byte(olAuthor))
+	ol.LoadCovers()
 
+	dataDir := t.TempDir()
 	finder := providers.NewFinder(providers.Config{
 		TMDBKey: "test-key", TMDBBaseURL: tmdb.URL(), TMDBCoverBase: tmdb.URL() + "/t/p/w92",
 		OpenLibraryBaseURL: ol.URL(), OpenLibraryCoverBase: ol.URL() + "/covers",
 		TMDBCallInterval: -1, OpenLibraryCallInterval: -1,
-		DataDir: t.TempDir(), Clock: clock,
+		DataDir: dataDir, Clock: clock,
 	})
 
 	set, err := banks.LoadDir("../../config/questions")
@@ -180,7 +185,7 @@ func newRig(t *testing.T, opts rigOptions) *rig {
 	}
 	return &rig{
 		agent: a, store: db, session: engine, chat: chat, tmdb: tmdb, ol: ol,
-		fake: fake, decisions: pre, finder: finder, responder: responder, clock: clock,
+		fake: fake, decisions: pre, finder: finder, responder: responder, clock: clock, dataDir: dataDir,
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/AutumnsGrove/sepia/internal/domain"
 	"github.com/AutumnsGrove/sepia/internal/session"
 	"github.com/AutumnsGrove/sepia/internal/store"
+	"github.com/AutumnsGrove/sepia/internal/world"
 )
 
 // The REST half: every route on the happy path, every refusal, and the two sad shapes a page can produce (a gone
@@ -772,5 +773,52 @@ func TestSessionListNamesTheDraftWork(t *testing.T) {
 	decode(t, one, &read)
 	if read.Title != "The Lantern Keeper" {
 		t.Errorf("one session's title = %q, want the work", read.Title)
+	}
+}
+
+// A stored cover has to reach the client as a URL it can actually load. The agent writes covers/<provider>-<id>.<ext>
+// when it fetches a work; the payload has to name that file, and the server has to serve it, or the card shows its
+// stand-in forever and the R2 mirror has nothing to copy.
+func TestAWorkWithACoverServesItsURL(t *testing.T) {
+	rig := newSocketRig(t)
+	defer rig.close()
+	ctx := context.Background()
+
+	coverBytes := world.SamplePoster()
+	dir := filepath.Join(rig.dataDir, "covers")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tmdb-movie-303.png"), coverBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	work := domain.Work{
+		ID: "w2", Medium: "film", Title: "The Quarry Line", Verified: true,
+		CoverPath: "covers/tmdb-movie-303.png", CoverSource: "tmdb",
+	}
+	if err := rig.db.SaveWork(ctx, work); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/api/works/w2", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("work detail = %d: %s", rec.Code, rec.Body)
+	}
+	var detail struct {
+		CoverURL string `json:"cover_url"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if detail.CoverURL != "/covers/tmdb-movie-303.png" {
+		t.Fatalf("cover_url = %q, want /covers/tmdb-movie-303.png", detail.CoverURL)
+	}
+
+	served := doJSON(t, rig.server.Config.Handler, http.MethodGet, detail.CoverURL, nil)
+	if served.Code != http.StatusOK {
+		t.Fatalf("%s = %d: the payload named a file the server will not serve", detail.CoverURL, served.Code)
+	}
+	if !bytes.Equal(served.Body.Bytes(), coverBytes) {
+		t.Error("the served cover is not the stored file")
 	}
 }
