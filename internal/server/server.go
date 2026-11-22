@@ -397,14 +397,31 @@ func (s *Server) serveCover(w http.ResponseWriter, r *http.Request) {
 // half that enforces the cap: a file the provider has disowned must not stay in data/covers/ for the next six months.
 // The context is the refresh's, which is already detached from the request that triggered it.
 func (s *Server) purgeCover(ctx context.Context, coverPath string) {
-	name := path.Base(coverPath)
-	if name != "" && name == coverPath[len(providers.CoverDir)+1:] && !strings.ContainsAny(name, `/\\`+"\x00") {
-		if err := os.Remove(filepath.Join(s.cfg.DataDir, providers.CoverDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) && s.log != nil {
-			s.log.Warn("cover purge failed", "cover", coverPath, "reason", err)
-		}
-	}
+	s.removeCoverFile(coverPath)
 	if err := s.model.ForgetCoverPath(ctx, coverPath); err != nil && s.log != nil {
 		s.log.Warn("cover reference not cleared", "cover", coverPath, "reason", err)
+	}
+}
+
+// removeCoverFile deletes one stored cover, resolving it exactly the way the serve route does: the directory and the
+// file are both resolved and the file must sit under the directory, so a name that is not a bare file name cannot
+// reach outside it. The path arrives from the request that found the cover stale, so it is never trusted as a path.
+func (s *Server) removeCoverFile(coverPath string) {
+	name := path.Base(coverPath)
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\\`+"\x00") {
+		return
+	}
+	dir := filepath.Join(s.cfg.DataDir, providers.CoverDir)
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return
+	}
+	resolvedFile, err := filepath.EvalSymlinks(filepath.Join(dir, name))
+	if err != nil || !strings.HasPrefix(resolvedFile, resolvedDir+string(os.PathSeparator)) {
+		return
+	}
+	if err := os.Remove(resolvedFile); err != nil && !errors.Is(err, os.ErrNotExist) && s.log != nil {
+		s.log.Warn("cover purge failed", "cover", coverPath, "reason", err)
 	}
 }
 
