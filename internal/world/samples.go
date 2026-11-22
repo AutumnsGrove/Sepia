@@ -73,7 +73,7 @@ func (s *Server) LoadCovers() {
 	for _, path := range []string{
 		"/t/p/w92/lantern.jpg", "/t/p/w342/lantern.jpg",
 		"/t/p/w92/quarry.jpg", "/t/p/w342/quarry.jpg",
-		"/covers/123-L.jpg", "/covers/123-M.jpg",
+		"/covers/b/id/123-L.jpg", "/covers/b/id/123-M.jpg",
 	} {
 		s.SetBodyType(path, "image/png", poster)
 	}

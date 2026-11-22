@@ -443,7 +443,9 @@ func mergeCandidates(ctx context.Context, raw json.RawMessage, tctx *tool.Contex
 // This runs on fetch rather than on every image request: a fetch is what happens when she logs a work, which is the
 // "next use" the freshness rule reads, and the server keeps serving a stored cover without calling a provider.
 func (a *Agent) attachCover(ctx context.Context, result providers.Result) providers.Result {
-	if a.finder == nil || strings.TrimSpace(result.CoverURL) == "" {
+	// No early return on an empty URL: Finder.Cover checks a stored cover for freshness before it looks at the
+	// URL, so a work whose provider has stopped advertising a poster still recovers the copy already on disk.
+	if a.finder == nil {
 		return result
 	}
 	cover, err := a.finder.Cover(ctx, result.Provider, result.ProviderID, result.CoverURL)
@@ -461,16 +463,23 @@ func (a *Agent) attachCover(ctx context.Context, result providers.Result) provid
 // stays one work.
 func (s *RunState) saveWork(ctx context.Context, result providers.Result) (string, error) {
 	workID := s.Agent.newID()
+	var known domain.Work
 	if existing, err := s.Agent.store.WorksByTitle(ctx, result.Medium, result.Work.Title); err == nil {
 		for _, candidate := range existing {
 			if sameWork(candidate, result.Work) {
-				workID = candidate.ID
+				workID, known = candidate.ID, candidate
 				break
 			}
 		}
 	}
 	work := result.Work
 	work.ID = workID
+	// A failed cover download is not a reason to forget the one already on the row: the file is still under
+	// data/covers/ and the card can still show it, so the stored path outlives a fetch that could not refresh it.
+	if work.CoverPath == "" && known.CoverPath != "" {
+		work.CoverPath = known.CoverPath
+		work.CoverSource = known.CoverSource
+	}
 	work.Verified = true
 	if work.PrimaryProvider == "" {
 		work.PrimaryProvider = result.Provider
