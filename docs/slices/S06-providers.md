@@ -70,9 +70,12 @@ tool after a successful fetch, because:
 - **The provider stays a metadata client.** `Fetch` returns the remote `CoverURL` and nothing else; downloading an
   image is a different concern, with a different size cap and a different failure mode, and putting it in `Fetch`
   would make every provider test do I/O against an image host.
-- **The fetch is the "next use" G3 reads.** A fetch happens when a work is logged, which is the same moment a cover
-  is first needed, so freshness needs no background job: `Cover` returns a stored file younger than 180 days without
-  a request, and replaces an older one.
+- **Freshness is checked on both halves, and only on read is it enough.** `Cover` reuses a stored file younger than
+  180 days and replaces an older one, so a fetch never downloads a poster it already has. The cover route then checks
+  the file's age on every request: past 180 days it stops serving it (the card draws its stand-in, which no longer
+  claims to be a poster) and refreshes the work in the background, once per cover per run. Without that second half a
+  work logged once and never logged again would serve a cached TMDB poster indefinitely, past the six-month cap G3
+  exists to respect.
 - **A cover failure is not a fetch failure.** The error is dropped, the work keeps no cover, and the card draws its
   stand-in. A poster is decoration beside a review she has written (BUILD.md 13).
 

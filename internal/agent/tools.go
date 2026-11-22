@@ -432,6 +432,47 @@ func mergeCandidates(ctx context.Context, raw json.RawMessage, tctx *tool.Contex
 		result.Work.Title, result.Work.Year, result.Work.Medium), nil
 }
 
+// RefreshCover re-reads a work from its provider and replaces a cover that has outlived the 180 days G3 allows.
+//
+// It is the read half of the freshness rule: the server calls it when a stored cover is too old to serve, so a work
+// she logged once and never logged again does not keep a cached poster past TMDB's six-month cap. The provider is
+// asked for the stored primary provider and id and nothing from the request, and a failure leaves the old file alone,
+// which the caller turns into a stand-in rather than a broken image.
+func (a *Agent) RefreshCover(ctx context.Context, work domain.Work) (domain.Work, error) {
+	if a.finder == nil {
+		return work, errors.New("the metadata services are not set up")
+	}
+	if work.PrimaryProvider == "" || work.PrimaryID == "" {
+		return work, fmt.Errorf("work %s has no provider to refresh from", work.ID)
+	}
+	result, err := a.finder.Fetch(ctx, work.PrimaryProvider, work.PrimaryID)
+	if err != nil {
+		return work, err
+	}
+	refreshed := a.attachCover(ctx, result)
+	if refreshed.Work.CoverPath == "" {
+		return work, errors.New("the provider has no cover for this work")
+	}
+	// Only the cover is the provider's answer here; the work keeps its own identity and fields.
+	work.CoverPath = refreshed.Work.CoverPath
+	work.CoverSource = refreshed.Work.CoverSource
+	if err := a.store.SaveWork(ctx, work); err != nil {
+		return work, err
+	}
+	return work, nil
+}
+
+// RefreshCoverByPath refreshes the cover a stored file name belongs to, which is what the cover route needs: the
+// name cannot be turned back into a provider id, so the work row is the only thing that knows where it came from.
+func (a *Agent) RefreshCoverByPath(ctx context.Context, coverPath string) error {
+	work, err := a.store.WorkByCoverPath(ctx, coverPath)
+	if err != nil {
+		return err
+	}
+	_, err = a.RefreshCover(ctx, work)
+	return err
+}
+
 // attachCover keeps a local copy of the fetched work's cover and returns the result carrying it.
 //
 // A cover that cannot be fetched is not a failed fetch. BUILD.md 13 says a metadata service being down degrades one

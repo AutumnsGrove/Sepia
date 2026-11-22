@@ -20,6 +20,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/agent"
@@ -92,6 +93,7 @@ func newServer(cfg config.Config, deps Deps, log *slog.Logger, assets fs.FS) *Se
 	s := &Server{
 		cfg: cfg, log: log, assets: assets, engine: deps.Engine, model: deps.Agent, now: now, base: base,
 		responder: deps.Responder, update: update.New(cfg.UpdateDir, versionString(), now), backups: deps.Backups,
+		coverRefresh: &inflight{keys: map[string]bool{}},
 	}
 	s.hub = newHub(s)
 	if deps.Live != nil {
@@ -117,7 +119,38 @@ type Server struct {
 	// backups is the app's half of the backup flow (S14). It reads the host script's receipts and writes the
 	// on-demand request; it never takes a snapshot itself.
 	backups *backup.Service
+	// coverRefresh is the set of covers this process is already refreshing. A page full of stale posters asks the
+	// provider once per poster rather than once per request.
+	coverRefresh *inflight
 }
+
+// inflight is a set of keys with a mutex, used to run one background job per key.
+type inflight struct {
+	mu   sync.Mutex
+	keys map[string]bool
+}
+
+// begin marks a key as running and reports whether the caller won the race. A key already running is not started
+// again, so a burst of requests produces one job.
+func (i *inflight) begin(key string) bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.keys[key] {
+		return false
+	}
+	i.keys[key] = true
+	return true
+}
+
+func (i *inflight) done(key string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	delete(i.keys, key)
+}
+
+// coverRefreshTimeout bounds one background refresh. It is generous because nobody is waiting for it: the request
+// that triggered it was already answered with a stand-in.
+const coverRefreshTimeout = 30 * time.Second
 
 // routes assembles the chain. Order matters: recover, then the access log, then headers, then the Host check on
 // everything, then the Origin check on state changes, then the route.
@@ -333,9 +366,39 @@ func (s *Server) serveCover(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
 		return
 	}
+	// G3's rule is that a cover older than 180 days is refreshed on its next use, and a use is a read: serving a
+	// stale poster would keep TMDB content cached past the six-month cap the gate was about. So a stale file is not
+	// served (the card draws its stand-in) and the work is refreshed in the background, once per work per run.
+	if s.now().Sub(info.ModTime()) >= providers.CoverMaxAge {
+		s.refreshCover(r.Context(), path.Join(providers.CoverDir, name))
+		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
+		return
+	}
 	w.Header().Set("Content-Type", coverType(name))
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeContent(w, r, name, info.ModTime(), f)
+}
+
+// refreshCover replaces a cover that has outlived G3's 180 days. It runs in the background on the server's base
+// context, because the request that found it stale has already been answered, and a failure is only logged: the
+// next request finds the file just as stale and tries again.
+func (s *Server) refreshCover(requestCtx context.Context, coverPath string) {
+	if s.model == nil || s.coverRefresh == nil {
+		return
+	}
+	if !s.coverRefresh.begin(coverPath) {
+		return
+	}
+	go func() {
+		defer s.coverRefresh.done(coverPath)
+		// The request that found the cover stale has already been answered, so its cancellation must not abort the
+		// refresh; its values are kept, which is what a trace or a logger in the chain would need.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(requestCtx), coverRefreshTimeout)
+		defer cancel()
+		if err := s.model.RefreshCoverByPath(ctx, coverPath); err != nil && s.log != nil {
+			s.log.Warn("cover refresh failed", "cover", coverPath, "reason", err)
+		}
+	}()
 }
 
 func coverType(name string) string {

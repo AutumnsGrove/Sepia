@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -247,5 +248,29 @@ func TestSettingsRoundTrip(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("settings rows = %d, want 1", count)
+	}
+}
+
+// The cover route needs the work a stored file belongs to, because the file name is sanitised and cannot be turned
+// back into a provider id. A missing row is not an error the caller has to guess at: it is ErrNotFound.
+func TestWorkByCoverPath(t *testing.T) {
+	ctx := context.Background()
+	db := openTest(t)
+	work := domain.Work{
+		ID: "w-cover", Medium: "film", Title: "The Lantern Keeper", Verified: true,
+		CoverPath: "covers/tmdb-movie-101.png", CoverSource: "tmdb",
+	}
+	if err := db.SaveWork(ctx, work); err != nil {
+		t.Fatalf("SaveWork: %v", err)
+	}
+	got, err := db.WorkByCoverPath(ctx, "covers/tmdb-movie-101.png")
+	if err != nil {
+		t.Fatalf("WorkByCoverPath: %v", err)
+	}
+	if got.ID != work.ID || got.CoverSource != "tmdb" {
+		t.Errorf("work = %+v", got)
+	}
+	if _, err := db.WorkByCoverPath(ctx, "covers/nope.png"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }

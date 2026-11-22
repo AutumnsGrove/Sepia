@@ -75,6 +75,20 @@ func (s *Store) Work(ctx context.Context, id string) (domain.Work, error) {
 	return workFromRow(row), nil
 }
 
+// WorkByCoverPath finds the work a stored cover belongs to. The cover route needs it to know what to refresh when a
+// cover has outlived the 180 days G3 allows: the file name alone cannot be turned back into a provider id, because
+// the name is sanitised on the way in.
+func (s *Store) WorkByCoverPath(ctx context.Context, coverPath string) (domain.Work, error) {
+	row, err := s.ReadQueries().FindWorkByCoverPath(ctx, coverPath)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Work{}, ErrNotFound
+	}
+	if err != nil {
+		return domain.Work{}, fmt.Errorf("store: read work by cover path: %w", err)
+	}
+	return workFromRow(row), nil
+}
+
 // WorksByTitle finds works with the same normalised title in a medium, which is the last of the merge's matching
 // rules (PLAN.md 7).
 func (s *Store) WorksByTitle(ctx context.Context, medium, title string) ([]domain.Work, error) {
