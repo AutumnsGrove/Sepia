@@ -93,7 +93,7 @@ stored cover are both unmet; the phase 1 review records why and what the small f
 | 0 | The spikes are written up and the open questions are closed | G8: **open.** S01.6 is answered and written up; S01.1 to S01.5 still owe theirs, and they can be written from the shipped code |
 | 1 | A review typed as a sentence is a saved entry on the potato, the app has updated itself and rolled back a failed update, and a nightly backup is in R2 | G5, G6 cleared, **G8 cleared 2026-11-22** ([review](../handoffs/2026-11-22-G8-phase-1-review.md)). The saved-entry condition is still unproven live: the operator's follow-up |
 | 2 | Four media coexist in one library, search works, the general chat works | G8 |
-| 3 | Ten real Fable reviews have been imported and read back correctly | G7, G8 |
+| 3 | Ten real Fable screenshots have been imported as works (title, creator, rating, date) and read back correctly | G7, G8 |
 | 4 | An export, a wipe and an import diff clean, and an R2 restore has really happened | G8 |
 
 ## What is real and what is mocked today
