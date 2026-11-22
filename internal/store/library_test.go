@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -247,5 +248,66 @@ func TestSettingsRoundTrip(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("settings rows = %d, want 1", count)
+	}
+}
+
+// A cover refresh writes only the cover. The job holds a work it read before two provider round trips, so a
+// whole-row save would re-assert every other field from that snapshot and could undo a newer fetch.
+func TestSetWorkCoverTouchesOnlyTheCover(t *testing.T) {
+	ctx := context.Background()
+	db := openTest(t)
+	work := domain.Work{
+		ID: "w-cover", Medium: "book", Title: "The Lantern Keeper", Year: 1999,
+		Creators:  []domain.Creator{{Role: "author", Name: "Ada Voss"}},
+		CoverPath: "covers/openlibrary-OL1W.jpg", CoverSource: "openlibrary",
+		PrimaryProvider: "openlibrary", PrimaryID: "OL1W", Verified: true,
+	}
+	if err := db.SaveWork(ctx, work); err != nil {
+		t.Fatalf("SaveWork: %v", err)
+	}
+	// A newer fetch rewrote the metadata while the refresh was in flight.
+	newer := work
+	newer.Title = "The Lantern Keeper (second edition)"
+	newer.Year = 2004
+	if err := db.SaveWork(ctx, newer); err != nil {
+		t.Fatalf("SaveWork: %v", err)
+	}
+
+	if err := db.SetWorkCover(ctx, work.ID, "covers/openlibrary-OL1W.png", "openlibrary"); err != nil {
+		t.Fatalf("SetWorkCover: %v", err)
+	}
+	got, err := db.Work(ctx, work.ID)
+	if err != nil {
+		t.Fatalf("Work: %v", err)
+	}
+	if got.CoverPath != "covers/openlibrary-OL1W.png" {
+		t.Errorf("cover path = %q, want the refreshed one", got.CoverPath)
+	}
+	if got.Title != newer.Title || got.Year != newer.Year {
+		t.Errorf("work = %q (%d), want the newer metadata to survive", got.Title, got.Year)
+	}
+}
+
+// The cover route needs the work a stored file belongs to, because the file name is sanitised and cannot be turned
+// back into a provider id. A missing row is not an error the caller has to guess at: it is ErrNotFound.
+func TestWorkByCoverPath(t *testing.T) {
+	ctx := context.Background()
+	db := openTest(t)
+	work := domain.Work{
+		ID: "w-cover", Medium: "film", Title: "The Lantern Keeper", Verified: true,
+		CoverPath: "covers/tmdb-movie-101.png", CoverSource: "tmdb",
+	}
+	if err := db.SaveWork(ctx, work); err != nil {
+		t.Fatalf("SaveWork: %v", err)
+	}
+	got, err := db.WorkByCoverPath(ctx, "covers/tmdb-movie-101.png")
+	if err != nil {
+		t.Fatalf("WorkByCoverPath: %v", err)
+	}
+	if got.ID != work.ID || got.CoverSource != "tmdb" {
+		t.Errorf("work = %+v", got)
+	}
+	if _, err := db.WorkByCoverPath(ctx, "covers/nope.png"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }

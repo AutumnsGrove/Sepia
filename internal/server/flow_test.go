@@ -69,9 +69,11 @@ func newFlowRigDecided(t *testing.T, wrap func(http.Handler) http.Handler, scrip
 	tmdb := world.Start("tmdb", clock)
 	t.Cleanup(tmdb.Close)
 	tmdb.LoadBodies(world.SampleTMDB())
+	tmdb.LoadCovers()
 	ol := world.Start("openlibrary", clock)
 	t.Cleanup(ol.Close)
 	ol.LoadBodies(world.SampleOpenLibrary())
+	ol.LoadCovers()
 
 	reading := world.NewDecisions(clock)
 	scriptDecisions(reading)
@@ -83,11 +85,14 @@ func newFlowRigDecided(t *testing.T, wrap func(http.Handler) http.Handler, scrip
 	if err != nil {
 		t.Fatal(err)
 	}
+	// One data directory for the finder and the server: the cover route serves what the finder writes, and a refresh
+	// that landed anywhere else would look like a refresh that never happened.
+	dataDir := t.TempDir()
 	finder := providers.NewFinder(providers.Config{
 		TMDBKey: "test-key", TMDBBaseURL: tmdb.URL(), TMDBCoverBase: tmdb.URL() + "/t/p/w92",
 		OpenLibraryBaseURL: ol.URL(), OpenLibraryCoverBase: ol.URL() + "/covers",
 		TMDBCallInterval: -1, OpenLibraryCallInterval: -1,
-		DataDir: t.TempDir(), Clock: clock,
+		DataDir: dataDir, Clock: clock,
 	})
 
 	responder := NewResponder()
@@ -109,7 +114,7 @@ func newFlowRigDecided(t *testing.T, wrap func(http.Handler) http.Handler, scrip
 		t.Fatal(err)
 	}
 	host := ln.Addr().String()
-	cfg := config.Config{AllowedHosts: []string{host, "localhost:8893"}, Addr: host, DataDir: t.TempDir()}
+	cfg := config.Config{AllowedHosts: []string{host, "localhost:8893"}, Addr: host, DataDir: dataDir}
 	inner := newServer(cfg, Deps{
 		Engine: engine, Agent: model, Responder: responder, Live: live, Now: clock.Now,
 	}, slog.New(slog.DiscardHandler), nil)
@@ -118,7 +123,7 @@ func newFlowRigDecided(t *testing.T, wrap func(http.Handler) http.Handler, scrip
 		Config:   &http.Server{Handler: inner.routes()},
 	}
 	srv.Start()
-	return &socketRig{t: t, server: srv, inner: inner, db: db, engine: engine, host: host}
+	return &socketRig{t: t, server: srv, inner: inner, db: db, engine: engine, host: host, dataDir: dataDir, tmdb: tmdb}
 }
 
 func TestScriptedSessionFromMessageToSaved(t *testing.T) {

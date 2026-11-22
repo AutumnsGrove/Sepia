@@ -1419,3 +1419,33 @@ outside the screen it was written on, so the four screenshots this finding's "st
 not exist, and measuring a review's body may not be possible at all. She decided the T10 the same day: **S18 imports
 the works, not the reviews**, which is now what `PLAN.md` 2 and 9 (phase 3), [`ENTRY_CARD.md`](ENTRY_CARD.md) 10 and
 [`slices/S18-screenshot-import.md`](slices/S18-screenshot-import.md) all say.
+
+## 2026-11-22, S06, the cover download gets a caller
+
+**What changed.** `providers.Finder.Cover` had no production caller: the agent wired `Lookup` and `Fetch` and never
+`Cover`, so `Work.CoverPath` was never set, `wireWorkOf` never emitted a `cover_url`, no cover had ever been written on
+the board, and R2's `covers` target was `skipped` every night with "the covers has no directory yet". The gate review
+found it; this is the fix.
+
+**Where the call goes, and why.** `Agent.attachCover` runs from the `merge_candidates` tool after a successful fetch.
+Not inside `providers.Fetch`: the provider is a metadata client, and an image download with its own cap, its own
+deadline and its own failure mode belongs above it, where a test can tell the two apart. The fetch is also the "next
+use" G3 reads, so the 180-day rule needs no background job: a stored file younger than the window is reused without a
+request, an older one is replaced.
+
+**A failed cover is not a failed card.** The error is dropped and the work keeps no cover, which is what BUILD.md 13
+asks for; a poster is decoration beside a review she has written. The test that proves this asserts the download was
+*attempted* (`coverRequests == 1`) as well as that no path was set, because a path that never asks for a cover also
+ends up with none.
+
+**What the world gained.** `world.SamplePoster` and `world.LoadCovers` give the invented poster paths a real PNG, so
+`sepia-dev` and the tests exercise the download without a network. The fixtures name JPEGs because the real providers
+do; the bytes are PNG and the content type says so, because the cover rule trusts the header and not the file name.
+
+**What still has no test.** The `/covers/` route and the payload half are now tested end to end
+(`TestAWorkWithACoverServesItsURL`); what is not measured is a real TMDB or Open Library cover on the potato, because
+that needs the operator's key and a fetch from the board.
+
+**Live check for the operator.** Log a work on the potato and look at the card: it should carry a real poster rather
+than the stand-in, `data/covers/` should exist on the board, and the next nightly backup's `covers` target should stop
+saying `skipped`.
