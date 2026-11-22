@@ -77,7 +77,7 @@ S09 needs S02, S07 and S08. S13 needs a working app (S09 and S12).
 | S18 | [Screenshot import](S18-screenshot-import.md) | 3 | planned |
 | S19 | [Export, import, verify](S19-export-import-verify.md) | 4 | planned |
 | S20 | [Parked](S20-parked.md) | 5 and 6 | parked |
-| S21 | [Wishlist and didn't finish](S21-wishlist-and-unfinished.md) | 2 | planned |
+| S21 | [Wishlist and didn't finish](S21-wishlist-and-unfinished.md) | 2 | done |
 | #31 | Library design pass | 2 | open, not yet a slice |
 
 **Open, and not yet owned by a slice.** [#31](https://github.com/AutumnsGrove/Sepia/issues/31) decides how the
