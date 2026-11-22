@@ -139,10 +139,10 @@ one review across two images. The finding says which half is measured; the other
 opened review.
 
 **What it cost, the figure section 3 promised.** Four calls, run on 2026-11-22 from the spike harness: **1,340 prompt
-tokens each**, 736 to 844 completion tokens each, **2.8 to 6.5 s** per call, and **US$0.0054 in total** at the
-listing's weekday peak price, which is about **$0.0014 per screenshot**. The gate's estimate was under 5 cents; the run
-came in at a fifth of the ceiling. The per-call numbers and the grading are in
-[`../spikes/01.6-vision.md`](../spikes/01.6-vision.md).
+tokens each**, 736 to 844 completion tokens each, **2.8 to 6.5 s** per call, and **about US$0.0027 in total**, because
+the 22nd was a Sunday and the listing's weekday peak price (double) did not apply. At the peak price the same run would
+have been about $0.0054. The gate's estimate was under 5 cents; the run came in under a fifth of the ceiling either
+way. The per-call numbers and the grading are in [`../spikes/01.6-vision.md`](../spikes/01.6-vision.md).
 
 What does not change: the copy lives in `~/sepia-spike-shots/` with mode 0700, outside the repository; the finding
 records mistakes by field and category and never quotes her review text; the spike's own copies are deleted when the
