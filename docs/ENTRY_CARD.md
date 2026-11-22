@@ -152,6 +152,7 @@ A review brought in from screenshots (the Fable migration) uses the same card wi
   months ago is not re-interviewed. A missing date or an ambiguous title is a `fill_gap` or
   `choose_candidate` interaction as usual.
 
-Fixture cases: a rating drawn as star icons; a review split across two images; a screenshot that is not a
-review at all; a transcription that differs from the image by one word (caught by the side-by-side, not
-by code).
+Fixture cases: a rating drawn as star icons, including quarter steps; a row with no rating at all; a list
+screenshot carrying several works, because the import is one screenshot to several cards; a screenshot that is not
+a review at all; and a partly occluded row, where the model may invent a fragment instead of saying it cannot read
+it (measured 2026-11-22, [`spikes/01.6-vision.md`](spikes/01.6-vision.md)).
