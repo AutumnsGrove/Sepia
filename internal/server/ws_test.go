@@ -25,6 +25,7 @@ import (
 	"github.com/AutumnsGrove/sepia/internal/domain"
 	"github.com/AutumnsGrove/sepia/internal/session"
 	"github.com/AutumnsGrove/sepia/internal/store"
+	"github.com/AutumnsGrove/sepia/internal/world"
 )
 
 // The frame codec, first: a client's mask, the two length forms, the fragmented message, every refusal, and a fuzz
@@ -167,6 +168,8 @@ type socketRig struct {
 	host   string
 	// dataDir is the server's data directory, so a test can put a cover where the server will look for one.
 	dataDir string
+	// tmdb is the metadata fake, so a test can make a cover download fail and count what it asked for.
+	tmdb *world.Server
 }
 
 func newSocketRig(t *testing.T) *socketRig {

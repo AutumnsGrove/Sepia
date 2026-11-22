@@ -899,3 +899,53 @@ func TestAFreshCoverIsServedWithoutAskingTheProvider(t *testing.T) {
 		t.Fatalf("fresh cover = %d %q", rec.Code, rec.Body.String())
 	}
 }
+
+// A cover that cannot be refreshed must not be retried on every read. The realistic case is a poster the provider has
+// stopped serving: the fetch succeeds, the image download fails, the file stays stale, and without a retry window every
+// render of that page becomes another pair of provider calls. One attempt, then quiet until the window passes.
+func TestAFailedRefreshIsNotRetriedOnEveryRead(t *testing.T) {
+	rig := newFlowRig(t)
+	defer rig.close()
+	ctx := context.Background()
+
+	dir := filepath.Join(rig.dataDir, "covers")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	name := "tmdb-movie-101.png"
+	file := filepath.Join(dir, name)
+	if err := os.WriteFile(file, world.SamplePoster(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := rig.inner.now().Add(-providers.CoverMaxAge - 24*time.Hour)
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatal(err)
+	}
+	// The provider still answers, and the poster it names is gone: the refresh fails and the file stays stale.
+	rig.tmdb.SetFault("/t/p/w92/lantern.jpg", world.FaultError)
+	work := domain.Work{
+		ID: "w-retry", Medium: "film", Title: "The Lantern Keeper", Verified: true,
+		CoverPath: "covers/" + name, CoverSource: "tmdb",
+		PrimaryProvider: "tmdb", PrimaryID: "movie:101",
+	}
+	if err := rig.db.SaveWork(ctx, work); err != nil {
+		t.Fatal(err)
+	}
+
+	for range 3 {
+		if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil); rec.Code != http.StatusNotFound {
+			t.Fatalf("stale cover = %d, want 404", rec.Code)
+		}
+		// Give a triggered refresh time to reach the world before the next read.
+		time.Sleep(150 * time.Millisecond)
+	}
+	downloads := 0
+	for _, request := range rig.tmdb.Requests() {
+		if strings.HasSuffix(request.Path, "lantern.jpg") {
+			downloads++
+		}
+	}
+	if got := downloads; got != 1 {
+		t.Errorf("cover downloads = %d after three reads, want 1: a failed refresh was retried on every read", got)
+	}
+}

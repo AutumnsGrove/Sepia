@@ -73,9 +73,11 @@ tool after a successful fetch, because:
 - **Freshness is checked on both halves, and only on read is it enough.** `Cover` reuses a stored file younger than
   180 days and replaces an older one, so a fetch never downloads a poster it already has. The cover route then checks
   the file's age on every request: past 180 days it stops serving it (the card draws its stand-in, which no longer
-  claims to be a poster) and refreshes the work in the background, once per cover per run. Without that second half a
-  work logged once and never logged again would serve a cached TMDB poster indefinitely, past the six-month cap G3
-  exists to respect.
+  claims to be a poster) and refreshes the work in the background, once per cover per retry window (15 minutes), so a
+  cover that cannot be refreshed does not turn every render into provider traffic. Without that second half a work
+  logged once and never logged again would serve a cached TMDB poster indefinitely, past the six-month cap G3 exists to
+  respect. The cost of refusing a stale file is that a board offline for more than six months shows stand-ins until one
+  provider round trip succeeds, which is the trade G3's cap implies rather than a bug.
 - **A cover failure is not a fetch failure.** The error is dropped, the work keeps no cover, and the card draws its
   stand-in. A poster is decoration beside a review she has written (BUILD.md 13).
 

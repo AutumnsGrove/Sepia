@@ -93,7 +93,7 @@ func newServer(cfg config.Config, deps Deps, log *slog.Logger, assets fs.FS) *Se
 	s := &Server{
 		cfg: cfg, log: log, assets: assets, engine: deps.Engine, model: deps.Agent, now: now, base: base,
 		responder: deps.Responder, update: update.New(cfg.UpdateDir, versionString(), now), backups: deps.Backups,
-		coverRefresh: &inflight{keys: map[string]bool{}},
+		coverRefresh: &inflight{keys: map[string]bool{}, tried: map[string]time.Time{}},
 	}
 	s.hub = newHub(s)
 	if deps.Live != nil {
@@ -119,26 +119,34 @@ type Server struct {
 	// backups is the app's half of the backup flow (S14). It reads the host script's receipts and writes the
 	// on-demand request; it never takes a snapshot itself.
 	backups *backup.Service
-	// coverRefresh is the set of covers this process is already refreshing. A page full of stale posters asks the
-	// provider once per poster rather than once per request.
+	// coverRefresh is the set of covers this process is already refreshing, with when each was last tried. A page full
+	// of stale posters asks the provider once per poster per retry window rather than once per request.
 	coverRefresh *inflight
 }
 
-// inflight is a set of keys with a mutex, used to run one background job per key.
+// inflight runs one background job per key, and remembers when each last ran.
+//
+// Guarding only the running set is not enough: a cover that can never be refreshed (a poster the provider has stopped
+// serving, or a work row that is gone) would fail, end, and be retried by the next request, so a page holding a few of
+// them turns every render into provider traffic. A key is therefore not tried again until the retry window has passed.
 type inflight struct {
-	mu   sync.Mutex
-	keys map[string]bool
+	mu    sync.Mutex
+	keys  map[string]bool
+	tried map[string]time.Time
 }
 
-// begin marks a key as running and reports whether the caller won the race. A key already running is not started
-// again, so a burst of requests produces one job.
-func (i *inflight) begin(key string) bool {
+// begin reports whether this caller should run the job: not already running, and not tried within the window.
+func (i *inflight) begin(key string, now time.Time) bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if i.keys[key] {
 		return false
 	}
+	if at, ok := i.tried[key]; ok && now.Sub(at) < coverRetryAfter {
+		return false
+	}
 	i.keys[key] = true
+	i.tried[key] = now
 	return true
 }
 
@@ -151,6 +159,10 @@ func (i *inflight) done(key string) {
 // coverRefreshTimeout bounds one background refresh. It is generous because nobody is waiting for it: the request
 // that triggered it was already answered with a stand-in.
 const coverRefreshTimeout = 30 * time.Second
+
+// coverRetryAfter is how long a cover that failed to refresh is left alone. Long enough that a stale poster cannot
+// turn reads into provider traffic, short enough that a provider outage does not lose the cover for a day.
+const coverRetryAfter = 15 * time.Minute
 
 // routes assembles the chain. Order matters: recover, then the access log, then headers, then the Host check on
 // everything, then the Origin check on state changes, then the route.
@@ -386,7 +398,7 @@ func (s *Server) refreshCover(requestCtx context.Context, coverPath string) {
 	if s.model == nil || s.coverRefresh == nil {
 		return
 	}
-	if !s.coverRefresh.begin(coverPath) {
+	if !s.coverRefresh.begin(coverPath, s.now()) {
 		return
 	}
 	go func() {
