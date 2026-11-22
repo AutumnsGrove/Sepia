@@ -1359,3 +1359,63 @@ both instead of treating confirmability as the end of the turn.
 **What the next agent should know.** `CanConfirm` and the save guard ask the same question, so the button and the
 commit move together; there is no second place to change. The frontend needed no logic change, because it draws Save
 from the server's `can_confirm` and `missing` rather than deciding for itself.
+
+## 2026-11-22, S01.6, the vision spike's gate, and the spike
+
+**What this is.** G7 asks for a written gate before any image reaches a model, so S01.6 has one:
+[`handoffs/2026-11-22-G7-vision-spike.md`](handoffs/2026-11-22-G7-vision-spike.md). It was written, answered and acted on
+the same day.
+
+**What the gate established, for free.** The live model listing still gives `deepseek/deepseek-v4.1-flash-1017` the
+modality `text+image->text`, at $0.15/M prompt and $0.60/M completion with a weekday override to double that between
+01:00 and 04:00 and 06:00 and 10:00 UTC, and its `supported_parameters` include `tools` and `structured_outputs`,
+which S18.2's strict schema needs. `DefaultModel` is that same id, so the spike tests production's model.
+
+**Answered.** Autumn had four screenshots after all, the newest four in `~/Downloads`, and cleared the gate on them:
+the images may go to OpenRouter and on to the model's provider, with the account's retention setting accepted
+unchecked because she said to go ahead. The copy lives in `~/sepia-spike-shots/`, outside the repo, and the four calls
+cost about a third of a cent in total, at the weekend price the listing charged.
+
+**What the spike learned is in `docs/spikes/01.6-vision.md`.** The short version: the model read every title, creator,
+rating and date on the four *Finished*-list screenshots correctly, including quarter-star values and an unrated row, and
+it invented no review text where there was none. It could not answer for the review body, because those four
+screenshots are a list rather than an opened review, and the decision recorded below is that no body is imported.
+
+**Live check for the operator.** None: the half this entry expected to measure later turned out to have nothing to
+measure, which the finding's last section records.
+
+## 2026-11-22, S01.6, the vision spike's finding
+
+**What this is.** The answer S01.6 exists for: [`spikes/01.6-vision.md`](spikes/01.6-vision.md). Four real screenshots,
+one production model, about a third of a cent, and every field graded by eye against the image.
+
+**The result.** It read all four titles, all four creators, all four ratings and all four dates exactly. The ratings
+included quarter steps drawn as a star icon plus digits, and one row with no rating at all, which came back empty
+rather than guessed. One date range was cut off by the screen edge and came back cut off. No review body was present in
+any image, and it wrote none: `text` was empty in all four calls, which is the behaviour rule 1 needs. A 1206x2622
+screenshot costs about 1,340 tokens, which is about $0.0014 at the listing's peak price, so a large import is cents.
+
+**Two defects it found, both for S18.2 rather than for the plan.** `unreadable` is unbounded prose: the model used it
+as a notebook, describing 19 further list rows in 300 to 380 characters per image, which S18.2 would store per image as
+`transcript_json`. And an empty field reports high confidence: `text` was empty with a self-reported 90 to 99, so S18.3's
+`fill_gap` cannot tell "no review text here" from "read it almost perfectly". S18.2's schema needs a bounded
+`unreadable` and an explicit absent value.
+
+**What was unmeasured, and why it no longer matters** (this paragraph first said the body half "matters most for the
+migration"; the decision recorded below superseded it). Her four screenshots are the *Finished* list, not an opened
+review. She then reported that a written Fable review is not viewable outside the screen it was written on, so there is
+no screenshot of a body to measure and, by her decision, no body in the import: S18 carries the work, the rating and
+the date. The one open question the spike did raise is now a real one for the plan, because her screenshots are lists:
+the model read a whole page of list rows correctly, so a bulk import may be the shape, and S18 still says one session
+and one confirm tap per title.
+
+**Hygiene.** The images and the model's raw answers were deleted from `~/sepia-spike-shots/` when this finding was
+committed, and nothing from them is in the repository: no title, rating, date or review text, only counts and
+categories. The harness stays there as a throwaway Go program outside the module, because the architecture test
+forbids a package outside `internal/` from importing Sepia's own code or naming a provider endpoint.
+
+**Live check for the operator.** None that can be run: she reports that a written Fable review is not viewable
+outside the screen it was written on, so the four screenshots this finding's "still open" section used to ask for may
+not exist, and measuring a review's body may not be possible at all. She decided the T10 the same day: **S18 imports
+the works, not the reviews**, which is now what `PLAN.md` 2 and 9 (phase 3), [`ENTRY_CARD.md`](ENTRY_CARD.md) 10 and
+[`slices/S18-screenshot-import.md`](slices/S18-screenshot-import.md) all say.
