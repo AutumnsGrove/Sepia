@@ -821,3 +821,42 @@ func TestTheDeadlineDoesNotRunWhileSheDecides(t *testing.T) {
 		t.Error("her thinking time was reported as the model being slow")
 	}
 }
+
+// A rated finish with nothing written about it is a card, not an error. It is the shape an imported library
+// arrives in (S18, decided 2026-11-22), so the agent has to be able to build it: no body quotes, no follow-up
+// question, and a card she can confirm with an empty body.
+func TestPipelineARatedFinishWithNoWordsIsACard(t *testing.T) {
+	script := []world.ChatTurn{
+		{ToolCalls: []world.ChatToolCall{toolCall("c1", "media_lookup", `{"title":"The Lantern Keeper","medium":"film"}`)}},
+		{ToolCalls: []world.ChatToolCall{toolCall("c2", "merge_candidates", `{"candidate_id":"tmdb|movie:101"}`)}},
+		{ToolCalls: []world.ChatToolCall{toolCall("c3", "save_entry", `{}`)}},
+		{Text: "Ready."},
+	}
+	r := newRig(t, rigOptions{script: script})
+	scriptFilm(r.fake)
+	r.responder.script("choose_candidate", "tmdb|movie:101")
+
+	ctx := context.Background()
+	sess, err := r.session.CreateEntry(ctx)
+	if err != nil {
+		t.Fatalf("CreateEntry: %v", err)
+	}
+	// A rating and no opinion: exactly what a screenshot gives her.
+	out, err := r.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: "the lantern keeper, 4/5", ClientMsgID: "m1"})
+	if err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if out.Draft == nil {
+		t.Fatal("no card: a finish with no words must still be a card")
+	}
+	if out.Draft.Entry.Rating != 16 {
+		t.Errorf("rating = %d, want 16", out.Draft.Entry.Rating)
+	}
+	if strings.TrimSpace(out.Draft.Entry.Body) != "" {
+		t.Errorf("body = %q, want empty", out.Draft.Entry.Body)
+	}
+	// The button and the commit ask the same question, so this is the one that decides both.
+	if ok, missing := domain.CanConfirm(out.Draft.Entry, ""); !ok {
+		t.Errorf("the card is not confirmable: missing %v", missing)
+	}
+}

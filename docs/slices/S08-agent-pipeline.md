@@ -31,7 +31,7 @@ The flow is specified in [`../../PLAN.md`](../../PLAN.md) section 5. The model i
   `lookup_web` and `ask_polaris_freeform` arrive in S15, `read_source_image` in S18.
 - `ask_reviewer` emits the Describe step and up to three single questions through the session engine and waits
   for the response as its tool result.
-- **Guardrails in code:** `save_entry` refuses without a rating and a body made of the user's own words; the
+- **Guardrails in code:** `save_entry` refuses without a rating, and without a body for an abandoned entry; a finish may have none, and then the card is built with an empty body (2026-11-22); the
   body and verdict pass the span containment check; ratings must be a quarter-star value; web and image facts
   need an accept; `ask_reviewer` is capped; every tool call, pre-read and cost is logged.
 - Caps: 12 tool steps, 60k tokens in and 8k out, a 120 s turn deadline, four question rounds.

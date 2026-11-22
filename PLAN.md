@@ -585,7 +585,7 @@ not a cheaper model.
    `ask_polaris_freeform`, which is the deliberate escape hatch and is always logged.
 6. **Classifier output never decides.** A decision model's probabilities steer and suggest. Anything that must be true
    (a rating, a body, a quarter-star value) is enforced by deterministic code. What is required depends on the
-   completion (§2): a finished entry needs a rating and a body, an abandoned one a body, a wanted one neither.
+   completion (§2): a finished entry needs a rating (its body is optional, decided 2026-11-22), an abandoned one a body, a wanted one neither.
 7. **Export must outlive the app.** If this code vanished tomorrow, the JSON should still be readable.
 8. **Tailnet-only.** No Funnel, no public port, no accounts.
 9. **Nothing is ever hard-deleted.** Deletes are soft, enforced by the database, and there is no purge.
