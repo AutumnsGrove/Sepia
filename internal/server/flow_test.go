@@ -69,9 +69,11 @@ func newFlowRigDecided(t *testing.T, wrap func(http.Handler) http.Handler, scrip
 	tmdb := world.Start("tmdb", clock)
 	t.Cleanup(tmdb.Close)
 	tmdb.LoadBodies(world.SampleTMDB())
+	tmdb.LoadCovers()
 	ol := world.Start("openlibrary", clock)
 	t.Cleanup(ol.Close)
 	ol.LoadBodies(world.SampleOpenLibrary())
+	ol.LoadCovers()
 
 	reading := world.NewDecisions(clock)
 	scriptDecisions(reading)
