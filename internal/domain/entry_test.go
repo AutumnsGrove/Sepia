@@ -55,14 +55,17 @@ func TestValidateForSaveRequiresARating(t *testing.T) {
 	}
 }
 
-func TestValidateForSaveRequiresABody(t *testing.T) {
+// A body of nothing but whitespace is no body, and a finish does not need one. What it must not become is a body
+// whose origin is unproven: with no text there is nothing to prove and nothing to store.
+func TestValidateForSaveTreatsWhitespaceAsNoBody(t *testing.T) {
 	e := extractedEntry(t)
 	e.Body = "   \n "
 	e.BodySpans = nil
-	err := ValidateForSave(e, session)
-	var guard *GuardError
-	if !errors.As(err, &guard) || guard.Code != CodeBodyRequired {
-		t.Fatalf("err = %v, want %s", err, CodeBodyRequired)
+	if err := ValidateForSave(e, session); err != nil {
+		t.Fatalf("a finish with a whitespace body was refused: %v", err)
+	}
+	if ok, _ := CanConfirm(e, session); !ok {
+		t.Error("CanConfirm refused a rated finish with no body")
 	}
 }
 

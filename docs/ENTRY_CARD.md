@@ -30,12 +30,13 @@ as in the button state. Everything not listed is optional: if I skip every quest
 
 | Completion | Required | Shown as |
 |---|---|---|
-| `finished` | a **rating** (a quarter-star value, 0.25 to 5.0) and a **non-empty body** | no badge |
+| `finished` | a **rating** (a quarter-star value, 0.25 to 5.0). The body is optional: a rated work with nothing written about it is a real entry (decided 2026-11-22) | no badge |
 | `abandoned` | a **non-empty body**. The rating stays optional, so a dropped book with no stars still saves | `didn't finish` |
 | `want_to` | nothing but the work and my confirm tap | `wanted` |
 
 A body, whenever there is one, is made of my own words: the agent never writes one, and if I only said "5/5" and
-nothing else it asks for a few words or I type them.
+nothing else it asks for a few words, and the card can be saved without them. An imported entry arrives that way:
+rated, dated, and empty, because the words it would have had are not in the screenshot.
 
 ## 3. The body and the verdict
 
