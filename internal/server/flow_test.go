@@ -197,7 +197,9 @@ func TestScriptedSessionFromMessageToSaved(t *testing.T) {
 			if err = json.Unmarshal(ev.Data, &data); err != nil {
 				t.Fatal(err)
 			}
-			if data.Draft.CanConfirm {
+			// The card becomes confirmable as soon as it has a rating, because the body is optional; the turn is
+			// not over until the body has been filled, so the loop waits for both.
+			if data.Draft.CanConfirm && data.Draft.Body != "" {
 				version = data.Version
 				if data.Draft.Work.Title != "The Lantern Keeper" {
 					t.Fatalf("work = %q", data.Draft.Work.Title)

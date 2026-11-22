@@ -118,14 +118,16 @@ func ValidateForSave(e Entry, sourceText string) error {
 	if !validCompletion(e.Completion) {
 		return &GuardError{Code: CodeCompletionInvalid, Message: "That is not how far you got."}
 	}
-	// What is required depends on the shelf (PLAN.md 2, docs/ENTRY_CARD.md 2): a finished entry needs a rating and a
-	// body, an abandoned one a body, and a wanted one nothing but the work.
+	// What is required depends on the shelf (PLAN.md 2, docs/ENTRY_CARD.md 2): a finished entry needs a rating and
+	// the body is optional, an abandoned one a body, and a wanted one nothing but the work. The body became
+	// optional for a finish on 2026-11-22, because a rated work with nothing written about it is a real thing to
+	// have (her imported library is all of them), and an empty body has no origin to prove.
 	completion := e.CompletionState()
 	if completion == CompletionFinished && !ValidRating(e.Rating) {
 		return &GuardError{Code: CodeRatingRequired, Message: "Add a rating before saving."}
 	}
 	hasBody := strings.TrimSpace(e.Body) != ""
-	if completion != CompletionWantTo && !hasBody {
+	if completion == CompletionAbandoned && !hasBody {
 		return &GuardError{Code: CodeBodyRequired, Message: "Add a few words of your own before saving."}
 	}
 	if len(e.Body) > MaxBodyLength {

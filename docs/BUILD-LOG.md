@@ -1337,3 +1337,25 @@ evidence that means anything. The review read counts and identifiers from `GET /
 
 **Live check for the operator.** Finish the draft on the potato, or log something small from `/new`, then check the
 library. That is the phase's headline condition and it is the one thing this review cannot do for her.
+
+## 2026-11-22, the body becomes optional on a finish
+
+**Why.** S18's works-only import produces exactly one shape: a finished, rated work with nothing written about it, and
+`ValidateForSave` refused it because a finish required a body. Her Fable library is made of that shape, so the rule
+would have blocked the whole migration on a body that the screenshot cannot carry and that nobody ever wrote.
+
+**What changed.** A `finished` entry now needs a rating, and its body is optional. An `abandoned` entry still needs a
+body, because there the body is the reason she stopped. `PLAN.md` 2, `ENTRY_CARD.md` 2 and the guard moved in the same
+change, which is what T10 asks for.
+
+**What it does not change.** Rule 1 is untouched: a body is still only ever her own words, and an empty body has no
+origin to prove. Nothing model-written becomes an opinion. A wish still needs only the work.
+
+**Two tests that had the old rule baked in, both changed rather than deleted.** `draft_test` asserted that a rated
+draft with no body is refused; it now asserts it saves with an empty body. The server flow asserted that a card is
+confirmable only once its body is filled; the card is confirmable as soon as it has a rating now, so the loop waits for
+both instead of treating confirmability as the end of the turn.
+
+**What the next agent should know.** `CanConfirm` and the save guard ask the same question, so the button and the
+commit move together; there is no second place to change. The frontend needed no logic change, because it draws Save
+from the server's `can_confirm` and `missing` rather than deciding for itself.

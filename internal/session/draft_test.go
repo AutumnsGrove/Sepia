@@ -177,20 +177,26 @@ func TestConfirmRefusesWhatTheGuardRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Draft: %v", err)
 	}
-	if _, _, _, err := e.Confirm(ctx, sess.ID, ConfirmRequest{BaseVersion: draft.Version}); err == nil {
+	if _, _, _, unratedErr := e.Confirm(ctx, sess.ID, ConfirmRequest{BaseVersion: draft.Version}); unratedErr == nil {
 		t.Fatal("a draft with no rating was saved")
 	} else {
 		var guard *domain.GuardError
-		if !errors.As(err, &guard) || guard.Code != domain.CodeRatingRequired {
-			t.Fatalf("error = %v, want rating_required", err)
+		if !errors.As(unratedErr, &guard) || guard.Code != domain.CodeRatingRequired {
+			t.Fatalf("error = %v, want rating_required", unratedErr)
 		}
 	}
 
-	if _, err := e.EditDraft(ctx, sess.ID, Edit{BaseVersion: 0, Set: patch(map[string]any{"rating": 12})}); err != nil {
-		t.Fatalf("EditDraft: %v", err)
+	// A rating is enough for a finish: the body is optional (decided 2026-11-22), because a rated work with
+	// nothing written about it is a real entry, and an imported library is made of them.
+	if _, editErr := e.EditDraft(ctx, sess.ID, Edit{BaseVersion: 0, Set: patch(map[string]any{"rating": 12})}); editErr != nil {
+		t.Fatalf("EditDraft: %v", editErr)
 	}
-	if _, _, _, err := e.Confirm(ctx, sess.ID, ConfirmRequest{BaseVersion: 1}); err == nil {
-		t.Fatal("a draft with no body was saved")
+	saved, _, _, err := e.Confirm(ctx, sess.ID, ConfirmRequest{BaseVersion: 1})
+	if err != nil {
+		t.Fatalf("a rated finish with no body was refused: %v", err)
+	}
+	if strings.TrimSpace(saved.Body) != "" {
+		t.Errorf("body = %q, want empty", saved.Body)
 	}
 }
 
