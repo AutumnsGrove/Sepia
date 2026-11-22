@@ -2089,6 +2089,27 @@ func (q *Queries) UpdateWork(ctx context.Context, arg UpdateWorkParams) error {
 	return err
 }
 
+const updateWorkCover = `-- name: UpdateWorkCover :exec
+UPDATE works SET cover_path = ?, cover_source = ?, updated_at = ? WHERE id = ?
+`
+
+type UpdateWorkCoverParams struct {
+	CoverPath   string `json:"cover_path"`
+	CoverSource string `json:"cover_source"`
+	UpdatedAt   string `json:"updated_at"`
+	ID          string `json:"id"`
+}
+
+func (q *Queries) UpdateWorkCover(ctx context.Context, arg UpdateWorkCoverParams) error {
+	_, err := q.db.ExecContext(ctx, updateWorkCover,
+		arg.CoverPath,
+		arg.CoverSource,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const upsertSetting = `-- name: UpsertSetting :exec
 INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)
 ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at

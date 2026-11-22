@@ -247,3 +247,44 @@ func TestAStoredCoverSurvivesThePosterDisappearing(t *testing.T) {
 		t.Errorf("cover path = %q with no cover URL, want the stored %q", got.Work.CoverPath, stored.CoverPath)
 	}
 }
+
+// A refresh runs as a background job between two provider round trips, so a newer fetch can land in that window. The
+// refresh must write the cover and nothing else, or it reverts the newer metadata to the snapshot it started from.
+// This is that race, made deterministic: the row is updated after the refresh's snapshot is taken.
+func TestARefreshWritesOnlyTheCover(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+	ctx := context.Background()
+
+	snapshot := domain.Work{
+		ID: "w-race", Medium: "film", Title: "The Lantern Keeper", Year: 2019, Verified: true,
+		PrimaryProvider: providers.ProviderTMDB, PrimaryID: "movie:101",
+	}
+	if err := r.store.SaveWork(ctx, snapshot); err != nil {
+		t.Fatalf("SaveWork: %v", err)
+	}
+	// The newer fetch lands while the refresh is in flight.
+	newer := snapshot
+	newer.Title = "The Lantern Keeper (restored cut)"
+	newer.Year = 2024
+	if err := r.store.SaveWork(ctx, newer); err != nil {
+		t.Fatalf("SaveWork: %v", err)
+	}
+
+	refreshed, err := r.agent.RefreshCover(ctx, snapshot)
+	if err != nil {
+		t.Fatalf("RefreshCover: %v", err)
+	}
+	if refreshed.CoverPath == "" {
+		t.Fatal("the refresh stored no cover")
+	}
+	stored, err := r.store.Work(ctx, snapshot.ID)
+	if err != nil {
+		t.Fatalf("Work: %v", err)
+	}
+	if stored.CoverPath != refreshed.CoverPath {
+		t.Errorf("cover path = %q, want the refreshed %q", stored.CoverPath, refreshed.CoverPath)
+	}
+	if stored.Title != newer.Title || stored.Year != newer.Year {
+		t.Errorf("work = %q (%d), want the newer metadata %q (%d) to survive", stored.Title, stored.Year, newer.Title, newer.Year)
+	}
+}

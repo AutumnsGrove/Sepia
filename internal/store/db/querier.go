@@ -121,6 +121,7 @@ type Querier interface {
 	UpdateDraft(ctx context.Context, arg UpdateDraftParams) (sql.Result, error)
 	UpdateSessionMessages(ctx context.Context, arg UpdateSessionMessagesParams) error
 	UpdateWork(ctx context.Context, arg UpdateWorkParams) error
+	UpdateWorkCover(ctx context.Context, arg UpdateWorkCoverParams) error
 	// Settings are a small map of switches, not history: the previous value is not kept, because it is a preference,
 	// not a review.
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error

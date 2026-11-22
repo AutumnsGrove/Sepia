@@ -89,6 +89,19 @@ func (s *Store) WorkByCoverPath(ctx context.Context, coverPath string) (domain.W
 	return workFromRow(row), nil
 }
 
+// SetWorkCover writes only the cover's two columns. A background cover refresh holds a work it read before two
+// provider round trips, so saving the whole row would re-assert every other field from that snapshot and could
+// revert metadata a newer fetch had already written.
+func (s *Store) SetWorkCover(ctx context.Context, workID, coverPath, coverSource string) error {
+	now := s.Now().UTC().Format(timeLayout)
+	if err := s.Queries().UpdateWorkCover(ctx, db.UpdateWorkCoverParams{
+		CoverPath: coverPath, CoverSource: coverSource, UpdatedAt: now, ID: workID,
+	}); err != nil {
+		return fmt.Errorf("store: set work cover: %w", err)
+	}
+	return nil
+}
+
 // WorksByTitle finds works with the same normalised title in a medium, which is the last of the merge's matching
 // rules (PLAN.md 7).
 func (s *Store) WorksByTitle(ctx context.Context, medium, title string) ([]domain.Work, error) {
