@@ -26,7 +26,7 @@ What is already true: S00 and S02 to S14 and S21 are built and live (`r160.c3e36
 | What | Detail |
 |---|---|
 | The images | Five screenshots of her own Fable reviews, sent at the size they were taken. Nothing is cropped, redacted or downscaled unless she wants that |
-| The prompt | About 600 characters of instructions: the output shape (title, creator, rating as shown, the date as shown, the review text, and a confidence for each field) and the rules ("transcribe, do not summarise"; "if a field is not visible, say so"). **No other review text, no other entry, no library data** |
+| The prompt | About 1,000 characters of instructions (the gate first said 600; the written prompt came out longer): the output shape (title, creator, rating as shown, the date as shown, the review text, and a confidence for each field) and the rules ("transcribe, do not summarise"; "if a field is not visible, say so"). **No other review text, no other entry, no library data** |
 | Where it goes | `https://openrouter.ai/api/v1/chat/completions`, model `deepseek/deepseek-v4.1-flash-1017`, authenticated with the key at `~/.pi/agent/auth.json` (`.openrouter.key`), read at runtime and never echoed, logged or committed. OpenRouter forwards the image and the prompt to whichever provider serves that model |
 | What does not leave | The database, the rest of the library, her OpenRouter account details, anything from the sessions store, and any text from an image that is not in the image itself |
 
