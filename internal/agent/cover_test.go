@@ -189,7 +189,10 @@ func TestABookFetchStoresItsCover(t *testing.T) {
 	if result.CoverURL == "" {
 		t.Fatal("the sample work has no cover URL")
 	}
-	got := r.agent.attachCover(context.Background(), result)
+	got, coverErr := r.agent.attachCover(context.Background(), result)
+	if coverErr != nil {
+		t.Fatalf("attachCover: %v", coverErr)
+	}
 	if got.Work.CoverPath == "" {
 		t.Fatalf("no cover stored for %s: the world does not serve %s", result.Work.Title, result.CoverURL)
 	}
@@ -242,7 +245,10 @@ func TestAStoredCoverSurvivesThePosterDisappearing(t *testing.T) {
 	}
 	// The provider's answer with its poster path removed: the work still comes back, with no cover URL at all.
 	result.CoverURL = ""
-	got := r.agent.attachCover(ctx, result)
+	got, coverErr := r.agent.attachCover(ctx, result)
+	if coverErr != nil {
+		t.Fatalf("attachCover: %v", coverErr)
+	}
 	if got.Work.CoverPath != stored.CoverPath {
 		t.Errorf("cover path = %q with no cover URL, want the stored %q", got.Work.CoverPath, stored.CoverPath)
 	}

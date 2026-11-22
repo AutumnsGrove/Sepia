@@ -70,14 +70,16 @@ tool after a successful fetch, because:
 - **The provider stays a metadata client.** `Fetch` returns the remote `CoverURL` and nothing else; downloading an
   image is a different concern, with a different size cap and a different failure mode, and putting it in `Fetch`
   would make every provider test do I/O against an image host.
-- **Freshness is checked on both halves, and only on read is it enough.** `Cover` reuses a stored file younger than
-  180 days and replaces an older one, so a fetch never downloads a poster it already has. The cover route then checks
-  the file's age on every request: past 180 days it stops serving it (the card draws its stand-in, which no longer
-  claims to be a poster) and refreshes the work in the background, once per cover per retry window (15 minutes), so a
-  cover that cannot be refreshed does not turn every render into provider traffic. Without that second half a work
-  logged once and never logged again would serve a cached TMDB poster indefinitely, past the six-month cap G3 exists to
-  respect. The cost of refusing a stale file is that a board offline for more than six months shows stand-ins until one
-  provider round trip succeeds, which is the trade G3's cap implies rather than a bug.
+- **Freshness is checked on both halves, and it is the purge that enforces the cap.** `Cover` reuses a stored file
+  younger than 180 days and replaces an older one, so a fetch never downloads a poster it already has. The cover route
+  checks the file's age on every request: past 180 days the file is still served, because the board is offline most of
+  the time and the library should keep its posters, but it is served `no-cache` so the browser revalidates, and the
+  work is refreshed in the background once per cover per retry window (15 minutes).
+- **A cover the provider disowns is deleted, not just withheld.** If the refresh fails because the provider says the
+  work or its cover is gone (`not_found`, `not_an_image`, `cover_too_large`), the file is removed from `data/covers/`
+  and the row stops naming it. That is what stops TMDB content outliving the six-month cap: withholding an image while
+  keeping the bytes would satisfy nothing. An outage — a 5xx, a timeout, a rate limit, a missing key — is not an
+  answer, so the stored file keeps being served and the refresh is retried in the next window.
 - **A cover failure is not a fetch failure.** The error is dropped, the work keeps no cover, and the card draws its
   stand-in. A poster is decoration beside a review she has written (BUILD.md 13).
 

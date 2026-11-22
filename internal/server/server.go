@@ -378,17 +378,34 @@ func (s *Server) serveCover(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
 		return
 	}
-	// G3's rule is that a cover older than 180 days is refreshed on its next use, and a use is a read: serving a
-	// stale poster would keep TMDB content cached past the six-month cap the gate was about. So a stale file is not
-	// served (the card draws its stand-in) and the work is refreshed in the background, once per work per run.
+	// G3's rule is that a cover older than 180 days is refreshed on its next use, and a use is a read. A stale file is
+	// still served — the board is usually offline and the library should keep its posters — but it is served with
+	// no-cache so the browser revalidates rather than holding a copy of its own, and the work is refreshed in the
+	// background. When the provider answers that the cover is gone, the refresh purges the file instead: that is what
+	// stops TMDB content outliving the cap, rather than withholding an image that is still on disk.
 	if s.now().Sub(info.ModTime()) >= providers.CoverMaxAge {
+		w.Header().Set("Cache-Control", "no-cache")
 		s.refreshCover(r.Context(), path.Join(providers.CoverDir, name))
-		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
-		return
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
 	}
 	w.Header().Set("Content-Type", coverType(name))
-	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeContent(w, r, name, info.ModTime(), f)
+}
+
+// purgeCover deletes a cover the provider says it no longer has, and clears the row's reference to it. This is the
+// half that enforces the cap: a file the provider has disowned must not stay in data/covers/ for the next six months.
+// The context is the refresh's, which is already detached from the request that triggered it.
+func (s *Server) purgeCover(ctx context.Context, coverPath string) {
+	name := path.Base(coverPath)
+	if name != "" && name == coverPath[len(providers.CoverDir)+1:] && !strings.ContainsAny(name, `/\\`+"\x00") {
+		if err := os.Remove(filepath.Join(s.cfg.DataDir, providers.CoverDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) && s.log != nil {
+			s.log.Warn("cover purge failed", "cover", coverPath, "reason", err)
+		}
+	}
+	if err := s.model.ForgetCoverPath(ctx, coverPath); err != nil && s.log != nil {
+		s.log.Warn("cover reference not cleared", "cover", coverPath, "reason", err)
+	}
 }
 
 // refreshCover replaces a cover that has outlived G3's 180 days. It runs in the background on the server's base
@@ -407,7 +424,12 @@ func (s *Server) refreshCover(requestCtx context.Context, coverPath string) {
 		// refresh; its values are kept, which is what a trace or a logger in the chain would need.
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(requestCtx), coverRefreshTimeout)
 		defer cancel()
-		if err := s.model.RefreshCoverByPath(ctx, coverPath); err != nil && s.log != nil {
+		err := s.model.RefreshCoverByPath(ctx, coverPath)
+		switch {
+		case err == nil:
+		case errors.Is(err, agent.ErrCoverGone):
+			s.purgeCover(ctx, coverPath)
+		case s.log != nil:
 			s.log.Warn("cover refresh failed", "cover", coverPath, "reason", err)
 		}
 	}()

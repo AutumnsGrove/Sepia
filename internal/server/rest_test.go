@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -825,10 +826,10 @@ func TestAWorkWithACoverServesItsURL(t *testing.T) {
 	}
 }
 
-// G3 says a cover older than 180 days is refreshed on its next use, and a use is a read. A stale poster must not be
-// served (that would keep TMDB content past its six-month cap), and the work it belongs to must be re-read so the
-// next request finds a fresh one.
-func TestACoverPastItsWindowIsNotServedAndIsRefreshed(t *testing.T) {
+// G3 says a cover older than 180 days is refreshed on its next use, and a use is a read. The stale poster keeps being
+// served (the library should keep its posters offline) with no-cache, and the work is re-read so the next request finds
+// a fresh one.
+func TestACoverPastItsWindowIsServedWhileItIsRefreshed(t *testing.T) {
 	// The flow rig, not the bare one: this path needs an agent with a finder, because the refresh re-reads the work.
 	rig := newFlowRig(t)
 	defer rig.close()
@@ -856,9 +857,13 @@ func TestACoverPastItsWindowIsNotServedAndIsRefreshed(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A stale cover is still served: the board is offline most of the time and the library should keep its posters.
 	rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("stale cover = %d, want 404 so the card draws its stand-in", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stale cover = %d, want 200 while the refresh runs", rec.Code)
+	}
+	if cache := rec.Header().Get("Cache-Control"); cache != "no-cache" {
+		t.Errorf("stale cover Cache-Control = %q, want no-cache so the browser revalidates", cache)
 	}
 
 	// The refresh runs in the background, so wait for it rather than sleeping a fixed time. The refresh writes the
@@ -933,8 +938,8 @@ func TestAFailedRefreshIsNotRetriedOnEveryRead(t *testing.T) {
 	}
 
 	for range 3 {
-		if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil); rec.Code != http.StatusNotFound {
-			t.Fatalf("stale cover = %d, want 404", rec.Code)
+		if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil); rec.Code != http.StatusOK {
+			t.Fatalf("stale cover = %d, want 200", rec.Code)
 		}
 		// Give a triggered refresh time to reach the world before the next read.
 		time.Sleep(150 * time.Millisecond)
@@ -947,5 +952,58 @@ func TestAFailedRefreshIsNotRetriedOnEveryRead(t *testing.T) {
 	}
 	if got := downloads; got != 1 {
 		t.Errorf("cover downloads = %d after three reads, want 1: a failed refresh was retried on every read", got)
+	}
+}
+
+// What enforces G3's cap is the purge, not withholding an image that is still on disk: when the provider answers that
+// the cover is gone, the file goes and the row stops naming it, so no TMDB content outlives the six months.
+func TestACoverTheProviderDisownsIsPurged(t *testing.T) {
+	rig := newFlowRig(t)
+	defer rig.close()
+	ctx := context.Background()
+
+	dir := filepath.Join(rig.dataDir, "covers")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	name := "tmdb-movie-101.png"
+	file := filepath.Join(dir, name)
+	if err := os.WriteFile(file, world.SamplePoster(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := rig.inner.now().Add(-providers.CoverMaxAge - 24*time.Hour)
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatal(err)
+	}
+	// The provider has never heard of this id: a not-found is an answer, not an outage.
+	rig.tmdb.SetFault("/movie/101", world.FaultNotFound)
+	work := domain.Work{
+		ID: "w-gone", Medium: "film", Title: "The Lantern Keeper", Verified: true,
+		CoverPath: "covers/" + name, CoverSource: "tmdb",
+		PrimaryProvider: "tmdb", PrimaryID: "movie:101",
+	}
+	if err := rig.db.SaveWork(ctx, work); err != nil {
+		t.Fatal(err)
+	}
+
+	if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil); rec.Code != http.StatusOK {
+		t.Fatalf("stale cover = %d, want 200 while the refresh runs", rec.Code)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, statErr := os.Stat(file); errors.Is(statErr, os.ErrNotExist) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the disowned cover was never deleted")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	got, err := rig.db.Work(ctx, work.ID)
+	if err != nil {
+		t.Fatalf("Work: %v", err)
+	}
+	if got.CoverPath != "" {
+		t.Errorf("cover path = %q, want it cleared once the file is gone", got.CoverPath)
 	}
 }
