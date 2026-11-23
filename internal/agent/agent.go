@@ -233,14 +233,15 @@ func (a *Agent) HandleMessage(ctx context.Context, in TurnInput) (Outcome, error
 		MessageIndex: len(messages) - 1,
 		Parsed:       parseMessage(in.Text, a.now(), in.ClientDate, in.Timezone),
 	}
-	// Her earlier answers come first, so a question a finished turn left behind is not asked a second time.
-	state.rememberAnswers(ctx)
 	if err := a.preread(ctx, state); err != nil {
 		return Outcome{}, err
 	}
 	if err := a.resolveMedium(ctx, state); err != nil {
 		return Outcome{}, err
 	}
+	// Her earlier answers come after the medium is known, because they are read through the same bank the live path
+	// uses: a label she tapped has to become the option's stable value, not stay a label.
+	state.rememberAnswers(ctx)
 
 	// A card may already exist from an earlier turn; the state reads it so the model sees the work and the
 	// parsed fields it already has.

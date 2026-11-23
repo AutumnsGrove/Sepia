@@ -755,3 +755,36 @@ func TestAddAnswersDoesNotAddASecondAnswerForAQuestion(t *testing.T) {
 		t.Errorf("answer = %+v, want the first one she gave", got[0])
 	}
 }
+
+// A skipped question is not an answer: she can still answer it on a later turn, and her answer has to land. The
+// skipped row stays (nothing is deleted), and the read prefers the real answer.
+func TestAddAnswersLetsARealAnswerFollowASkippedOne(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	if err := s.SaveWork(ctx, sampleWork("w1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateDraft(ctx, sampleEntry("e1", "w1", 18)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddAnswers(ctx, "e1", []domain.Answer{
+		{QuestionID: "ending", Prompt: "How did the ending land?", Type: domain.AnswerChoice, Skipped: true},
+	}); err != nil {
+		t.Fatalf("AddAnswers: %v", err)
+	}
+	if err := s.AddAnswers(ctx, "e1", []domain.Answer{
+		{QuestionID: "ending", Prompt: "How did the ending land?", Type: domain.AnswerChoice, Values: []string{"landed"}},
+	}); err != nil {
+		t.Fatalf("second AddAnswers: %v", err)
+	}
+	got, err := s.Answers(ctx, "e1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("answers = %+v, want one row per question", got)
+	}
+	if got[0].Skipped || len(got[0].Values) != 1 || got[0].Values[0] != "landed" {
+		t.Errorf("answer = %+v, want her real answer, not the skip", got[0])
+	}
+}

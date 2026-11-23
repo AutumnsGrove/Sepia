@@ -812,14 +812,17 @@ type questionPayload struct {
 	Questions []questionItem `json:"questions"`
 }
 
+// questionAnswerItem is one question's answer as the client sends it.
+type questionAnswerItem struct {
+	ID      string   `json:"id"`
+	Value   string   `json:"value"`
+	Values  []string `json:"values"`
+	Skipped bool     `json:"skipped"`
+}
+
 type questionAnswer struct {
-	Answers []struct {
-		ID      string   `json:"id"`
-		Value   string   `json:"value"`
-		Values  []string `json:"values"`
-		Skipped bool     `json:"skipped"`
-	} `json:"answers"`
-	SkipAll bool `json:"skip_all"`
+	Answers []questionAnswerItem `json:"answers"`
+	SkipAll bool                 `json:"skip_all"`
 }
 
 func askReviewer(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (tool.Result, error) {
