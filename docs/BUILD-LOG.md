@@ -1524,6 +1524,13 @@ so one render error still blanks the whole app; that is what made the entry unre
 **Live check for the operator.** After the update, open the half-finished *A Closed and Common Orbit* draft on the
 potato. It should open on the card, and **How this was read** should show each check once.
 
+## 2026-11-22, fix, answers keep the order they were written
+
+Every answer for an entry is written in one transaction, so they all carry the same `created_at`. `ListAnswers` broke
+the tie with `id`, which is random in production, so the card's ANSWERS block had no stable order and could come back
+differently on each read. It ties on `rowid` now, the same fix `ListDecisionCalls` needed. The new store test writes
+two answers whose ids sort against insertion order; it failed on the old query. `TestAnswersRoundTrip` could not catch
+this because the test store's ids rise with the clock.
 ## 2026-11-22, fix, a failed screen no longer takes the app down
 
 SvelteKit's built-in error page was all there was, so a component that threw while drawing replaced the whole app with
