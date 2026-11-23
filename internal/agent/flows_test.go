@@ -1238,3 +1238,72 @@ func TestRememberedAnswerFindsTheMediumOnTheCard(t *testing.T) {
 		t.Errorf("values = %v, want the stable value %q rather than the label", got, "right")
 	}
 }
+
+// The same fallback through the pipeline, which is where the ordering lives: the pre-read is off, so the turn has no
+// medium, and the card it loads is what names the bank. Run through HandleMessage, so moving the hydration back above
+// the draft load fails this.
+func TestRememberedAnswerFindsTheMediumThroughThePipeline(t *testing.T) {
+	ctx := context.Background()
+	first := newRig(t, rigOptions{script: bookScript()})
+	scriptBook(first.fake)
+	first.responder.script("choose_candidate", "openlibrary|OL1W")
+	answerQuestions(t, first)
+	sess, _ := first.session.CreateEntry(ctx)
+	out, err := first.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1"})
+	if err != nil || out.Draft == nil {
+		t.Fatalf("first turn: %v, %+v", err, out)
+	}
+	// She answers a question whose label and value differ, after the turn that asked has ended.
+	payload := questionPayload{Questions: []questionItem{{
+		ID: "book_length", Prompt: "Was it the right length?", Type: "choice",
+	}}}
+	opened, err := first.session.Ask(ctx, sess.ID, "question_form", payload)
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	resolution, err := json.Marshal(questionAnswer{Answers: []questionAnswerItem{
+		{ID: "book_length", Value: "About right"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.session.Answer(ctx, sess.ID, opened.ID, json.RawMessage(resolution), "answer-1"); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+
+	// The next turn runs with the pre-read off, so nothing names the medium but the card.
+	saves := make([]world.ChatTurn, 8)
+	for i := range saves {
+		saves[i] = world.ChatTurn{ToolCalls: []world.ChatToolCall{toolCall(
+			fmt.Sprintf("again-%d", i), "save_entry",
+			`{"body_quotes":["the middle dragged a bit but the end stayed with me"],"verdict_quote":"stayed with me"}`,
+		)}}
+	}
+	second := newRig(t, rigOptions{noDecisions: true, script: append(saves, world.ChatTurn{Text: "The card is ready."})})
+	second.store = first.store
+	second.session = first.session
+	second.agent.store = first.store
+	second.agent.session = first.session
+	second.responder.session = first.session
+	second.responder.store = first.store
+	scriptBook(second.fake)
+	if _, err := second.agent.HandleMessage(ctx, TurnInput{
+		SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1", Retry: true,
+	}); err != nil {
+		t.Fatalf("second turn: %v", err)
+	}
+	answers, err := first.store.Answers(ctx, out.Draft.Entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, answer := range answers {
+		if answer.QuestionID != "book_length" {
+			continue
+		}
+		if len(answer.Values) != 1 || answer.Values[0] != "right" {
+			t.Errorf("values = %v, want the stable value %q rather than the label", answer.Values, "right")
+		}
+		return
+	}
+	t.Fatalf("her answer never reached the card: %+v", answers)
+}
