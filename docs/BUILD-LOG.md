@@ -1449,3 +1449,49 @@ that needs the operator's key and a fetch from the board.
 **Live check for the operator.** Log a work on the potato and look at the card: it should carry a real poster rather
 than the stand-in, `data/covers/` should exist on the board, and the next nightly backup's `covers` target should stop
 saying `skipped`.
+
+## 2026-11-22, S16 (first half), search
+
+**What changed.** The library is searchable by her own words. A migration adds an FTS5 table over the work's title, the
+review body and the answers she gave a chip question; `/api/search` answers ranked hits with the sentence the match was
+found in; the Library screen's search box works, with the matched word marked; the library list reports a real total
+and accepts rating and date filters; `search_library` reads the same index instead of scanning the newest pages; and a
+looked-up work that is probably one already in her library asks before it becomes a second row.
+
+**Ranking.** Title, then body, then answers, weighted `3, 1, 0.5` (her decision, recorded in
+[`slices/S16-search-and-chat.md`](slices/S16-search-and-chat.md) Decisions). FTS5's `bm25` weights are per column *in
+the table's order*, including the UNINDEXED id, so the call is `bm25(entries_fts, 0.0, 3.0, 1.0, 0.5)`; a three-weight
+call silently gives the title a weight of 1 and the answers the default of 1, and the store test that ranks a title hit
+above an answer hit failed for exactly that reason first.
+
+**The index is kept in step by the database, not by Go.** Four triggers rewrite an entry's whole index row from the
+base tables: on the entry inserting, on its status, body or deleted_at changing, on an answer being added, and on a
+work's title being corrected. One definition of "searchable text", and no repository path can forget it. The index is
+derived data, so it may be deleted and rebuilt, unlike the tables invariant 4 protects. Every search compares its row
+count with the library's and rebuilds when they disagree, which is how a file restored from an older backup heals
+itself; `sepia reindex` does the same rebuild on demand, for the case the counts cannot see (right number of rows, wrong
+text).
+
+**A trap this found: a table rebuild breaks on a cross-table trigger.** SQLite will not rename a table while a trigger
+on another table names it, so replaying 0004's rebuild over a database that has the search triggers failed inside
+`entries_fts_answer` with "no such table: entries". The rebuild path now takes the search triggers out, applies the
+migration, and puts back any that are still valid, which is what SQLite's own rebuild recipe does with triggers. It is
+covered by the shelf migration test and by the rebuild test, both of which were already failing.
+
+**A trap this found: the filter chose a plan, and the plan was 40 times slower.** With a medium or date filter SQLite
+started from `entries_library` and probed the virtual table once per row: 729 ms for a page that took 19 ms without a
+filter. The query now makes the FTS table drive the join with `CROSS JOIN`, and the budget test holds both to 250 ms on
+5,000 invented entries.
+
+**A second boundary, deliberately not silent.** A search over eight words, or over 200 characters, is refused with
+plain copy rather than quietly cut (invariant 12). FTS5 operators never reach the engine raw: only letters and digits
+survive `domain.ParseSearchText`, which is fuzzed, so "the (mostly) slow parts" is four words and `" OR 1=1 --` is
+three.
+
+**What is still open.** The general chat's own half of S16 (S16.4 and S16.5: an `edit_entry` tool that opens a revision,
+the Ask button, the chat screen and its start screen) is the second pull request. The rating and date filters are in
+the API and not on a chip, because the mockup's Library has medium and shelf chips only; the phase 2 done-when's
+"filters work on a phone" is met by those chips.
+
+**Live check for the operator.** On the potato after the update: open Library, type a word from one of your reviews, and
+check that the sentence comes back with the word marked. Typing something nothing holds should say so, not error.

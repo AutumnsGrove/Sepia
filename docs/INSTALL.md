@@ -161,6 +161,21 @@ The move is not ceremony: the restore refuses to write over an existing `sepia.d
 the moment to find out whether the old file was still needed. The image's entrypoint is `serve`, so the one-off run
 has to name the binary as its entrypoint and pass the subcommand as its command, as above.
 
+### Rebuilding the search index
+
+Search reads a derived index, not the tables themselves, and the service keeps it in step with every write. Every
+search also compares its row count with the library's and rebuilds it when the two disagree, so a restored database
+normally heals itself. The command is for the case the counts cannot see: an index with the right number of rows and
+the wrong text, after a hand edit or a merge of two databases.
+
+```bash
+cd "$HOME/Sepia"
+docker compose exec sepia /sepia reindex
+```
+
+It prints how many entries it wrote and touches no review: the index is built from the entries and works that are
+already there, so it is safe to run while the service is up.
+
 ## 5. The doctor
 
 ```bash
