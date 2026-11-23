@@ -1622,3 +1622,45 @@ ways: `save_entry` writes the body and fields (a snapshot each) before it stores
 only re-applies answers writes no snapshot at all. The card now says it itself: `answers_pending` rides on
 `draft_snapshot` and `hello`, computed by the same check `Confirm` uses, and `save_entry` publishes one more snapshot
 after `AddAnswers` so the client hears that her answers were stored. The client reads the flag and nothing else.
+
+## 2026-11-23, fix, a candidate's cover comes through the app
+
+The picker drew initials for every candidate. The browser said why: `img-src 'self' data:` refused
+`https://covers.openlibrary.org/...`, so `InteractionCard`'s `<Cover url={candidate.thumb_url}>` was blocked before it
+drew, and the payload had been carrying the provider's URL since the first lookup. Seen on the potato while checking a
+draft (issue #53).
+
+Two ways to fix it. Loosening `img-src` to the two provider hosts is smaller, but it tells those services her IP every
+time a picker is drawn, and the CSP note in `vite.config.ts` says the point of `'self'` is that the app loads nothing
+from a third-party origin. So the cover is proxied instead: the payload names `/api/thumb?provider=…&src=…`, and
+the route fetches the provider's copy through the download, size, dimension and rate limits a saved cover already uses
+(`Finder.Cover`) and serves the stored file from this origin. The CSP is unchanged.
+
+Three things the proxy needed to be safe. The route is not an open image fetch: `Finder.Cover` refuses a URL whose
+origin the config does not name and now also refuses a provider name it was not built with, because the provider is
+part of the stored file's name and the name arrives in a query. `coverName` sanitises both halves for the same reason.
+A thumb is stored under a name derived from its source URL, never an id the page names, because the cache is keyed by
+provider and id and a candidate and the work she picks from it share one: the hash is what keeps a candidate's small
+cover from later being served as the work's own, and what stops a page writing a file per id it invents.
+
+Tests, each watched failing first. `TestACandidatePointsItsCoverAtTheApp` asserts the payload's `thumb_url` names this
+origin, carries the provider's URL as `src`, and carries no id, and that a candidate with no cover carries none at all.
+`TestACandidateThumbIsFetchedAndServedFromThisOrigin` fetches through the world and gets the provider's bytes back,
+stored once under `covers/tmdb-thumb-…`, with a redraw served from the cache rather than a second provider call.
+`TestAThumbIsRefusedUnlessItIsFromAConfiguredHost` and `TestAThumbTheProviderDoesNotHaveIsA404` cover the bad and sad
+routes, and both assert nothing was written into the cover cache. `TestACandidateThumbIsNotTheWorksCover` is the
+collision: the thumb and the work's cover are different files, and `TestAThumbIsStoredByItsSource` is the naming rule.
+The logging e2e now requires the picker's first cover to decode (`naturalWidth > 0`), which is the assertion the old
+payload failed.
+
+**The review found the origin rule was only a host rule.** `Finder.Cover` exempted loopback from the https requirement
+and from the host allow-list, so `/api/thumb?src=http://127.0.0.1:<any port>/…` fetched and stored whatever answered
+there: the dev and test world names a loopback cover base, and every other service on the board shares that host. A
+cover URL must now match a configured cover base's origin, scheme, host and port together, and a URL carrying a
+userinfo part is refused. `TestCoverRefusesAnotherOriginOnTheSameHost` and `TestAThumbCannotBeAnotherLocalService` were
+watched failing against the old rule, the second returning the other service's own PNG. The review's second finding,
+thumb files growing under names a page chose, is answered by the source-derived key rather than by a prune: one URL is
+one file. Eviction is still not implemented, and this entry says so rather than leaving it implicit.
+
+Checked by eye at 390×844 against the dev stack's split scenario: the first candidate draws its poster and the second,
+which the world gives no cover, draws its initials stand-in.

@@ -60,10 +60,19 @@ test.describe('logging a review', () => {
     await expect(page.getByRole('button', { name: /The book/ })).toBeVisible({ timeout: 20_000 });
     await page.getByRole('button', { name: /The book/ }).click();
 
-    // 2. Open Library returned candidates and she picks the work, not the model.
+    // 2. Open Library returned candidates and she picks the work, not the model. Each candidate draws its cover,
+    // which the browser fetches from the app: the CSP allows img-src 'self' only, so a provider's own URL draws
+    // nothing at all (issue #53). The image is asserted decoded, not merely present.
     await expect(page.getByRole('button', { name: /The Lantern Keeper/ })).toBeVisible({
       timeout: 20_000,
     });
+    const cover = page.locator('.cand img').first();
+    await expect(cover).toHaveAttribute('src', /^\/api\/thumb\?/);
+    await expect
+      .poll(async () => cover.evaluate((img: HTMLImageElement) => img.naturalWidth), {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(0);
     await pickBook(page);
 
     // 3. Describe: a guessed chip is dashed and never pre-selected, which is the bad route's rule. The card opens

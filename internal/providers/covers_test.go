@@ -3,10 +3,12 @@ package providers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,5 +191,116 @@ func TestCoverSanitisesTheID(t *testing.T) {
 		if strings.Contains(cover.Path, "..") {
 			t.Errorf("Cover(%q) path = %q", id, cover.Path)
 		}
+	}
+}
+
+// A candidate's cover is drawn from the app, not from the provider. The page's CSP is img-src 'self' data:, so a
+// payload carrying the provider's own URL draws nothing at all (issue #53): the path has to name this origin, and
+// carry the provider's URL as data for the route to fetch.
+func TestAThumbPathStaysOnThisOrigin(t *testing.T) {
+	remote := "https://covers.openlibrary.org/b/id/123-M.jpg"
+	got := ThumbPath(ProviderOpenLibrary, remote)
+
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("ThumbPath(%q) = %q: %v", remote, got, err)
+	}
+	if parsed.Scheme != "" || parsed.Host != "" {
+		t.Fatalf("thumb path %q names another origin, which the CSP refuses", got)
+	}
+	if parsed.Path != "/api/thumb" {
+		t.Errorf("path = %q, want the app's thumb route", parsed.Path)
+	}
+	query := parsed.Query()
+	if query.Get("provider") != ProviderOpenLibrary || query.Get("src") != remote {
+		t.Errorf("query = %v, want the provider and the source", query)
+	}
+	// The page names no id and no stored file: what it may fetch is decided by the source.
+	if query.Has("id") {
+		t.Errorf("query = %v, want no client-chosen id", query)
+	}
+
+	// A source URL with a query of its own survives the trip as one value, rather than splitting the route's.
+	puzzled := "https://image.tmdb.org/t/p/w92/x.jpg?size=1&sig=2"
+	again, err := url.Parse(ThumbPath(ProviderTMDB, puzzled))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if src := again.Query().Get("src"); src != puzzled {
+		t.Errorf("src = %q, want %q", src, puzzled)
+	}
+
+	// No cover, no path: the card draws its stand-in instead of a request that can only fail.
+	if got := ThumbPath(ProviderTMDB, "  "); got != "" {
+		t.Errorf("ThumbPath with no source = %q, want an empty string", got)
+	}
+
+	// The thumb's stored name is a hash of its source, so it is never the name of the work's own cover.
+	if coverName(ProviderTMDB, thumbKey(puzzled), "png") == coverName(ProviderTMDB, "movie:101", "png") {
+		t.Errorf("the thumb and the work share the name %s", coverName(ProviderTMDB, "movie:101", "png"))
+	}
+}
+
+// The provider name is part of a stored file's name, so a name this finder was not built with is refused rather
+// than turned into a path.
+func TestCoverRefusesAProviderItDoesNotKnow(t *testing.T) {
+	rig := newCoverRig(t, nil)
+	for _, provider := range []string{"../../etc", "covers/../..", "", "OpenLibrary"} {
+		_, err := rig.finder.Cover(context.Background(), provider, "OL1W", rig.srv.URL()+"/cover.png")
+		if err == nil {
+			t.Errorf("Cover(provider %q) was allowed", provider)
+		}
+	}
+	entries, readErr := os.ReadDir(filepath.Join(rig.cfg.DataDir, CoverDir))
+	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a refused provider left %d file(s)", len(entries))
+	}
+	// The names the finder does know are still fetched, so the refusal is about the name and not about covers.
+	if _, err := rig.finder.Cover(context.Background(), ProviderTMDB, "movie:101", rig.srv.URL()+"/cover.png"); err != nil {
+		t.Fatalf("Cover(tmdb): %v", err)
+	}
+}
+
+// The cover origin is the config's, not merely its host. The dev and test world names a loopback host on a port, and
+// every other service on the board shares that host, so a host allow-list would let a cover URL name anything local —
+// which is exactly what the thumb route would then fetch and store (the second review finding on #54).
+func TestCoverRefusesAnotherOriginOnTheSameHost(t *testing.T) {
+	rig := newCoverRig(t, nil)
+	other := world.Start("other", rig.clock)
+	defer other.Close()
+	other.SetBodyType("/secret.png", "image/png", pngBytes(t, 20, 30))
+
+	_, err := rig.finder.Cover(context.Background(), ProviderTMDB, "movie:101", other.URL()+"/secret.png")
+	if Reason(err) != ReasonUnauthorized {
+		t.Fatalf("Cover(other loopback origin) = %v, want %s", err, ReasonUnauthorized)
+	}
+	if calls := other.Calls("/secret.png"); calls != 0 {
+		t.Errorf("the other service was asked %d time(s), want none", calls)
+	}
+	entries, readErr := os.ReadDir(filepath.Join(rig.cfg.DataDir, CoverDir))
+	if readErr != nil && !os.IsNotExist(readErr) {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a refused origin left %d file(s)", len(entries))
+	}
+}
+
+// A candidate's thumb is stored under a name derived from its source, so a page cannot write a new file for every id it
+// invents: one URL is one file, however many times it is asked for.
+func TestAThumbIsStoredByItsSource(t *testing.T) {
+	first := thumbKey("https://image.tmdb.org/t/p/w342/a.jpg")
+	second := thumbKey("https://image.tmdb.org/t/p/w342/b.jpg")
+	if first == second {
+		t.Fatalf("two sources share the key %q", first)
+	}
+	if first != thumbKey("https://image.tmdb.org/t/p/w342/a.jpg") {
+		t.Error("the same source got a different key")
+	}
+	if strings.ContainsAny(first, `/\.`) {
+		t.Errorf("thumb key %q is not a bare file name", first)
 	}
 }
