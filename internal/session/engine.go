@@ -177,6 +177,23 @@ func (e *Engine) Greet(ctx context.Context, sessionID string, lastSeq int) (Hell
 	return hello, nil
 }
 
+// Answered lists the questions she has already answered in this session, oldest first. A turn can end while one is
+// still waiting (a timeout, a restart, a retry) and her answer is then stored but nothing is left to take it; the next
+// turn reads it here rather than asking the same question again (issue #39).
+func (e *Engine) Answered(ctx context.Context, sessionID string) ([]domain.Interaction, error) {
+	all, err := e.store.Interactions(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Interaction, 0, len(all))
+	for _, question := range all {
+		if question.ResolvedBy == domain.ResolvedByUser {
+			out = append(out, question)
+		}
+	}
+	return out, nil
+}
+
 // Draft reads the card: the entry, its version, and the questions still open on it.
 func (e *Engine) Draft(ctx context.Context, sessionID string) (Draft, error) {
 	sess, err := e.store.Session(ctx, sessionID)

@@ -720,3 +720,71 @@ func TestAnswersKeepInsertionOrderWithinASecond(t *testing.T) {
 		t.Fatalf("answers came back as %q then %q, want the order they were written", got[0].QuestionID, got[1].QuestionID)
 	}
 }
+
+// An answer is never deleted, so a second write for the same question cannot replace the first. It must not add a
+// second row either: a retried turn remembers the answers it already has and says them again, and a duplicate would
+// put the same question on the card twice.
+func TestAddAnswersDoesNotAddASecondAnswerForAQuestion(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	if err := s.SaveWork(ctx, sampleWork("w1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateDraft(ctx, sampleEntry("e1", "w1", 18)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddAnswers(ctx, "e1", []domain.Answer{
+		{QuestionID: "setting", Category: "setting", Type: domain.AnswerTags, Values: []string{"lived-in"}},
+	}); err != nil {
+		t.Fatalf("AddAnswers: %v", err)
+	}
+	// The same question again, with a different value: the first answer is hers and stays.
+	if err := s.AddAnswers(ctx, "e1", []domain.Answer{
+		{QuestionID: "setting", Category: "setting", Type: domain.AnswerTags, Values: []string{"immersive"}},
+	}); err != nil {
+		t.Fatalf("second AddAnswers: %v", err)
+	}
+	got, err := s.Answers(ctx, "e1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("answers = %+v, want one row per question", got)
+	}
+	if len(got[0].Values) != 1 || got[0].Values[0] != "lived-in" {
+		t.Errorf("answer = %+v, want the first one she gave", got[0])
+	}
+}
+
+// A skipped question is not an answer: she can still answer it on a later turn, and her answer has to land. The
+// skipped row stays (nothing is deleted), and the read prefers the real answer.
+func TestAddAnswersLetsARealAnswerFollowASkippedOne(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	if err := s.SaveWork(ctx, sampleWork("w1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateDraft(ctx, sampleEntry("e1", "w1", 18)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddAnswers(ctx, "e1", []domain.Answer{
+		{QuestionID: "ending", Prompt: "How did the ending land?", Type: domain.AnswerChoice, Skipped: true},
+	}); err != nil {
+		t.Fatalf("AddAnswers: %v", err)
+	}
+	if err := s.AddAnswers(ctx, "e1", []domain.Answer{
+		{QuestionID: "ending", Prompt: "How did the ending land?", Type: domain.AnswerChoice, Values: []string{"landed"}},
+	}); err != nil {
+		t.Fatalf("second AddAnswers: %v", err)
+	}
+	got, err := s.Answers(ctx, "e1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("answers = %+v, want one row per question", got)
+	}
+	if got[0].Skipped || len(got[0].Values) != 1 || got[0].Values[0] != "landed" {
+		t.Errorf("answer = %+v, want her real answer, not the skip", got[0])
+	}
+}

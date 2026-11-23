@@ -812,14 +812,17 @@ type questionPayload struct {
 	Questions []questionItem `json:"questions"`
 }
 
+// questionAnswerItem is one question's answer as the client sends it.
+type questionAnswerItem struct {
+	ID      string   `json:"id"`
+	Value   string   `json:"value"`
+	Values  []string `json:"values"`
+	Skipped bool     `json:"skipped"`
+}
+
 type questionAnswer struct {
-	Answers []struct {
-		ID      string   `json:"id"`
-		Value   string   `json:"value"`
-		Values  []string `json:"values"`
-		Skipped bool     `json:"skipped"`
-	} `json:"answers"`
-	SkipAll bool `json:"skip_all"`
+	Answers []questionAnswerItem `json:"answers"`
+	SkipAll bool                 `json:"skip_all"`
 }
 
 func askReviewer(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (tool.Result, error) {
@@ -842,12 +845,7 @@ func askReviewer(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (
 			"She only means to read this, so there is nothing to ask about it. Do not ask what she thought. "+
 				"Tell her it is on her list in one short sentence."), nil
 	}
-	medium := state.Medium
-	if medium == "" && state.Draft != nil {
-		if work, err := state.Agent.store.Work(ctx, state.Draft.Entry.WorkID); err == nil {
-			medium = work.Medium
-		}
-	}
+	medium := state.reviewMedium(ctx)
 	if medium == "" {
 		return tool.Errorf("pick the work first, so I know which questions apply"), nil
 	}
@@ -929,9 +927,21 @@ func (s *RunState) askQuestions(ctx context.Context, selection banks.Selection) 
 	if s.skipAll || len(selection.Questions) == 0 {
 		return nil
 	}
-	payload := questionPayload{}
-	offered := make(map[string]banks.Question, len(selection.Questions))
+	// A question she has already answered is not offered again: a turn can end with the card still waiting, and her
+	// answer is hers to keep (issue #39).
+	questions := make([]banks.Question, 0, len(selection.Questions))
 	for _, question := range selection.Questions {
+		if s.answered(question.ID) {
+			continue
+		}
+		questions = append(questions, question)
+	}
+	if len(questions) == 0 {
+		return nil
+	}
+	payload := questionPayload{}
+	offered := make(map[string]banks.Question, len(questions))
+	for _, question := range questions {
 		item := questionItem{ID: question.ID, Prompt: question.Prompt, Type: question.Type}
 		for _, option := range question.Options {
 			item.Options = append(item.Options, option.Label)
@@ -964,7 +974,7 @@ func (s *RunState) askQuestions(ctx context.Context, selection banks.Selection) 
 			Type: domain.AnswerType(question.Type), Values: values, Skipped: got.Skipped || len(values) == 0,
 		})
 	}
-	for _, question := range selection.Questions {
+	for _, question := range questions {
 		if answered[question.ID] {
 			continue
 		}
