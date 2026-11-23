@@ -234,7 +234,12 @@ func TestUpgradingFromBeforeTheShelvesKeepsEveryRowFinished(t *testing.T) {
 			body_origin, imported_from, body_spans_json, format, finished_on, status, deleted_at, created_at,
 			updated_at FROM entries;
 		DROP TABLE entries;
-		ALTER TABLE entries_old RENAME TO entries;`
+		ALTER TABLE entries_old RENAME TO entries;
+		-- A database written before 0010 has no search index either, and its triggers would otherwise be left
+		-- naming a virtual table that is about to be dropped.
+		DROP TRIGGER IF EXISTS entries_fts_insert; DROP TRIGGER IF EXISTS entries_fts_update;
+		DROP TRIGGER IF EXISTS entries_fts_answer; DROP TRIGGER IF EXISTS entries_fts_work_title;
+		DROP TABLE entries_fts;`
 	if applyErr := s.apply(ctx, migration{version: 8, name: "step_back", sql: stepBack, foreignKeysOff: true}); applyErr != nil {
 		t.Fatalf("step back: %v", applyErr)
 	}

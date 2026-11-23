@@ -115,6 +115,7 @@ in the commit that introduces it, with its outcome above the limit.
 | WebSocket outbound queue | 256 frames per connection | A persisted event that cannot be queued closes the socket so the client replays from its `last_seq`; live-only events are shed oldest first |
 | List page size | 50 default, 100 max | Capped |
 | Search query | 200 characters | Refused |
+| Search words | 8 words | Refused, with plain copy: a search answered as a shorter question would be a lie |
 | Backup receipt file read | 256 KiB, newest end first | Older receipts are outside the window; the newest still import. A file read never exceeds the bound |
 | Receipts imported per read | 500 lines, 8 KiB a line | Extras are skipped; the screen lists the newest runs |
 | Receipt field lengths | target 200, detail 1,000, run id 128 characters | Cut at a rune boundary; a receipt that still cannot be trusted is counted and skipped, never guessed at |

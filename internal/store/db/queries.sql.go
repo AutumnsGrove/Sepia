@@ -96,6 +96,57 @@ func (q *Queries) BumpDraftVersion(ctx context.Context, arg BumpDraftVersionPara
 	return q.db.ExecContext(ctx, bumpDraftVersion, arg.UpdatedAt, arg.ID, arg.DraftVersion)
 }
 
+const countLibrary = `-- name: CountLibrary :one
+SELECT count(*) FROM entries JOIN works ON works.id = entries.work_id
+WHERE ((?1 = 1 AND entries.status = 'saved' AND entries.deleted_at IS NOT NULL)
+       OR (?1 = 0 AND entries.status = 'saved' AND entries.deleted_at IS NULL))
+  AND (?2 IS NULL OR works.medium = ?2)
+  AND (?3 IS NULL OR entries.favourite = ?3)
+  AND (?4 IS NULL OR entries.work_id = ?4)
+  AND CASE ?5
+        WHEN 'want_to' THEN entries.completion = 'want_to'
+        WHEN 'finished' THEN entries.completion = 'finished'
+        WHEN 'abandoned' THEN entries.completion = 'abandoned'
+        ELSE entries.completion <> 'want_to'
+      END
+  AND (?6 IS NULL OR entries.rating_q >= ?6)
+  AND (?7 IS NULL OR entries.rating_q <= ?7)
+  AND (?8 IS NULL OR entries.finished_on >= ?8)
+  AND (?9 IS NULL OR entries.finished_on <= ?9)
+`
+
+type CountLibraryParams struct {
+	Deleted      interface{} `json:"deleted"`
+	Medium       interface{} `json:"medium"`
+	Favourite    interface{} `json:"favourite"`
+	WorkID       interface{} `json:"work_id"`
+	Shelf        interface{} `json:"shelf"`
+	RatingMin    interface{} `json:"rating_min"`
+	RatingMax    interface{} `json:"rating_max"`
+	FinishedFrom interface{} `json:"finished_from"`
+	FinishedTo   interface{} `json:"finished_to"`
+}
+
+// How many entries the same filters would list, which is what the tool row says ("42 entries") and what tells her that
+// a filtered list has more beyond the page she is reading. It is deliberately independent of the sort and the cursor:
+// a total that changed with the page would not be a total. The shelf CASE is ListLibraryPage's, for the same reason.
+func (q *Queries) CountLibrary(ctx context.Context, arg CountLibraryParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLibrary,
+		arg.Deleted,
+		arg.Medium,
+		arg.Favourite,
+		arg.WorkID,
+		arg.Shelf,
+		arg.RatingMin,
+		arg.RatingMax,
+		arg.FinishedFrom,
+		arg.FinishedTo,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAnswer = `-- name: CreateAnswer :exec
 INSERT INTO answers (id, entry_id, question_id, category, prompt, answer_type, answer_json, skipped, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1246,13 +1297,17 @@ WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
         WHEN 'abandoned' THEN entries.completion = 'abandoned'
         ELSE entries.completion <> 'want_to'
       END
-  AND (?5 IS NULL
+  AND (?5 IS NULL OR entries.rating_q >= ?5)
+  AND (?6 IS NULL OR entries.rating_q <= ?6)
+  AND (?7 IS NULL OR entries.finished_on >= ?7)
+  AND (?8 IS NULL OR entries.finished_on <= ?8)
+  AND (?9 IS NULL
        OR ((CASE WHEN entries.completion = 'finished' THEN 1 ELSE 0 END),
            entries.rating_q, entries.created_at, entries.id)
-          < (CAST(?6 AS INTEGER), CAST(?7 AS INTEGER),
-             CAST(?8 AS TEXT), ?5))
+          < (CAST(?10 AS INTEGER), CAST(?11 AS INTEGER),
+             CAST(?12 AS TEXT), ?9))
 ORDER BY (entries.completion = 'finished') DESC, entries.rating_q DESC, entries.created_at DESC, entries.id DESC
-LIMIT ?9
+LIMIT ?13
 `
 
 type ListLibraryByRatingParams struct {
@@ -1260,6 +1315,10 @@ type ListLibraryByRatingParams struct {
 	Favourite       interface{}    `json:"favourite"`
 	WorkID          interface{}    `json:"work_id"`
 	Shelf           interface{}    `json:"shelf"`
+	RatingMin       interface{}    `json:"rating_min"`
+	RatingMax       interface{}    `json:"rating_max"`
+	FinishedFrom    interface{}    `json:"finished_from"`
+	FinishedTo      interface{}    `json:"finished_to"`
 	BeforeID        interface{}    `json:"before_id"`
 	BeforeRank      sql.NullInt64  `json:"before_rank"`
 	BeforeRating    sql.NullInt64  `json:"before_rating"`
@@ -1279,6 +1338,10 @@ func (q *Queries) ListLibraryByRating(ctx context.Context, arg ListLibraryByRati
 		arg.Favourite,
 		arg.WorkID,
 		arg.Shelf,
+		arg.RatingMin,
+		arg.RatingMax,
+		arg.FinishedFrom,
+		arg.FinishedTo,
 		arg.BeforeID,
 		arg.BeforeRank,
 		arg.BeforeRating,
@@ -1338,14 +1401,18 @@ WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
         WHEN 'abandoned' THEN entries.completion = 'abandoned'
         ELSE entries.completion <> 'want_to'
       END
-  AND (?5 IS NULL
-       OR (?6 IS NOT NULL
+  AND (?5 IS NULL OR entries.rating_q >= ?5)
+  AND (?6 IS NULL OR entries.rating_q <= ?6)
+  AND (?7 IS NULL OR entries.finished_on >= ?7)
+  AND (?8 IS NULL OR entries.finished_on <= ?8)
+  AND (?9 IS NULL
+       OR (?10 IS NOT NULL
            AND (entries.finished_on IS NULL
-                OR (entries.finished_on, entries.id) < (?6, ?5)))
-       OR (?6 IS NULL
-           AND entries.finished_on IS NULL AND entries.id < ?5))
+                OR (entries.finished_on, entries.id) < (?10, ?9)))
+       OR (?10 IS NULL
+           AND entries.finished_on IS NULL AND entries.id < ?9))
 ORDER BY entries.finished_on DESC, entries.id DESC
-LIMIT ?7
+LIMIT ?11
 `
 
 type ListLibraryPageParams struct {
@@ -1353,6 +1420,10 @@ type ListLibraryPageParams struct {
 	Favourite        interface{} `json:"favourite"`
 	WorkID           interface{} `json:"work_id"`
 	Shelf            interface{} `json:"shelf"`
+	RatingMin        interface{} `json:"rating_min"`
+	RatingMax        interface{} `json:"rating_max"`
+	FinishedFrom     interface{} `json:"finished_from"`
+	FinishedTo       interface{} `json:"finished_to"`
 	BeforeID         interface{} `json:"before_id"`
 	BeforeFinishedOn interface{} `json:"before_finished_on"`
 	RowLimit         int64       `json:"row_limit"`
@@ -1371,6 +1442,10 @@ func (q *Queries) ListLibraryPage(ctx context.Context, arg ListLibraryPageParams
 		arg.Favourite,
 		arg.WorkID,
 		arg.Shelf,
+		arg.RatingMin,
+		arg.RatingMax,
+		arg.FinishedFrom,
+		arg.FinishedTo,
 		arg.BeforeID,
 		arg.BeforeFinishedOn,
 		arg.RowLimit,
