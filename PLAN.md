@@ -240,7 +240,10 @@ strongly at embedding. Phase 0 confirms it with a spike, not an opinion.
 | 12 | app | `save_entry` → SQLite commit → export row queued → R2 mirror on the next run |
 
 Nothing in steps 2–10 writes a saved entry. Step 11 is the only commit, and it is always mine to make.
-In-progress work lives in a draft that can be resumed after closing the app.
+In-progress work lives in a draft that can be resumed after closing the app. An answer I give to a question
+the agent asked is mine to keep: if the turn that asked has already ended (it timed out, or the potato
+restarted, or I tapped Try again), the next turn picks the answer up instead of asking me the same thing
+again and throwing the first one away.
 
 Branches off the main flow:
 

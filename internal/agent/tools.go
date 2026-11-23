@@ -929,9 +929,21 @@ func (s *RunState) askQuestions(ctx context.Context, selection banks.Selection) 
 	if s.skipAll || len(selection.Questions) == 0 {
 		return nil
 	}
-	payload := questionPayload{}
-	offered := make(map[string]banks.Question, len(selection.Questions))
+	// A question she has already answered is not offered again: a turn can end with the card still waiting, and her
+	// answer is hers to keep (issue #39).
+	questions := make([]banks.Question, 0, len(selection.Questions))
 	for _, question := range selection.Questions {
+		if s.answered(question.ID) {
+			continue
+		}
+		questions = append(questions, question)
+	}
+	if len(questions) == 0 {
+		return nil
+	}
+	payload := questionPayload{}
+	offered := make(map[string]banks.Question, len(questions))
+	for _, question := range questions {
 		item := questionItem{ID: question.ID, Prompt: question.Prompt, Type: question.Type}
 		for _, option := range question.Options {
 			item.Options = append(item.Options, option.Label)
@@ -964,7 +976,7 @@ func (s *RunState) askQuestions(ctx context.Context, selection banks.Selection) 
 			Type: domain.AnswerType(question.Type), Values: values, Skipped: got.Skipped || len(values) == 0,
 		})
 	}
-	for _, question := range selection.Questions {
+	for _, question := range questions {
 		if answered[question.ID] {
 			continue
 		}

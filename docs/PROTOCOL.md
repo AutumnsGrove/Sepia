@@ -106,7 +106,7 @@ something new.
 | Type | Data | Effect |
 |---|---|---|
 | `message` | `text`, `attachments[]` (media ids), `client_date`, `tz` | A normal chat message; `attachments` are images already uploaded to the session (Phase 3). The date and timezone make "last night" resolve against where I am |
-| `interaction_response` | `interaction_id`, `value` | Answers an open interaction; this is the tool result the agent is waiting on |
+| `interaction_response` | `interaction_id`, `value` | Answers an open interaction; this is the tool result the agent is waiting on. If the turn that asked has already ended (a timeout, a restart, a retry), the answer is still stored and still hers: the next turn reads it from the log and does not ask the same question again |
 | `draft_edit` | `base_version`, `set` (field to value map) | Direct edit of the card. Stale `base_version` means `rejected` plus a fresh `draft_snapshot` |
 | `accept_unverified` | `base_version`, `fields[]` or `all` | Accept web-derived or manual fields into the canonical work |
 | `include_left_out` | `base_version`, `segment_id` | Move a left-out segment into the body |
@@ -130,6 +130,10 @@ the current `draft_snapshot`.
 - **Offline outbox.** While the socket is down, the client keeps what I type, marked "will send when you are back online", and sends it on reconnect with its original `client_msg_id`, so a message typed in a tunnel is neither lost nor sent twice.
 - **Idempotency.** The server remembers each `client_msg_id` for the life of the session. A repeat gets
   `ack: duplicate` carrying the first outcome, and changes nothing.
+- **An answer outlives the turn that asked.** A turn can end while a card is still waiting, and her tap can arrive
+  after it. The answer is stored either way, and the next turn for that session reads the answers already given
+  instead of offering the same question again. A question is never answered twice into the card: the first answer
+  stands, because answers are never deleted.
 - **Resume.** On connect with `last_seq=N`, the server sends `hello`, then replays every persisted event
   with `seq > N` in order, then streams live. If it cannot (the log was compacted past N), `hello` says
   `full_state: true` and the client rebuilds from the snapshot in `hello`.

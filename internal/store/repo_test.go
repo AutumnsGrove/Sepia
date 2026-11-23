@@ -689,3 +689,38 @@ func TestCreateDraftDefaultsToDraft(t *testing.T) {
 		t.Fatalf("status = %q, want draft", got.Status)
 	}
 }
+
+// An answer is never deleted, so a second write for the same question cannot replace the first. It must not add a
+// second row either: a retried turn remembers the answers it already has and says them again, and a duplicate would
+// put the same question on the card twice.
+func TestAddAnswersDoesNotAddASecondAnswerForAQuestion(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	if err := s.SaveWork(ctx, sampleWork("w1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateDraft(ctx, sampleEntry("e1", "w1", 18)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddAnswers(ctx, "e1", []domain.Answer{
+		{QuestionID: "setting", Category: "setting", Type: domain.AnswerTags, Values: []string{"lived-in"}},
+	}); err != nil {
+		t.Fatalf("AddAnswers: %v", err)
+	}
+	// The same question again, with a different value: the first answer is hers and stays.
+	if err := s.AddAnswers(ctx, "e1", []domain.Answer{
+		{QuestionID: "setting", Category: "setting", Type: domain.AnswerTags, Values: []string{"immersive"}},
+	}); err != nil {
+		t.Fatalf("second AddAnswers: %v", err)
+	}
+	got, err := s.Answers(ctx, "e1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("answers = %+v, want one row per question", got)
+	}
+	if len(got[0].Values) != 1 || got[0].Values[0] != "lived-in" {
+		t.Errorf("answer = %+v, want the first one she gave", got[0])
+	}
+}

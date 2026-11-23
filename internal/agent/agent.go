@@ -233,6 +233,8 @@ func (a *Agent) HandleMessage(ctx context.Context, in TurnInput) (Outcome, error
 		MessageIndex: len(messages) - 1,
 		Parsed:       parseMessage(in.Text, a.now(), in.ClientDate, in.Timezone),
 	}
+	// Her earlier answers come first, so a question a finished turn left behind is not asked a second time.
+	state.rememberAnswers(ctx)
 	if err := a.preread(ctx, state); err != nil {
 		return Outcome{}, err
 	}
