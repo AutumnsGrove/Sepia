@@ -24,6 +24,7 @@ const usage = `sepia: a private review journal.
 
   sepia serve                            run the service on 127.0.0.1:8893 (override with SEPIA_ADDR)
   sepia doctor [--env-file path]         check the install: .env mode and owner, loopback, database protections
+  sepia reindex                          rebuild the library's search index from the database
   sepia restore --snapshot path --into dir [--compare db]
                                          restore a snapshot into an empty directory and prove the copy
   sepia version                          print the version
@@ -72,6 +73,14 @@ func run(ctx context.Context, args []string, environ []string, stdout, stderr io
 			return 2
 		}
 		return runDoctor(ctx, cfg, envFile, stdout)
+
+	case "reindex":
+		cfg, err := config.Load(environ)
+		if err != nil {
+			fmt.Fprintf(stderr, "sepia: %v\n", err)
+			return 1
+		}
+		return reindex(ctx, cfg, stdout, stderr)
 
 	case "restore":
 		return runRestore(ctx, args[1:], stdout, stderr)
