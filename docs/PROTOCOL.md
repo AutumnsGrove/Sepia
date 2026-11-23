@@ -90,6 +90,7 @@ One mechanism for every question the service asks me. `interaction_request.kind`
 | `describe` | The Describe it step | `categories[]` (id, label, `covered` when I already mentioned it, `tags[]` of `{value, label, tone}`, `hints[]` of tag values) | `selected` (a map of category id to tag values), or `skip_all`. Hints are never pre-selected |
 | `question_form` | The single questions that remain | `questions[]` (id, prompt, type, options, optional `hint`), at most three | `answers[]`, with skipped questions marked, or `skip_all` |
 | `revisit_choice` | The work is already in the library | the previous entry's summary | `new_entry` or `edit_existing` |
+| `same_work_choice` | A looked-up work is probably one already in the library, but not certainly (a near title, a missing year) | `previous` (the work already there: title, year, creator, medium) and `options[]` | `same` or `different`. An unanswered question is not a yes |
 | `fill_gap` | A required piece is missing and cannot be parsed (a rating, a few words of review) | `field`, `prompt` | the value |
 | `lookup_failed` | A metadata service errored, timed out or found nothing | `service`, `reason`, `can_ask_polaris` | `retry`, `ask_polaris` or `log_without_details` |
 

@@ -1,2 +1,6 @@
-Search her saved entries. Read only. Use it to check whether she has already reviewed a work, or what she
-thought of something she logged before.
+Search her saved entries: the work's title, the review she wrote, and the answers she gave. Read only. Use it to
+check whether she has already reviewed a work, or what she thought of something she logged before.
+
+Every word must match, so "slow burn" finds an entry that says both. Narrow it with medium and with from and to as
+YYYY-MM-DD days when she asks about a kind of work or a stretch of time. The result is at most five entries, and the
+summary says how many there were in all, so tell her when there are more.

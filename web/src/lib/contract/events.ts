@@ -313,7 +313,14 @@ export type Completion = 'want_to' | 'finished' | 'abandoned';
 export type BlockState = 'verified' | 'unverified' | 'accepted' | 'image_read' | 'empty';
 export type Usd = number;
 export type InteractionKind =
-  'choose_medium' | 'choose_candidate' | 'describe' | 'question_form' | 'revisit_choice' | 'fill_gap' | 'lookup_failed';
+  | 'choose_medium'
+  | 'choose_candidate'
+  | 'describe'
+  | 'question_form'
+  | 'revisit_choice'
+  | 'same_work_choice'
+  | 'fill_gap'
+  | 'lookup_failed';
 /**
  * Any client message. Every one carries a client_msg_id so a retry cannot be applied twice.
  */
