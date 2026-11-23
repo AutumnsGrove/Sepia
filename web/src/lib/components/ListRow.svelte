@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Heart, Star } from '@lucide/svelte';
   import Cover from './Cover.svelte';
+  import type { SnippetSegment } from '../state/search';
 
   /**
    * One row in the library or the drafts list. `rating` shows the exact number beside a filled star, because a
@@ -19,6 +20,11 @@
     favourite?: boolean;
     /** The sentence under a saved row: what she wrote. */
     note?: string;
+    /**
+     * The same sentence as runs, for a search result: the matched words are marked and everything else is escaped
+     * like any other text. It is a fallback-free alternative to note, so one of the two is rendered.
+     */
+    noteSegments?: SnippetSegment[];
     /** The quiet right-hand text on a draft: "2 h ago". */
     age?: string;
     /** What a draft is waiting for, shown with its own icon. */
@@ -36,6 +42,7 @@
     quarters = null,
     favourite = false,
     note,
+    noteSegments,
     age,
     waiting,
     badge,
@@ -53,7 +60,15 @@
       <span class="tt">{title}</span>
       {#if meta}<span class="mm">{meta}</span>{/if}
       {#if badge}<span class="shelf">{badge}</span>{/if}
-      {#if note}<span class="sn">{note}</span>{/if}
+      {#if noteSegments && noteSegments.length > 0}
+        <span class="sn">
+          {#each noteSegments as segment, index (index)}{#if segment.marked}<mark class="m"
+                >{segment.text}</mark
+              >{:else}{segment.text}{/if}{/each}
+        </span>
+      {:else if note}
+        <span class="sn">{note}</span>
+      {/if}
       {#if waiting}<span class="st">{waiting}</span>{/if}
     </span>
     <span class="right">
@@ -134,6 +149,15 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+  /* The matched word. A soft wash plus an underline, so the highlight survives the greyscale of a screenshot and
+     is not the only signal: the word is different from the ones around it either way. */
+  .sn :global(mark.m) {
+    background: var(--accent-soft);
+    color: var(--text);
+    border-radius: 3px;
+    padding: 0 2px;
+    box-shadow: inset 0 -1.5px 0 var(--accent);
   }
   .st {
     font-size: 0.8125rem;

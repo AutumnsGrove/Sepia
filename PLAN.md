@@ -509,7 +509,8 @@ nightly backup has run and appeared in R2.
 
 - Medium table with per-medium providers and per-medium question sets.
 - `lookup_web` and the unverified-field flow, so anything an API misses can still be logged.
-- Library view: filter by medium, sort by date/rating, search my text (SQLite FTS5).
+- Library view: filter by medium, sort by date/rating, search my text (SQLite FTS5, ranked title first, then the
+  body, then the answers).
 - The general chat, backed by `search_library`, with edits going through a confirm card.
 - Duplicate detection and the "this already exists" path.
 

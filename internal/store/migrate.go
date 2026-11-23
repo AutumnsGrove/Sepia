@@ -113,9 +113,38 @@ func (s *Store) applyRebuild(ctx context.Context, m migration) error {
 	if err != nil {
 		return fmt.Errorf("store: migration %s: begin: %w", m.name, err)
 	}
+	// Search triggers live on answers and works and name entries, and SQLite refuses to rename a table while
+	// another table's trigger names it: a rebuild of entries fails with "no such table" inside the answers trigger.
+	// They are captured, dropped and put back around the rebuild, which is what SQLite's own rebuild recipe does with
+	// triggers, and it keeps this working for a migration written long after the search index was.
+	triggers, err := detachedSearchTriggers(ctx, tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("store: migration %s: %w", m.name, err)
+	}
 	if applyErr := s.applyInTx(ctx, tx, m); applyErr != nil {
 		_ = tx.Rollback()
 		return applyErr
+	}
+	for _, trigger := range triggers {
+		// A rebuild that stepped the schema back to before the search index dropped the table as well, and a
+		// trigger that named it must not come back. The migration may also have restored a trigger itself.
+		if exists, err := schemaObjectExists(ctx, tx, "trigger", trigger.name); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("store: migration %s: %w", m.name, err)
+		} else if exists {
+			continue
+		}
+		if exists, err := schemaObjectExists(ctx, tx, "table", "entries_fts"); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("store: migration %s: %w", m.name, err)
+		} else if !exists {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, trigger.sql); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("store: migration %s: restore the search trigger %s: %w", m.name, trigger.name, err)
+		}
 	}
 	if checkErr := checkRebuilt(ctx, tx); checkErr != nil {
 		_ = tx.Rollback()
@@ -125,6 +154,53 @@ func (s *Store) applyRebuild(ctx context.Context, m migration) error {
 		return fmt.Errorf("store: migration %s: commit: %w", m.name, commitErr)
 	}
 	return nil
+}
+
+// detachedSearchTriggers removes the search index's triggers from the schema and returns the statements that create
+// them. SQLite will not rename a table while a trigger on another table names it, so any rebuild of entries has to
+// take the answers and works triggers out of the way first. Reading them from the schema rather than repeating them
+// in Go keeps one definition of what they do: the migration.
+func detachedSearchTriggers(ctx context.Context, tx *sql.Tx) ([]schemaObject, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'entries\_fts\_%' ESCAPE '\'`)
+	if err != nil {
+		return nil, fmt.Errorf("read the search triggers: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var triggers []schemaObject
+	for rows.Next() {
+		var trigger schemaObject
+		if scanErr := rows.Scan(&trigger.name, &trigger.sql); scanErr != nil {
+			return nil, fmt.Errorf("scan a search trigger: %w", scanErr)
+		}
+		triggers = append(triggers, trigger)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("read the search triggers: %w", rowsErr)
+	}
+	for _, trigger := range triggers {
+		// The name came out of sqlite_master and is ours; it is never anything a request supplies.
+		if _, err := tx.ExecContext(ctx, `DROP TRIGGER "`+trigger.name+`"`); err != nil {
+			return nil, fmt.Errorf("drop the search trigger %s: %w", trigger.name, err)
+		}
+	}
+	return triggers, nil
+}
+
+// schemaObject is one trigger's name and the statement that creates it.
+type schemaObject struct {
+	name string
+	sql  string
+}
+
+// schemaObjectExists reports whether a table or trigger of that name is in the schema inside the transaction.
+func schemaObjectExists(ctx context.Context, tx *sql.Tx, kind, name string) (bool, error) {
+	var count int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT count(*) FROM sqlite_master WHERE type = ? AND name = ?`, kind, name).Scan(&count); err != nil {
+		return false, fmt.Errorf("read the schema for %s %s: %w", kind, name, err)
+	}
+	return count > 0, nil
 }
 
 // checkRebuilt refuses the commit when a rebuild left a dangling reference or an unsound file. Both checks run

@@ -178,6 +178,47 @@ func aConfirmedEntry(t *testing.T, engine *session.Engine, db *store.Store, titl
 	return entry
 }
 
+// aReviewedEntry confirms one entry with the body, rating and date a search or filter case needs. It goes through the
+// engine's own confirm, so the row is written exactly as the app writes it.
+func aReviewedEntry(t *testing.T, engine *session.Engine, db *store.Store, title, medium, body string, rating int,
+	finished string,
+) domain.Entry {
+	t.Helper()
+	ctx := context.Background()
+	if err := db.SaveWork(ctx, domain.Work{
+		ID: workIDFor(title), Medium: medium, Title: title, Verified: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := engine.CreateEntry(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = engine.StartDraft(ctx, sess.ID, domain.Entry{WorkID: workIDFor(title)}); err != nil {
+		t.Fatal(err)
+	}
+	ratingJSON, err := json.Marshal(rating)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = engine.EditDraft(ctx, sess.ID, session.Edit{BaseVersion: 0, Set: map[string]json.RawMessage{
+		"rating":      ratingJSON,
+		"body":        bodyJSON,
+		"finished_on": json.RawMessage(`"` + finished + `"`),
+	}, ClientMsgID: "e-" + title}); err != nil {
+		t.Fatal(err)
+	}
+	entry, _, _, err := engine.Confirm(ctx, sess.ID, session.ConfirmRequest{BaseVersion: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return entry
+}
+
 func workIDFor(title string) string {
 	id := strings.ToLower(strings.ReplaceAll(title, " ", "-"))
 	return "w-" + id
@@ -281,8 +322,8 @@ func TestWorksSearchAndTheNotBuiltStubs(t *testing.T) {
 		t.Errorf("missing work = %d", rec.Code)
 	}
 
-	if rec := doJSON(t, h, http.MethodGet, "/api/search?q=lantern", nil); rec.Code != http.StatusNotImplemented {
-		t.Errorf("search = %d, want not built", rec.Code)
+	if rec := doJSON(t, h, http.MethodGet, "/api/search?q=lantern", nil); rec.Code != http.StatusOK {
+		t.Errorf("search = %d, want 200", rec.Code)
 	}
 	if rec := doJSON(t, h, http.MethodGet, "/api/search?q=", nil); rec.Code != http.StatusBadRequest {
 		t.Errorf("empty search = %d", rec.Code)
@@ -1005,5 +1046,200 @@ func TestACoverTheProviderDisownsIsPurged(t *testing.T) {
 	}
 	if got.CoverPath != "" {
 		t.Errorf("cover path = %q, want it cleared once the file is gone", got.CoverPath)
+	}
+}
+
+// searchPage is the search response as the client reads it.
+type searchPage struct {
+	Items []wireSearchHit `json:"items"`
+	Total int             `json:"total"`
+}
+
+// Happy: a phrase from her body finds the entry, with the sentence around it, the match marked, and the entry the row
+// draws; the title finds it too; and the total is every match rather than the page.
+func TestSearchFindsHerWords(t *testing.T) {
+	h, engine, db := newREST(t)
+	light := aReviewedEntry(t, engine, db, "The Lantern Keeper", "book",
+		"a quiet book about light and memory", 18, "2026-10-30")
+	aReviewedEntry(t, engine, db, "Piranesi", "book", "a book that started slow but then it grabbed me", 19,
+		"2026-09-28")
+
+	rec := doJSON(t, h, http.MethodGet, "/api/search?q=memory", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("search = %d: %s", rec.Code, rec.Body)
+	}
+	var page searchPage
+	decode(t, rec, &page)
+	if page.Total != 1 || len(page.Items) != 1 {
+		t.Fatalf("page = %+v", page)
+	}
+	hit := page.Items[0]
+	if hit.ID != light.ID || hit.Kind != "entry" || hit.Title != "The Lantern Keeper" {
+		t.Fatalf("hit = %+v", hit)
+	}
+	if hit.Entry == nil || hit.Entry.ID != light.ID || hit.Entry.Work.Title != "The Lantern Keeper" {
+		t.Fatalf("hit has no entry to draw: %+v", hit.Entry)
+	}
+	if !strings.Contains(hit.Snippet, "\uE000memory\uE001") {
+		t.Fatalf("snippet = %q, want the matched word marked", hit.Snippet)
+	}
+	if hit.Score <= 0 {
+		t.Fatalf("score = %v, want a bigger number for a better match", hit.Score)
+	}
+
+	// A title is searchable, and the match is found in it.
+	byTitle := doJSON(t, h, http.MethodGet, "/api/search?q=lantern", nil)
+	decode(t, byTitle, &page)
+	if page.Total != 1 || page.Items[0].ID != light.ID {
+		t.Fatalf("by title = %+v", page)
+	}
+
+	// The count is every match rather than the page it fitted on.
+	all := doJSON(t, h, http.MethodGet, "/api/search?q=book&limit=1", nil)
+	decode(t, all, &page)
+	if page.Total != 2 || len(page.Items) != 1 {
+		t.Fatalf("book = %d matches over %d rows, want 2 over 1", page.Total, len(page.Items))
+	}
+}
+
+// Bad: an empty search, a search over the length limit, one with too many words, and a bad page size are all refused
+// with plain copy. An operator-shaped search is asked as words and answers nothing rather than erroring.
+func TestSearchRefusesBadQueries(t *testing.T) {
+	h, engine, db := newREST(t)
+	aReviewedEntry(t, engine, db, "The Lantern Keeper", "book", "a quiet book about light", 18, "2026-10-30")
+
+	for name, target := range map[string]string{
+		"empty":        "/api/search?q=",
+		"spaces":       "/api/search?q=%20%20",
+		"operators":    "/api/search?q=%22%20*%20(%20%5E",
+		"too long":     "/api/search?q=" + strings.Repeat("a", 201),
+		"too many":     "/api/search?q=one+two+three+four+five+six+seven+eight+nine",
+		"a bad page":   "/api/search?q=light&limit=0",
+		"a page again": "/api/search?q=light&limit=nonsense",
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := doJSON(t, h, http.MethodGet, target, nil)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("%s = %d, want 400: %s", name, rec.Code, rec.Body)
+			}
+		})
+	}
+
+	// A query shaped like FTS5 syntax is words, not syntax: it is answered, and it matches nothing.
+	hostile := doJSON(t, h, http.MethodGet, "/api/search?q=%22+OR+1%3D1+--", nil)
+	if hostile.Code != http.StatusOK {
+		t.Fatalf("hostile search = %d: %s", hostile.Code, hostile.Body)
+	}
+	var page searchPage
+	decode(t, hostile, &page)
+	if page.Total != 0 || len(page.Items) != 0 {
+		t.Fatalf("hostile search matched something: %+v", page)
+	}
+}
+
+// Happy: the library's total is the filters', not the page's, and the rating and date filters narrow it.
+func TestLibraryTotalAndFilters(t *testing.T) {
+	h, engine, db := newREST(t)
+	aReviewedEntry(t, engine, db, "The Lantern Keeper", "book", "light and memory", 18, "2026-10-30")
+	aReviewedEntry(t, engine, db, "Blade Runner 2049", "film", "slow and deliberate", 19, "2026-10-27")
+	aReviewedEntry(t, engine, db, "Piranesi", "book", "started slow", 15, "2026-09-28")
+
+	type page struct {
+		Items []wireEntry `json:"items"`
+		Total int         `json:"total"`
+	}
+	read := func(target string) page {
+		t.Helper()
+		rec := doJSON(t, h, http.MethodGet, target, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d: %s", target, rec.Code, rec.Body)
+		}
+		var got page
+		decode(t, rec, &got)
+		return got
+	}
+
+	if got := read("/api/entries?limit=1"); len(got.Items) != 1 || got.Total != 3 {
+		t.Fatalf("total = %d with %d rows, want 3 in all", got.Total, len(got.Items))
+	}
+	// The total does not change with the page.
+	if got := read("/api/entries?limit=2"); got.Total != 3 {
+		t.Fatalf("total on the second page size = %d", got.Total)
+	}
+	if got := read("/api/entries?rating_min=18"); got.Total != 2 {
+		t.Fatalf("rating_min total = %d, want 2", got.Total)
+	}
+	if got := read("/api/entries?rating_max=18"); got.Total != 2 {
+		t.Fatalf("rating_max total = %d, want 2", got.Total)
+	}
+	if got := read("/api/entries?finished_from=2026-10-01"); got.Total != 2 {
+		t.Fatalf("finished_from total = %d, want 2", got.Total)
+	}
+	if got := read("/api/entries?finished_to=2026-09-30"); got.Total != 1 {
+		t.Fatalf("finished_to total = %d, want 1", got.Total)
+	}
+	if got := read("/api/entries?medium=film"); got.Total != 1 {
+		t.Fatalf("medium total = %d, want 1", got.Total)
+	}
+
+	// Bad: a bound that is not a rating, a date that does not exist, and a range the wrong way round.
+	for _, target := range []string{
+		"/api/entries?rating_min=0",
+		"/api/entries?rating_max=21",
+		"/api/entries?rating_min=nine",
+		"/api/entries?finished_from=2026-02-31",
+		"/api/entries?finished_to=yesterday",
+		"/api/entries?rating_min=19&rating_max=17",
+		"/api/entries?finished_from=2026-10-01&finished_to=2026-09-01",
+	} {
+		if rec := doJSON(t, h, http.MethodGet, target, nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", target, rec.Code)
+		}
+	}
+}
+
+// Bad: the Deleted list's total is its own. Its shelf rule is not the library's ("everything but a wish"), because a
+// deleted wish is still something Restore should find, so the count has to come from the same query the rows do.
+func TestDeletedListTotalMatchesItsRows(t *testing.T) {
+	h, engine, db := newREST(t)
+	ctx := context.Background()
+	review := aReviewedEntry(t, engine, db, "Piranesi", "book", "started slow", 17, "2026-09-28")
+	if err := db.SaveWork(ctx, domain.Work{ID: "w-wish", Medium: "book", Title: "House of Leaves"}); err != nil {
+		t.Fatalf("wish work: %v", err)
+	}
+	if err := db.CreateDraft(ctx, domain.Entry{
+		ID: "e-wish", WorkID: "w-wish", RatingScale: domain.RatingScale, Body: "meant to read it",
+		BodyOrigin: domain.BodyTyped, Status: domain.StatusSaved, Completion: domain.CompletionWantTo,
+	}); err != nil {
+		t.Fatalf("wish: %v", err)
+	}
+	for _, id := range []string{review.ID, "e-wish"} {
+		if rec := doJSON(t, h, http.MethodPost, "/api/entries/"+id+"/delete", nil); rec.Code != http.StatusNoContent {
+			t.Fatalf("delete %s = %d: %s", id, rec.Code, rec.Body)
+		}
+	}
+
+	type page struct {
+		Items []wireEntry `json:"items"`
+		Total int         `json:"total"`
+	}
+	read := func(target string) page {
+		t.Helper()
+		rec := doJSON(t, h, http.MethodGet, target, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d: %s", target, rec.Code, rec.Body)
+		}
+		var got page
+		decode(t, rec, &got)
+		return got
+	}
+
+	all := read("/api/entries?deleted=true")
+	if len(all.Items) != 2 || all.Total != 2 {
+		t.Fatalf("deleted = %d rows, total %d, want 2 and 2", len(all.Items), all.Total)
+	}
+	finished := read("/api/entries?deleted=true&completion=finished")
+	if len(finished.Items) != 1 || finished.Total != 1 {
+		t.Fatalf("deleted finished = %d rows, total %d, want 1 and 1", len(finished.Items), finished.Total)
 	}
 }

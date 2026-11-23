@@ -309,13 +309,30 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 	if query.Work != "" {
 		workArg = query.Work
 	}
+	ratingMinArg, ratingMaxArg := any(nil), any(nil)
+	if query.RatingMin > 0 {
+		ratingMinArg = int64(query.RatingMin)
+	}
+	if query.RatingMax > 0 {
+		ratingMaxArg = int64(query.RatingMax)
+	}
+	fromArg, toArg := any(nil), any(nil)
+	if query.From != "" {
+		fromArg = query.From
+	}
+	if query.To != "" {
+		toArg = query.To
+	}
 	beforeID := nullableString(cursor.ID)
 
 	var rows []db.Entry
 	if query.Deleted {
 		page, err := s.ReadQueries().ListDeletedPage(ctx, db.ListDeletedPageParams{
-			Medium: mediumArg, WorkID: workArg, BeforeDeletedAt: nullableString(cursor.DeletedAt),
-			BeforeID: beforeID, RowLimit: int64(limit + 1),
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
+			RatingMin: ratingMinArg, RatingMax: ratingMaxArg,
+			FinishedFrom: fromArg, FinishedTo: toArg,
+			BeforeDeletedAt: nullableString(cursor.DeletedAt),
+			BeforeID:        beforeID, RowLimit: int64(limit + 1),
 		})
 		if err != nil {
 			return nil, domain.Cursor{}, fmt.Errorf("store: list deleted: %w", err)
@@ -324,6 +341,8 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 	} else if query.Sort == domain.SortRating {
 		page, err := s.ReadQueries().ListLibraryByRating(ctx, db.ListLibraryByRatingParams{
 			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
+			RatingMin: ratingMinArg, RatingMax: ratingMaxArg,
+			FinishedFrom: fromArg, FinishedTo: toArg,
 			BeforeRank:      rankNull(cursor.CompletionRank, cursor.ID != ""),
 			BeforeRating:    rankNull(cursor.Rating, cursor.ID != ""),
 			BeforeCreatedAt: stringNull(cursor.CreatedAt),
@@ -336,6 +355,8 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 	} else {
 		page, err := s.ReadQueries().ListLibraryPage(ctx, db.ListLibraryPageParams{
 			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
+			RatingMin: ratingMinArg, RatingMax: ratingMaxArg,
+			FinishedFrom: fromArg, FinishedTo: toArg,
 			BeforeFinishedOn: nullableString(cursor.FinishedOn), BeforeID: beforeID, RowLimit: int64(limit + 1),
 		})
 		if err != nil {
@@ -367,6 +388,57 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 		out = append(out, entryFromRow(row))
 	}
 	return out, next, nil
+}
+
+// LibraryCount is how many entries the same query would list, independent of the page and the sort. A failed read is an
+// error rather than zero: a screen that says "0 entries" because the database was busy is worse than one that says it
+// could not count.
+func (s *Store) LibraryCount(ctx context.Context, query domain.LibraryQuery) (int, error) {
+	mediumArg, favouriteArg, workArg := any(nil), any(nil), any(nil)
+	if query.Medium != "" {
+		mediumArg = query.Medium
+	}
+	if query.Favourite != nil {
+		favouriteArg = boolToInt(*query.Favourite)
+	}
+	if query.Work != "" {
+		workArg = query.Work
+	}
+	ratingMinArg, ratingMaxArg := any(nil), any(nil)
+	if query.RatingMin > 0 {
+		ratingMinArg = int64(query.RatingMin)
+	}
+	if query.RatingMax > 0 {
+		ratingMaxArg = int64(query.RatingMax)
+	}
+	fromArg, toArg := any(nil), any(nil)
+	if query.From != "" {
+		fromArg = query.From
+	}
+	if query.To != "" {
+		toArg = query.To
+	}
+	// The two lists have different shelf rules (the Deleted list has no "not a wish" default), so each has its own
+	// count rather than one number that would disagree with one of them.
+	var (
+		total int64
+		err   error
+	)
+	if query.Deleted {
+		total, err = s.ReadQueries().CountDeleted(ctx, db.CountDeletedParams{
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
+			RatingMin: ratingMinArg, RatingMax: ratingMaxArg, FinishedFrom: fromArg, FinishedTo: toArg,
+		})
+	} else {
+		total, err = s.ReadQueries().CountLibrary(ctx, db.CountLibraryParams{
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
+			RatingMin: ratingMinArg, RatingMax: ratingMaxArg, FinishedFrom: fromArg, FinishedTo: toArg,
+		})
+	}
+	if err != nil {
+		return 0, fmt.Errorf("store: count library: %w", err)
+	}
+	return int(total), nil
 }
 
 // Setting reads one stored switch, or the default when it was never written. A storage failure is an error, not the

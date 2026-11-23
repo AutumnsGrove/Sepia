@@ -98,6 +98,24 @@ func TestTheRebuildKeepsRowsAndRules(t *testing.T) {
 		t.Error("the status trigger did not survive the rebuild")
 	}
 
+	// The search triggers came back with the table, and they still do their job: the row that existed before the
+	// rebuild is indexed, and a write after it is indexed too. Without this, a restore loop that silently skipped
+	// would leave every test above green and search quietly stale.
+	ctxSearch := context.Background()
+	if hits, total, searchErr := s.Search(ctxSearch, domain.SearchQuery{Text: "loved", Limit: 10}); searchErr != nil {
+		t.Fatalf("search after the rebuild: %v", searchErr)
+	} else if len(hits) != 1 || total != 1 {
+		t.Fatalf("search after the rebuild = %+v, total %d, want the seeded entry", hits, total)
+	}
+	if err := raw(t, s, `UPDATE entries SET body = 'loved it so much i read it twice' WHERE id = 'e1'`); err != nil {
+		t.Fatalf("rewrite the body: %v", err)
+	}
+	if hits, _, err := s.Search(ctxSearch, domain.SearchQuery{Text: "twice", Limit: 10}); err != nil {
+		t.Fatalf("search after a write: %v", err)
+	} else if len(hits) != 1 {
+		t.Fatalf("a write after the rebuild is not indexed: %+v", hits)
+	}
+
 	// And the indexes the lists depend on are back.
 	for _, name := range []string{"entries_library", "entries_work", "entries_drafts"} {
 		var found string

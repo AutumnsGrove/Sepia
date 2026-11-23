@@ -53,9 +53,28 @@ The Library screen lists and filters by medium; search and the Ask button have r
 
 None.
 
+## Decisions
+
+Answered by Autumn on 2026-11-22, in the batch before the slice started.
+
+1. **Ranking weights: title, then body, then answers.** FTS5's `bm25` is weighted `title=3.0, body=1.0,
+   answers=0.5`, so a title hit always outranks a sentence she wrote on the card, and an answer she gave a
+   chip for never outranks her own prose. Recorded here, and in `PLAN.md` 5 where the library view is listed.
+2. **Two pull requests.** Search (S16.1, S16.2, S16.3, S16.6 and the search UI) lands first and is shippable
+   alone; the general chat (S16.4, S16.5) follows on its own branch, so each is a diff a reviewer can hold in
+   their head and the library becomes searchable before the chat exists.
+3. **A hit carries its entry, and both lists carry a total.** The contract's `SearchHit` gained an optional `entry`
+   so a result row draws without a request per hit, and `/api/entries` and `/api/search` gained a required `total`
+   so the tool row says how many there are rather than how many fitted on the page. Both are additive and both are in
+   `api/openapi.yaml` in the same commit as the code that sends them.
+4. **The snippet marks its matches with private-use characters, not HTML.** U+E000 and U+E001 rather than `<mark>`:
+   a snippet is her own text, so the browser escapes everything between them and a review of "<script>" stays a
+   sentence about a script. Outside the UI, `search_library` strips them and shows the model plain words.
+
 ## Open questions
 
-- Ranking weights between title, body and answers (proposed: title highest, then body, then answers).
+None. Both questions above were answered before the slice started; anything a builder meets afterwards is a
+judgement call recorded in this section, or trigger T10.
 
 ## Done when
 

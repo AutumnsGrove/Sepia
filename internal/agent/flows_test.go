@@ -873,3 +873,108 @@ func TestPipelineARatedFinishWithNoWordsIsACard(t *testing.T) {
 		t.Error("she was never asked what she thought")
 	}
 }
+
+// --- a work that may already be in the library ------------------------------------------------------------
+
+// S16.3. The provider answers with a work whose title is the one she already has, but whose year disagrees, so it is
+// not certainly the same work. Guessing either way is wrong: a merge rewrites history and a new row splits it. The
+// turn asks, and her answer decides which work the card belongs to.
+func TestPipelineAsksWhenALookedUpWorkMightAlreadyBeLogged(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, rigOptions{script: bookScript()})
+	scriptBook(r.fake)
+	r.responder.script("choose_candidate", "openlibrary|OL1W")
+	// Her library already has the title, under a manual work with a different year and no provider id.
+	if err := r.store.SaveWork(ctx, domain.Work{
+		ID: "w-manual", Medium: "book", Title: "The Lantern Keeper", Year: 2001,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.store.CreateDraft(ctx, domain.Entry{
+		ID: "e-old", WorkID: "w-manual", Rating: 16, RatingScale: domain.RatingScale,
+		Body: "I read it years ago and liked it", BodyOrigin: domain.BodyTyped,
+		Status: domain.StatusSaved, Completion: domain.CompletionFinished, FinishedOn: "2026-01-04",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r.responder.script("same_work_choice", "same")
+	// She is already in the library, so the revisit choice follows, and she wants a second entry.
+	r.responder.script("revisit_choice", "new_entry")
+	r.responder.script("describe", map[string]any{"selected": map[string][]string{}})
+	r.responder.script("question_form", map[string]any{"skip_all": true})
+
+	sess, _ := r.session.CreateEntry(ctx)
+	out, err := r.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1"})
+	if err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if out.Draft == nil {
+		t.Fatal("no card")
+	}
+	if out.Draft.Entry.WorkID != "w-manual" {
+		t.Fatalf("card is on %q, want the work she already had", out.Draft.Entry.WorkID)
+	}
+	entries, err := r.store.EntriesOnWork(ctx, "w-manual")
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("entries on the existing work = %v, %v", entries, err)
+	}
+	// Nothing was written for the fetched work: no invisible row keeps the provider id for the next lookup to match.
+	same, err := r.store.WorksByTitle(ctx, "book", "The Lantern Keeper")
+	if err != nil || len(same) != 1 {
+		t.Fatalf("works titled that = %d, %v; want only the one she had", len(same), err)
+	}
+
+	// The second lookup of the same provider work asks again rather than reusing a row the first turn left behind.
+	second := newRig(t, rigOptions{script: bookScript()})
+	second.agent.store, second.agent.session = r.store, r.session
+	second.responder.session, second.responder.store = r.session, r.store
+	scriptBook(second.fake)
+	second.responder.script("choose_candidate", "openlibrary|OL1W")
+	second.responder.script("same_work_choice", "same")
+	second.responder.script("revisit_choice", "new_entry")
+	second.responder.script("describe", map[string]any{"selected": map[string][]string{}})
+	second.responder.script("question_form", map[string]any{"skip_all": true})
+	next, _ := r.session.CreateEntry(ctx)
+	again, err := second.agent.HandleMessage(ctx, TurnInput{
+		SessionID: next.ID, Text: bookMessage, ClientMsgID: "m2",
+	})
+	if err != nil {
+		t.Fatalf("second HandleMessage: %v", err)
+	}
+	if again.Draft == nil || again.Draft.Entry.WorkID != "w-manual" {
+		t.Fatalf("the second card = %+v, want her work again", again.Draft)
+	}
+	if same, _ := r.store.WorksByTitle(ctx, "book", "The Lantern Keeper"); len(same) != 1 {
+		t.Fatalf("works titled that = %d after a second lookup, want one", len(same))
+	}
+}
+
+// Bad: a second work that is only close by title and that she says is different stays a work of its own, and its card
+// is on the new row rather than on hers.
+func TestPipelineKeepsADifferentWorkApart(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, rigOptions{script: bookScript()})
+	scriptBook(r.fake)
+	r.responder.script("choose_candidate", "openlibrary|OL1W")
+	if err := r.store.SaveWork(ctx, domain.Work{
+		ID: "w-manual", Medium: "book", Title: "The Lantern Keeper", Year: 2001,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r.responder.script("same_work_choice", "different")
+	r.responder.script("describe", map[string]any{"selected": map[string][]string{}})
+	r.responder.script("question_form", map[string]any{"skip_all": true})
+
+	sess, _ := r.session.CreateEntry(ctx)
+	out, err := r.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1"})
+	if err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if out.Draft == nil || out.Draft.Entry.WorkID == "w-manual" {
+		t.Fatalf("the card was put on her old work: %+v", out.Draft)
+	}
+	work, err := r.store.Work(ctx, out.Draft.Entry.WorkID)
+	if err != nil || work.PrimaryID != "OL1W" {
+		t.Fatalf("the card's work = %+v, %v", work, err)
+	}
+}

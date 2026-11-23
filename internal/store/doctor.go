@@ -24,6 +24,13 @@ var protectedTriggers = []string{
 	"entries_status_forward_only",
 	"interactions_no_delete",
 	"interactions_no_reopen",
+	// The search index is derived, but a file that has lost these triggers stops following every write: search
+	// would answer from the day the trigger went missing and never say so. Presence is checked here, and the
+	// counts in Search detect a table that is out of step.
+	"entries_fts_insert",
+	"entries_fts_update",
+	"entries_fts_answer",
+	"entries_fts_work_title",
 }
 
 // Health is the doctor's answer. A store that is not healthy should not be used to save a review.

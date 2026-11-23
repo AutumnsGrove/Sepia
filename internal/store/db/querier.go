@@ -21,6 +21,17 @@ type Querier interface {
 	// --- the session engine (S07) ---------------------------------------------------------------------------
 	// The optimistic-concurrency check is the WHERE clause, so a stale edit changes nothing instead of racing a read.
 	BumpDraftVersion(ctx context.Context, arg BumpDraftVersionParams) (sql.Result, error)
+	// How many entries the Deleted list holds under the same filters, so the line above the list is the list's own count.
+	// Its shelf rule is ListDeletedPage's: an unnamed shelf is every deleted entry, because a wish she deleted is still
+	// something restore should find, and the library's "not a wish" rule is about what she scans, not about what is gone.
+	CountDeleted(ctx context.Context, arg CountDeletedParams) (int64, error)
+	// How many entries the same filters would list, which is what the tool row says ("42 entries") and what tells her that
+	// a filtered list has more beyond the page she is reading. It is deliberately independent of the sort and the cursor:
+	// a total that changed with the page would not be a total. The shelf CASE is ListLibraryPage's, for the same reason.
+	//
+	// It is the library proper and not the Deleted list, which has its own count: the two lists apply different shelf
+	// rules, and one count cannot describe both.
+	CountLibrary(ctx context.Context, arg CountLibraryParams) (int64, error)
 	CreateAnswer(ctx context.Context, arg CreateAnswerParams) error
 	CreateDecisionCall(ctx context.Context, arg CreateDecisionCallParams) error
 	CreateEntry(ctx context.Context, arg CreateEntryParams) error
@@ -59,7 +70,8 @@ type Querier interface {
 	// A session's decisions calls, oldest first, for the "why" sheet. The ledger holds odds and costs, never her text.
 	ListDecisionCalls(ctx context.Context, arg ListDecisionCallsParams) ([]DecisionCall, error)
 	// The Deleted list: soft-deleted saved entries, the most recently deleted first. It is the only list that shows
-	// them, and restore is the only way out of it.
+	// them, and restore is the only way out of it. Its filters are CountDeleted's, so the count and the rows agree: an
+	// unnamed shelf is every deleted entry, and a named one narrows it.
 	ListDeletedPage(ctx context.Context, arg ListDeletedPageParams) ([]Entry, error)
 	ListDrafts(ctx context.Context, limit int64) ([]Entry, error)
 	ListEntriesOnWork(ctx context.Context, workID string) ([]Entry, error)

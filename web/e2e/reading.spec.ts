@@ -130,6 +130,35 @@ test('the library groups by month, filters by medium, and sorts', async ({ page 
   await shot(page, 'reading-library-by-rating.png');
 });
 
+test('searching her own words finds the sentence, marks the match, and clears back', async ({
+  page,
+}) => {
+  await openReading(page, '/library');
+
+  // A word from a review, not a title: search reads what she wrote.
+  const box = page.getByLabel('Search titles and your words');
+  await box.fill('slow');
+  await expect(page.getByText(/mentions? “slow”/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Grey Harbour/ })).toBeVisible();
+  // The matched word is marked in the sentence the server found.
+  await expect(page.locator('.sn mark.m').first()).toHaveText('slow');
+  await noViolations(page);
+  await shot(page, 'reading-library-search.png');
+
+  // Sad: words nothing in the library holds say so plainly, with a way back.
+  await box.fill('zzzznothing');
+  await expect(page.getByRole('heading', { name: /Nothing mentions/ })).toBeVisible();
+  await shot(page, 'reading-library-search-empty.png');
+  await page.getByRole('button', { name: 'Back to the library' }).click();
+  await expect(page.getByText('October 2026')).toBeVisible();
+
+  // Bad: FTS syntax is asked as words rather than obeyed, so it answers nothing instead of erroring.
+  await box.fill('" OR 1=1 --');
+  await expect(page.getByRole('heading', { name: /Nothing mentions/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await expect(page.getByText('October 2026')).toBeVisible();
+});
+
 test('the shelves: a work she stopped is in the library, and wanted is one chip away', async ({
   page,
 }) => {
