@@ -473,3 +473,32 @@ func TestIncludeLeftOutRefusesOverlapAndSplitCharacters(t *testing.T) {
 		t.Fatalf("a real left-out passage was refused: %v", err)
 	}
 }
+
+// A card built before her answers arrive must not be confirmed while a question is still open: the answer she gave
+// would be left in the log and the entry saved without it (issue #46). She answers or skips first, then saves.
+func TestConfirmRefusedWhileAQuestionIsOpen(t *testing.T) {
+	e, _, sess := draftSession(t)
+	ctx := context.Background()
+	if _, err := e.EditDraft(ctx, sess.ID, Edit{BaseVersion: 0, Set: patch(map[string]any{
+		"rating": 18, "body": "A quiet book about light and memory.",
+	})}); err != nil {
+		t.Fatalf("EditDraft: %v", err)
+	}
+	if _, err := e.Ask(ctx, sess.ID, "describe", map[string]any{
+		"categories": []any{map[string]any{"id": "feel", "label": "Feel", "tags": []any{}}},
+	}); err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	_, _, _, err := e.Confirm(ctx, sess.ID, ConfirmRequest{BaseVersion: 1})
+	var refusal *Refusal
+	if !errors.As(err, &refusal) || refusal.Code != CodeAnswerPending {
+		t.Fatalf("Confirm = %v, want a %s refusal", err, CodeAnswerPending)
+	}
+	entry, err := e.Draft(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+	if entry.Entry.Status != domain.StatusDraft {
+		t.Errorf("status = %q, want the card left as a draft", entry.Entry.Status)
+	}
+}
