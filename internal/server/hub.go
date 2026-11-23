@@ -240,12 +240,33 @@ func (h *hub) runTurn(ctx context.Context, sessionID string, msg queuedMessage) 
 	go h.runTurn(nextCtx, sessionID, *next)
 }
 
-// busy reports whether any session has a turn running. It is what refuses an update or a restart mid-reply: the
-// watcher recreates the container, and a turn that is being written would die with it.
+// busy reports whether any session has a turn that is actually writing a reply. It is what refuses an update or a
+// restart mid-reply: the watcher recreates the container, and a turn that is being written would die with it.
+//
+// A turn parked on her answer is not busy. The clock stops while she decides, so such a turn never ends on its own,
+// and counting it refused every update until she answered a question on the very screen the update would refresh
+// (issue #47). The restart kills nothing she is reading, her answer is stored if she taps it afterwards, and the next
+// turn reads it.
 func (h *hub) busy() bool {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	return len(h.turns) > 0
+	sessions := make([]string, 0, len(h.turns))
+	for sessionID := range h.turns {
+		sessions = append(sessions, sessionID)
+	}
+	h.mu.Unlock()
+	for _, sessionID := range sessions {
+		if h.responder == nil || !h.responder.parkedOn(sessionID) {
+			return true
+		}
+	}
+	return false
+}
+
+// parkedOn reports whether a session's turn is waiting on her answer.
+func (r *Responder) parkedOn(sessionID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.parked[sessionID] > 0
 }
 
 // stop cancels the turn in flight. It is explicit: nothing else ever stops a reply.
@@ -387,11 +408,17 @@ type Responder struct {
 	mu      sync.Mutex
 	waiters map[string]chan json.RawMessage
 	early   map[string]json.RawMessage
+	// parked counts the waiters per session: a turn waiting on her answer is not a reply being written, which is what
+	// an update refuses (issue #47).
+	parked map[string]int
 }
 
 // NewResponder builds an empty bridge. The service makes one and hands it to both the agent and the hub.
 func NewResponder() *Responder {
-	return &Responder{waiters: map[string]chan json.RawMessage{}, early: map[string]json.RawMessage{}}
+	return &Responder{
+		waiters: map[string]chan json.RawMessage{}, early: map[string]json.RawMessage{},
+		parked: map[string]int{},
+	}
 }
 
 // Wait blocks until the question is answered or the turn ends.
@@ -404,10 +431,14 @@ func (r *Responder) Wait(ctx context.Context, sessionID, interactionID string) (
 	}
 	ch := make(chan json.RawMessage, 1)
 	r.waiters[interactionID] = ch
+	r.parked[sessionID]++
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
 		delete(r.waiters, interactionID)
+		if r.parked[sessionID]--; r.parked[sessionID] <= 0 {
+			delete(r.parked, sessionID)
+		}
 		r.mu.Unlock()
 	}()
 	select {

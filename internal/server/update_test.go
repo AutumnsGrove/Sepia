@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -296,5 +297,44 @@ func TestServicesReportConfiguration(t *testing.T) {
 	}
 	if got, ok := byName["polaris"]; !ok || got.State != "not_configured" {
 		t.Errorf("polaris = %+v", got)
+	}
+}
+
+// The refusal is for a reply being written, not for a turn that is waiting on her. A parked turn is doing no model
+// work, and the restart kills nothing she is reading. Without this, a card left waiting blocks every update until she
+// answers it on the very screen the update would refresh (issue #47).
+func TestUpdateAllowedWhileATurnWaitsOnHer(t *testing.T) {
+	cfg, dir := updateConfig(t)
+	digest := "ghcr.io/autumnsgrove/sepia@sha256:" + strings.Repeat("c", 64)
+	writeSignal(t, dir, "available", `{"latest":"r220","latest_digest":"`+digest+`","update_available":true}`)
+	s := newServer(cfg, Deps{}, slog.New(slog.NewTextHandler(io.Discard, nil)), assets())
+	h := s.routes()
+
+	s.hub.mu.Lock()
+	s.hub.turns["session-1"] = &turn{}
+	s.hub.mu.Unlock()
+	defer func() {
+		s.hub.mu.Lock()
+		delete(s.hub.turns, "session-1")
+		s.hub.mu.Unlock()
+	}()
+
+	// The turn asks her a question and parks on it, which is what the responder's waiter means.
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = s.hub.responder.Wait(ctx, "session-1", "interaction-1")
+	}()
+	time.Sleep(50 * time.Millisecond)
+
+	rec := do(t, h, http.MethodPost, "/api/update/start", "localhost:8893", "http://localhost:8893", nil)
+	cancel()
+	<-done
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", rec.Code, rec.Body)
+	}
+	if body := readSignal(t, dir, "requested"); !strings.Contains(body, "target="+digest) {
+		t.Errorf("requested = %q", body)
 	}
 }
