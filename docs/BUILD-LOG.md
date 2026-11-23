@@ -1495,3 +1495,31 @@ the API and not on a chip, because the mockup's Library has medium and shelf chi
 
 **Live check for the operator.** On the potato after the update: open Library, type a word from one of your reviews, and
 check that the sentence comes back with the word marked. Typing something nothing holds should say so, not error.
+
+## 2026-11-22, fix, the why sheet stops crashing on a repeated check
+
+**Found live, on the potato.** One entry could not be opened at all: every load of its session rendered SvelteKit's
+plain `500 Internal Error`, while the library and the Drafts list were fine. The console said
+`each_key_duplicate`. `Engine.receipts` appends one row per decision call for the whole session, and the pre-read runs
+on every turn, so a session with two pre-reads (a second message, or Try again, which re-runs the pre-read by design)
+carried `intent: log_review`, `medium: book` and the rest twice. `WhySheet` keyed its list by the text it printed, so
+the second row with the same name and option threw, and SvelteKit turned the route into a 500. The sheet is in the
+DOM while it is closed, so the card could not render at all.
+
+**Fixed.** `receipts` keeps one row per check name and the newest call's verdict wins: a later pre-read supersedes an
+earlier one, and repeating it is stale data, not a second opinion. The names are also sorted before they are read,
+because the odds are a JSON object and Go's map iteration is random, so the sheet used to reshuffle itself between
+renders. On the frontend the `{#each}` lists in the why sheet are unkeyed: a key over server text must never be able
+to take the page down, and the server side is now the place uniqueness is guaranteed.
+
+**Tests.** `TestWhySheetKeepsOneRowPerCheck` records two decision calls and asserts one row per name, the newer
+probability, and the same order on a second read; it failed on the duplicate before the fix. A gallery state,
+`screen-repeat-pre-read`, carries a repeated check on purpose: it drew the same `500 Internal Error` she saw, and the
+gallery's render assertion is now the regression guard for the crash itself.
+
+**Still open, and filed.** #39: her chip answers are stored by `Engine.Answer` but go nowhere when the turn that asked
+has ended, so a retry asks the same question again and her taps are lost. #40: there is no route-level error boundary,
+so one render error still blanks the whole app; that is what made the entry unreachable rather than merely unopenable.
+
+**Live check for the operator.** After the update, open the half-finished *A Closed and Common Orbit* draft on the
+potato. It should open on the card, and **How this was read** should show each check once.
