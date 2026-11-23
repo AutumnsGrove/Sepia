@@ -21,6 +21,10 @@ type Querier interface {
 	// --- the session engine (S07) ---------------------------------------------------------------------------
 	// The optimistic-concurrency check is the WHERE clause, so a stale edit changes nothing instead of racing a read.
 	BumpDraftVersion(ctx context.Context, arg BumpDraftVersionParams) (sql.Result, error)
+	// How many entries the same filters would list, which is what the tool row says ("42 entries") and what tells her that
+	// a filtered list has more beyond the page she is reading. It is deliberately independent of the sort and the cursor:
+	// a total that changed with the page would not be a total. The shelf CASE is ListLibraryPage's, for the same reason.
+	CountLibrary(ctx context.Context, arg CountLibraryParams) (int64, error)
 	CreateAnswer(ctx context.Context, arg CreateAnswerParams) error
 	CreateDecisionCall(ctx context.Context, arg CreateDecisionCallParams) error
 	CreateEntry(ctx context.Context, arg CreateEntryParams) error

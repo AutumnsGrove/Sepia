@@ -279,6 +279,10 @@ WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
         WHEN 'abandoned' THEN entries.completion = 'abandoned'
         ELSE entries.completion <> 'want_to'
       END
+  AND (sqlc.narg(rating_min) IS NULL OR entries.rating_q >= sqlc.narg(rating_min))
+  AND (sqlc.narg(rating_max) IS NULL OR entries.rating_q <= sqlc.narg(rating_max))
+  AND (sqlc.narg(finished_from) IS NULL OR entries.finished_on >= sqlc.narg(finished_from))
+  AND (sqlc.narg(finished_to) IS NULL OR entries.finished_on <= sqlc.narg(finished_to))
   AND (sqlc.narg(before_id) IS NULL
        OR (sqlc.narg(before_finished_on) IS NOT NULL
            AND (entries.finished_on IS NULL
@@ -306,6 +310,10 @@ WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
         WHEN 'abandoned' THEN entries.completion = 'abandoned'
         ELSE entries.completion <> 'want_to'
       END
+  AND (sqlc.narg(rating_min) IS NULL OR entries.rating_q >= sqlc.narg(rating_min))
+  AND (sqlc.narg(rating_max) IS NULL OR entries.rating_q <= sqlc.narg(rating_max))
+  AND (sqlc.narg(finished_from) IS NULL OR entries.finished_on >= sqlc.narg(finished_from))
+  AND (sqlc.narg(finished_to) IS NULL OR entries.finished_on <= sqlc.narg(finished_to))
   AND (sqlc.narg(before_id) IS NULL
        OR ((CASE WHEN entries.completion = 'finished' THEN 1 ELSE 0 END),
            entries.rating_q, entries.created_at, entries.id)
@@ -313,6 +321,27 @@ WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
              CAST(sqlc.narg(before_created_at) AS TEXT), sqlc.narg(before_id)))
 ORDER BY (entries.completion = 'finished') DESC, entries.rating_q DESC, entries.created_at DESC, entries.id DESC
 LIMIT sqlc.arg(row_limit);
+
+-- name: CountLibrary :one
+-- How many entries the same filters would list, which is what the tool row says ("42 entries") and what tells her that
+-- a filtered list has more beyond the page she is reading. It is deliberately independent of the sort and the cursor:
+-- a total that changed with the page would not be a total. The shelf CASE is ListLibraryPage's, for the same reason.
+SELECT count(*) FROM entries JOIN works ON works.id = entries.work_id
+WHERE ((sqlc.arg(deleted) = 1 AND entries.status = 'saved' AND entries.deleted_at IS NOT NULL)
+       OR (sqlc.arg(deleted) = 0 AND entries.status = 'saved' AND entries.deleted_at IS NULL))
+  AND (sqlc.narg(medium) IS NULL OR works.medium = sqlc.narg(medium))
+  AND (sqlc.narg(favourite) IS NULL OR entries.favourite = sqlc.narg(favourite))
+  AND (sqlc.narg(work_id) IS NULL OR entries.work_id = sqlc.narg(work_id))
+  AND CASE sqlc.narg(shelf)
+        WHEN 'want_to' THEN entries.completion = 'want_to'
+        WHEN 'finished' THEN entries.completion = 'finished'
+        WHEN 'abandoned' THEN entries.completion = 'abandoned'
+        ELSE entries.completion <> 'want_to'
+      END
+  AND (sqlc.narg(rating_min) IS NULL OR entries.rating_q >= sqlc.narg(rating_min))
+  AND (sqlc.narg(rating_max) IS NULL OR entries.rating_q <= sqlc.narg(rating_max))
+  AND (sqlc.narg(finished_from) IS NULL OR entries.finished_on >= sqlc.narg(finished_from))
+  AND (sqlc.narg(finished_to) IS NULL OR entries.finished_on <= sqlc.narg(finished_to));
 
 -- name: ListDeletedPage :many
 -- The Deleted list: soft-deleted saved entries, the most recently deleted first. It is the only list that shows

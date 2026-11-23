@@ -261,10 +261,48 @@ type LibraryQuery struct {
 	// which is finished and abandoned but not a wish, because a wish is not a review and has no finish date to
 	// group by. A named shelf shows exactly that one.
 	Shelf Completion
-	Sort  LibrarySort
+	// RatingMin and RatingMax are the quarter-star bounds, inclusive. Zero is unset, because a stored rating is 1
+	// to 20: the one value that cannot be a real rating is the one that means "no bound".
+	RatingMin int
+	RatingMax int
+	// From and To bound the finish date, inclusive, as YYYY-MM-DD. Empty is unset. An entry with no finish date
+	// is outside a date filter, because it has nothing to be inside it with.
+	From string
+	To   string
+	Sort LibrarySort
 	// Deleted switches the list from the library to the Deleted one, which holds only the soft-deleted rows.
 	Deleted bool
 }
+
+// SearchQuery is one search of the library: the text she typed and the filters that narrow it. It is text rather
+// than parsed terms so the store owns the one call to ParseSearchText, and a caller cannot pass FTS5 syntax by
+// accident with a prebuilt expression.
+type SearchQuery struct {
+	Text      string
+	Medium    string
+	Favourite *bool
+	RatingMin int
+	RatingMax int
+	From      string
+	To        string
+	Limit     int
+}
+
+// SearchHit is one entry her words found. Kind is "entry" today; the contract keeps room for a work or a past chat,
+// and carries the entry and its work so a result row draws without a second request per hit.
+type SearchHit struct {
+	Kind    string  `json:"kind"`
+	ID      string  `json:"id"`
+	Title   string  `json:"title"`
+	Snippet string  `json:"snippet"`
+	Score   float64 `json:"score"`
+	// Entry and Work are the row behind the hit. They are not part of the wire shape: the API sends the entry, and
+	// the server renders it with wireEntryOf.
+	Entry Entry `json:"-"`
+	Work  Work  `json:"-"`
+}
+
+// ParseLibrarySort reads the API's sort value. An empty value is the default.
 
 // ParseLibrarySort reads the API's sort value. An empty value is the default.
 func ParseLibrarySort(raw string) (LibrarySort, bool) {
