@@ -195,6 +195,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("/api/restart", postOnly(s.restart))
 	mux.Handle("/media/{id}", getOnly(s.notBuilt))
 	mux.Handle("/covers/", getOnly(s.serveCover))
+	mux.Handle("/api/thumb", getOnly(s.serveThumb))
 
 	mux.Handle("/api/", getOnly(s.apiNotFound))
 	mux.Handle("/", getOnly(s.static))
@@ -352,32 +353,12 @@ func (s *Server) serveCover(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
 		return
 	}
-	dir := filepath.Join(s.cfg.DataDir, providers.CoverDir)
-	// Both sides of the prefix check are resolved, because a temp directory on macOS is a symlink and the real
-	// path is not the one os.TempDir handed out.
-	resolvedDir, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
-		return
-	}
-	file := filepath.Join(dir, name)
-	resolvedFile, err := filepath.EvalSymlinks(file)
-	if err != nil || !strings.HasPrefix(resolvedFile, resolvedDir+string(os.PathSeparator)) {
-		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
-		return
-	}
-	file = resolvedFile
-	f, err := os.Open(file) //nolint:gosec // G703: file is resolved under the cover directory and checked above
+	f, info, err := openCover(s.cfg.DataDir, name)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
 		return
 	}
 	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() > providers.MaxCoverBytes {
-		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
-		return
-	}
 	// G3's rule is that a cover older than 180 days is refreshed on its next use, and a use is a read. A stale file is
 	// still served — the board is usually offline and the library should keep its posters — but it is served with
 	// no-cache so the browser revalidates rather than holding a copy of its own, and the work is refreshed in the
@@ -389,6 +370,67 @@ func (s *Server) serveCover(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 	}
+	w.Header().Set("Content-Type", coverType(name))
+	http.ServeContent(w, r, name, info.ModTime(), f)
+}
+
+// openCover opens one stored cover by bare file name, resolving both sides of the directory check: a temp directory on
+// macOS is a symlink and the real path is not the one os.TempDir handed out, and a name that is not under the cover
+// directory is refused rather than read (S09 bad route).
+func openCover(dataDir, name string) (*os.File, os.FileInfo, error) {
+	dir := filepath.Join(dataDir, providers.CoverDir)
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	resolvedFile, err := filepath.EvalSymlinks(filepath.Join(dir, name))
+	if err != nil || !strings.HasPrefix(resolvedFile, resolvedDir+string(os.PathSeparator)) {
+		return nil, nil, os.ErrNotExist
+	}
+	f, err := os.Open(resolvedFile) //nolint:gosec // G703: resolved under the cover directory and checked above
+	if err != nil {
+		return nil, nil, err
+	}
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > providers.MaxCoverBytes {
+		_ = f.Close()
+		return nil, nil, os.ErrNotExist
+	}
+	return f, info, nil
+}
+
+// serveThumb serves a candidate's cover from this origin. The page's CSP is img-src 'self' data:, and a candidate's
+// cover lived on a provider's image host, so the picker drew its stand-in for every candidate (issue #53). The payload
+// names this route instead, and the app fetches the provider's copy through the same cache, limits and rate limits a
+// saved cover uses.
+//
+// Nothing here is proxied from a host the config does not name: the download refuses a host that is not one of the
+// provider's image bases, and a provider name that is not one the finder was built with. A cover that cannot be
+// fetched is a 404 and the card draws its stand-in, which is how every other cover failure is handled.
+func (s *Server) serveThumb(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	provider, id, src := query.Get("provider"), query.Get("id"), query.Get("src")
+	// No model means no finder in this build: the thumb is decoration, so it is a missing image rather than a refusal
+	// the card would have to explain.
+	if s.model == nil {
+		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
+		return
+	}
+	cover, err := s.model.CandidateCover(r.Context(), provider, id, src)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
+		return
+	}
+	name := path.Base(cover.Path)
+	f, info, err := openCover(s.cfg.DataDir, name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
+		return
+	}
+	defer func() { _ = f.Close() }()
+	// A thumb is not a work's cover: there is no row to refresh from a path, and the provider's own URL came with the
+	// request that fetched it. It is served for a day and fetched again when the cache window closes.
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Type", coverType(name))
 	http.ServeContent(w, r, name, info.ModTime(), f)
 }
