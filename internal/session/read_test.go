@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -86,5 +87,58 @@ func TestSessionsListsWithFilters(t *testing.T) {
 	}
 	if one[0].ID == sess.ID && general.ID == "" {
 		t.Error("the newest session was not first")
+	}
+}
+
+// A session with two pre-reads (a second message, or Try again, which re-runs the pre-read by design) must still
+// show one row per check. The why sheet used to key its list by the text it printed, so a repeated name and option
+// took the whole session page down with "each_key_duplicate" (issue #38).
+func TestWhySheetKeepsOneRowPerCheck(t *testing.T) {
+	e, db, sess := draftSession(t)
+	ctx := context.Background()
+	record := func(probability float64) {
+		t.Helper()
+		odds, err := json.Marshal(map[string]map[string]float64{
+			"intent": {"log_review": probability, "chitchat": 0.02},
+			"medium": {"book": 0.90, "film": 0.03},
+		})
+		if err != nil {
+			t.Fatalf("marshal odds: %v", err)
+		}
+		if err := db.RecordDecisionCall(ctx, domain.DecisionCall{
+			SessionID: sess.ID, Odds: odds, Fired: []string{"intent", "medium"},
+		}); err != nil {
+			t.Fatalf("RecordDecisionCall: %v", err)
+		}
+	}
+	record(0.94)
+	record(0.99)
+
+	card, err := e.Card(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Card: %v", err)
+	}
+	seen := map[string]int{}
+	for _, check := range card.Checks {
+		seen[check.Name]++
+	}
+	if seen["intent"] != 1 || seen["medium"] != 1 {
+		t.Fatalf("checks = %+v, want one row per name, got %v", card.Checks, seen)
+	}
+	// The newer pre-read wins: the sheet is "why this card says that", and an earlier read is stale, not a second
+	// opinion.
+	if card.Checks[0].Name != "intent" || card.Checks[0].Probability != 0.99 {
+		t.Errorf("checks = %+v, want the newest intent first", card.Checks)
+	}
+	// The order is stable between reads. The odds are a JSON object, and Go's map iteration is random, so without
+	// sorted names the sheet reshuffled itself on every render.
+	again, err := e.Card(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Card: %v", err)
+	}
+	for i := range again.Checks {
+		if again.Checks[i] != card.Checks[i] {
+			t.Fatalf("the sheet reordered between reads:\n%+v\n%+v", card.Checks, again.Checks)
+		}
 	}
 }
