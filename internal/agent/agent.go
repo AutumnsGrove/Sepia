@@ -251,6 +251,11 @@ func (a *Agent) HandleMessage(ctx context.Context, in TurnInput) (Outcome, error
 		return Outcome{}, err
 	}
 
+	// Her earlier answers are read after the card, because they are mapped through the same bank the live path uses
+	// and that needs the medium: the pre-read's, or the card's work when the pre-read did not name one. A label she
+	// tapped has to become the option's stable value, not stay a label.
+	state.rememberAnswers(ctx)
+
 	if a.provider == nil {
 		if err := a.notice(ctx, in.SessionID, "warn", "model_off",
 			"The model is not set up. Your words are kept, and you can fill in the card by hand."); err != nil {

@@ -583,7 +583,33 @@ func (s *Store) EntryTags(ctx context.Context, entryID string) ([]domain.Tag, er
 func (s *Store) AddAnswers(ctx context.Context, entryID string, answers []domain.Answer) error {
 	now := s.Now().UTC().Format(timeLayout)
 	return s.InTx(ctx, func(q *db.Queries) error {
+		// An answer is never deleted (invariant 4), so the first one she gave for a question is the one that stands.
+		// A retried turn remembers the answers it already has and offers them again; a second row would put the same
+		// question on the card twice.
+		existing, err := q.ListAnswers(ctx, entryID)
+		if err != nil {
+			return fmt.Errorf("store: list answers: %w", err)
+		}
+		// A real answer stands first, between two of those. A skipped marker is not an answer: she can still answer
+		// that question on a later turn, and the read prefers the answer she gave over the skip.
+		answered := make(map[string]bool, len(existing))
+		skipped := make(map[string]bool, len(existing))
+		for _, row := range existing {
+			if row.Skipped == 1 {
+				skipped[row.QuestionID] = true
+			} else {
+				answered[row.QuestionID] = true
+			}
+		}
 		for _, a := range answers {
+			if answered[a.QuestionID] || (a.Skipped && skipped[a.QuestionID]) {
+				continue
+			}
+			if a.Skipped {
+				skipped[a.QuestionID] = true
+			} else {
+				answered[a.QuestionID] = true
+			}
 			values, err := json.Marshal(a.Values)
 			if err != nil {
 				return fmt.Errorf("store: encode answer: %w", err)
@@ -609,6 +635,9 @@ func (s *Store) Answers(ctx context.Context, entryID string) ([]domain.Answer, e
 	if err != nil {
 		return nil, fmt.Errorf("store: list answers: %w", err)
 	}
+	// One row per question, in the order the questions first appear, and her answer wins over a skipped marker for
+	// the same question: a skip is where the card was, not what she said.
+	at := make(map[string]int, len(rows))
 	out := make([]domain.Answer, 0, len(rows))
 	for _, row := range rows {
 		var values []string
@@ -616,11 +645,19 @@ func (s *Store) Answers(ctx context.Context, entryID string) ([]domain.Answer, e
 			return nil, fmt.Errorf("store: decode answer: %w", err)
 		}
 		created, _ := time.Parse(timeLayout, row.CreatedAt)
-		out = append(out, domain.Answer{
+		answer := domain.Answer{
 			ID: row.ID, EntryID: row.EntryID, QuestionID: row.QuestionID, Category: row.Category,
 			Prompt: row.Prompt, Type: domain.AnswerType(row.AnswerType), Values: values,
 			Skipped: row.Skipped == 1, CreatedAt: created,
-		})
+		}
+		if i, seen := at[answer.QuestionID]; seen {
+			if out[i].Skipped && !answer.Skipped {
+				out[i] = answer
+			}
+			continue
+		}
+		at[answer.QuestionID] = len(out)
+		out = append(out, answer)
 	}
 	return out, nil
 }

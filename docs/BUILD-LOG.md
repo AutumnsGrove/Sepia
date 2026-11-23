@@ -1563,3 +1563,33 @@ with 409 before the change; the case without a waiter still is.
 A parked turn with a message queued behind it is still busy. That message lives only in memory and was already
 acknowledged, so the client has dropped it from its outbox and a restart would lose it; the review caught that and
 `TestUpdateRefusedWhileAParkedTurnHasAQueuedMessage` covers it.
+## 2026-11-22, fix, an answer outlives the turn that asked for it
+
+**The bug she hit.** On 2026-11-15 the agent opened a Describe card and the turn ended while it waited. Eight days
+later she tapped the chips and submitted: the server wrote `interaction_resolved by user` and acknowledged it, and then
+nothing happened. `Engine.Answer` resolves the interaction row and `hub.responder.deliver` hands the value to the turn
+waiting on it, and by then there was no turn. The retry that followed asked the same question again under a new id, the
+card's `answers` block was still empty, and her taps looked like they had been thrown away. They had been: the answers
+only ever lived in the turn's memory.
+
+**Fixed.** A turn now starts by reading the answers the session already has (`Engine.Answered`, then
+`RunState.rememberAnswers`), and `ask_reviewer` offers only what she has not answered: a Describe she has answered is
+not offered again, and a question already in the card is left out of the form. `AddAnswers` also refuses a second row
+for the same question, because an answer is never deleted and a retried turn says the same answers again; a duplicate
+would put one question on the card twice.
+
+**Two gaps the review found, both real.** A skipped marker is not an answer: `AddAnswers` treated it as one, so a
+question she skipped and then answered for real kept saying skipped. A skip and a real answer are now distinguished,
+the skipped row stays (nothing is deleted) and the read prefers the answer she gave. The other: hydration copied the
+resolution through, so a choice answer kept the button's label ("It landed") where the live path stores the stable
+value ("landed"). Hydration runs after the medium is resolved and maps through the same bank, so both paths store the
+same thing; a question the bank no longer offers keeps what it was given rather than being dropped.
+
+**What this does not do.** It does not resume the turn that died, and it does not re-run the model on its own: the next
+turn (her next message, or Try again) is what reads the answers. The alternative — starting a turn when an answer
+arrives with no waiter — was rejected because it cannot survive a restart, which is half of what leaves a card waiting.
+
+**Tests, each seen failing first.** `TestPipelineHerAnswerOutlivesTheTurnThatAsked` runs a turn that ends with the
+Describe card open, answers it, then retries: the card must carry her pick. `TestReviewerAsksNothingSheHasAlreadyAnswered`
+proves the form is not offered again. `TestAddAnswersDoesNotAddASecondAnswerForAQuestion` failed with two rows before
+the store change.

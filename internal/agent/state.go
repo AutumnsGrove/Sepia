@@ -14,6 +14,7 @@ import (
 	"github.com/AutumnsGrove/nova/message"
 	"github.com/AutumnsGrove/nova/provider"
 
+	"github.com/AutumnsGrove/sepia/internal/banks"
 	"github.com/AutumnsGrove/sepia/internal/decisions"
 	"github.com/AutumnsGrove/sepia/internal/domain"
 	"github.com/AutumnsGrove/sepia/internal/providers"
@@ -178,6 +179,163 @@ func (s *RunState) ask(ctx context.Context, kind string, payload any) (json.RawM
 		return nil, err
 	}
 	return s.waitForHer(ctx, question.ID)
+}
+
+// rememberAnswers seeds the turn with the answers she has already given in this session. A turn can end with a card
+// still waiting: a timeout, a restart, a retry. The answer is stored either way, but the turn that asked is gone, so
+// the next turn reads it from the log instead of asking again and dropping what she already tapped (issue #39).
+//
+// The answers go through the same bank the live path uses. A choice option's label is what the client sends and what
+// she reads on the button; the stable value is what the card stores, so a hydrated answer is mapped exactly as
+// askQuestions maps one. A question the bank no longer offers keeps what it was given rather than being dropped.
+//
+// The categories and questions are walked in the payload's order, not the answer map's, so the card's answers come out
+// in the order they were offered. A question answered twice keeps the newer answer: the older one is what she
+// corrected.
+func (s *RunState) rememberAnswers(ctx context.Context) {
+	answered, err := s.Agent.session.Answered(ctx, s.SessionID)
+	if err != nil {
+		s.Agent.log.Warn("answered questions could not be read", "session", s.SessionID, "err", err.Error())
+		return
+	}
+	chips, offeredQuestions := s.offeredVocabulary(ctx)
+	at := make(map[string]int, len(s.Answers))
+	for i, answer := range s.Answers {
+		at[answer.QuestionID] = i
+	}
+	put := func(answer domain.Answer) {
+		if i, seen := at[answer.QuestionID]; seen {
+			s.Answers[i] = answer
+			return
+		}
+		at[answer.QuestionID] = len(s.Answers)
+		s.Answers = append(s.Answers, answer)
+	}
+	for _, question := range answered {
+		switch question.Kind {
+		case "describe":
+			var payload describePayload
+			var answer describeAnswer
+			if json.Unmarshal(question.Payload, &payload) != nil || json.Unmarshal(question.Resolution, &answer) != nil {
+				continue
+			}
+			s.AskedDescribe = true
+			if answer.SkipAll {
+				s.skipAll = true
+			}
+			for _, category := range payload.Categories {
+				values := answer.Selected[category.ID]
+				if len(values) == 0 {
+					continue
+				}
+				if offered := chips[category.ID]; offered != nil {
+					values = mapThrough(values, offered)
+				}
+				if len(values) == 0 {
+					continue
+				}
+				put(domain.Answer{
+					QuestionID: category.ID, Category: category.ID, Type: domain.AnswerTags, Values: values,
+				})
+			}
+		case "question_form":
+			var payload questionPayload
+			var answer questionAnswer
+			if json.Unmarshal(question.Payload, &payload) != nil || json.Unmarshal(question.Resolution, &answer) != nil {
+				continue
+			}
+			given := make(map[string]questionAnswerItem, len(answer.Answers))
+			for _, item := range answer.Answers {
+				given[item.ID] = item
+			}
+			for _, item := range payload.Questions {
+				got, ok := given[item.ID]
+				if !ok {
+					continue
+				}
+				values := got.Values
+				if len(values) == 0 && got.Value != "" {
+					values = []string{got.Value}
+				}
+				if question, known := offeredQuestions[item.ID]; known {
+					values = matchOptions(question, values)
+				}
+				put(domain.Answer{
+					QuestionID: item.ID, Prompt: item.Prompt, Type: domain.AnswerType(item.Type),
+					Values: values, Skipped: got.Skipped || len(values) == 0,
+				})
+			}
+		}
+	}
+}
+
+// offeredVocabulary is the bank's chips and questions for this turn's medium, keyed the way askDescribe and
+// askQuestions key them: a category's chip label or value onto its value, and a question by its id.
+func (s *RunState) offeredVocabulary(ctx context.Context) (map[string]map[string]string, map[string]banks.Question) {
+	medium := s.reviewMedium(ctx)
+	if medium == "" || s.Agent.banks == nil {
+		return nil, nil
+	}
+	// The same request askReviewer makes, covered topics included: a covered topic changes which questions are
+	// offered, and a question missing here would keep the label she tapped instead of its value.
+	selection, err := banks.Select(s.Agent.banks, banks.Request{
+		Medium: medium, Format: s.MediumFormat(), CoveredTopics: s.PreRead.Topics,
+	})
+	if err != nil {
+		s.Agent.log.Warn("the question bank could not be read for her earlier answers", "err", err.Error())
+		return nil, nil
+	}
+	chips := make(map[string]map[string]string, len(selection.Categories))
+	for _, category := range selection.Categories {
+		values := make(map[string]string, len(category.Chips))
+		for _, chip := range category.Chips {
+			values[chip.Value] = chip.Value
+			values[chip.Label] = chip.Value
+		}
+		chips[category.Name] = values
+	}
+	questions := make(map[string]banks.Question, len(selection.Questions))
+	for _, question := range selection.Questions {
+		questions[question.ID] = question
+	}
+	return chips, questions
+}
+
+// mapThrough keeps the values the offered set knows, in the order they were given. Anything else is not a chip she
+// could have tapped.
+func mapThrough(values []string, offered map[string]string) []string {
+	kept := make([]string, 0, len(values))
+	for _, value := range values {
+		if mapped, ok := offered[value]; ok {
+			kept = append(kept, mapped)
+		}
+	}
+	return kept
+}
+
+// reviewMedium is the medium the questions are chosen for: this turn's, or the card's work when the pre-read did not
+// name one (it is off, or decisions is not configured). askReviewer and rememberAnswers both read it here, so the two
+// cannot disagree about which questions, and which options, exist.
+func (s *RunState) reviewMedium(ctx context.Context) string {
+	if s.Medium != "" {
+		return s.Medium
+	}
+	if s.Draft != nil {
+		if work, err := s.Agent.store.Work(ctx, s.Draft.Entry.WorkID); err == nil {
+			return work.Medium
+		}
+	}
+	return ""
+}
+
+// answered reports whether this turn already holds an answer for a question, so it is not offered again.
+func (s *RunState) answered(questionID string) bool {
+	for _, answer := range s.Answers {
+		if answer.QuestionID == questionID {
+			return true
+		}
+	}
+	return false
 }
 
 // waitForHer blocks on her answer with the turn's deadline stopped. Only an explicit stop, which cancels the
