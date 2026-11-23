@@ -9,7 +9,7 @@
     {
       "code": "answer_pending",
       "status": 409,
-      "copy": "Answer or skip the question first."
+      "copy": "Your answer is still on its way to the card."
     },
     {
       "code": "backup_in_progress",

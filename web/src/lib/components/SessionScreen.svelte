@@ -77,7 +77,13 @@
   const rows = $derived(timeline(session));
   // A card can be ready while a question that carries her answer is still open; saving then would drop the answer
   // (issue #46), so the bar says so and Save waits for her answer or her skip.
-  const answerPending = $derived(waitingOnAnswer(session.interactions.map((row) => row.kind)));
+  const answerPending = $derived(
+    session.answersPending
+      ? 'Saving waits until your answer is on the card'
+      : waitingOnAnswer(session.interactions.map((row) => row.kind))
+        ? 'Answer or skip the question first'
+        : '',
+  );
   const save = $derived(saveState(session.draft, answerPending));
   const unverifiedCount = $derived(
     (session.draft?.unverified ?? []).filter((field) => field.from_image !== true).length,

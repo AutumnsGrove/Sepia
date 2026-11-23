@@ -640,6 +640,17 @@ func (e *Engine) Confirm(ctx context.Context, sessionID string, in ConfirmReques
 			}
 		}
 	}
+	// Answering is not the same as the answer being on the card: the agent applies her answers when it writes the card,
+	// and a confirm in that gap would save the card built before she tapped.
+	pending, err := e.answersPending(ctx, sessionID, draft.Entry.ID)
+	if err != nil {
+		return domain.Entry{}, 0, nil, err
+	}
+	if pending {
+		return domain.Entry{}, 0, nil, &Refusal{
+			Code: CodeAnswerPending, Message: "Her answer is still on its way to the card.",
+		}
+	}
 	// The hub remembers the target while the process is up. After a restart it is the session's own record that
 	// says what this card revises, so a revision cannot quietly become a second entry.
 	revises := in.Revises
@@ -1255,4 +1266,67 @@ func (q *Queue) Queued(sessionID string) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	return q.pending[sessionID]
+}
+
+// answersPending reports whether she has answered a question whose answer is not on the card yet. The agent applies
+// answers when it writes the card (AddAnswers), so a resolved interaction with no matching row is exactly the gap
+// between her tap and the card that carries it.
+func (e *Engine) answersPending(ctx context.Context, sessionID, entryID string) (bool, error) {
+	interactions, err := e.store.Interactions(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+	var held map[string]bool
+	for _, interaction := range interactions {
+		if interaction.ResolvedBy != domain.ResolvedByUser {
+			continue
+		}
+		ids, ok := answeredIDs(interaction)
+		if !ok || len(ids) == 0 {
+			continue
+		}
+		if held == nil {
+			answers, readErr := e.store.Answers(ctx, entryID)
+			if readErr != nil {
+				return false, readErr
+			}
+			held = make(map[string]bool, len(answers))
+			for _, answer := range answers {
+				held[answer.QuestionID] = true
+			}
+		}
+		for _, id := range ids {
+			if !held[id] {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// answeredIDs reads the question ids out of an answered interaction's resolution. It does not map labels onto values:
+// it only needs to know which questions she answered, so it can tell whether the card has them.
+func answeredIDs(interaction domain.Interaction) ([]string, bool) {
+	var resolution struct {
+		Selected map[string][]string `json:"selected"`
+		Answers  []struct {
+			ID     string   `json:"id"`
+			Value  string   `json:"value"`
+			Values []string `json:"values"`
+		} `json:"answers"`
+	}
+	if json.Unmarshal(interaction.Resolution, &resolution) != nil {
+		return nil, false
+	}
+	var ids []string
+	for category := range resolution.Selected {
+		ids = append(ids, category)
+	}
+	for _, answer := range resolution.Answers {
+		if answer.Value == "" && len(answer.Values) == 0 {
+			continue
+		}
+		ids = append(ids, answer.ID)
+	}
+	return ids, true
 }

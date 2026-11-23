@@ -20,11 +20,10 @@ export function waitingOnAnswer(kinds: readonly string[]): boolean {
   return kinds.some((kind) => (ANSWER_KINDS as readonly string[]).includes(kind));
 }
 
-export function saveState(draft: Draft | null, answerPending = false): SaveState {
+export function saveState(draft: Draft | null, answerPending = ''): SaveState {
   if (draft === null) return { allowed: false, reason: '', missing: [] };
   const missing = draft.missing ?? [];
-  if (answerPending)
-    return { allowed: false, reason: 'Answer or skip the question first', missing };
+  if (answerPending !== '') return { allowed: false, reason: answerPending, missing };
   if (draft.can_confirm === true) return { allowed: true, reason: '', missing };
   return { allowed: false, reason: saveReason(missing), missing };
 }
