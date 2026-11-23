@@ -96,27 +96,74 @@ func (q *Queries) BumpDraftVersion(ctx context.Context, arg BumpDraftVersionPara
 	return q.db.ExecContext(ctx, bumpDraftVersion, arg.UpdatedAt, arg.ID, arg.DraftVersion)
 }
 
+const countDeleted = `-- name: CountDeleted :one
+SELECT count(*) FROM entries JOIN works ON works.id = entries.work_id
+WHERE entries.status = 'saved' AND entries.deleted_at IS NOT NULL
+  AND (?1 IS NULL OR works.medium = ?1)
+  AND (?2 IS NULL OR entries.favourite = ?2)
+  AND (?3 IS NULL OR entries.work_id = ?3)
+  AND (?4 IS NULL
+       OR CASE ?4
+            WHEN 'want_to' THEN entries.completion = 'want_to'
+            WHEN 'finished' THEN entries.completion = 'finished'
+            WHEN 'abandoned' THEN entries.completion = 'abandoned'
+            ELSE entries.completion <> 'want_to'
+          END)
+  AND (?5 IS NULL OR entries.rating_q >= ?5)
+  AND (?6 IS NULL OR entries.rating_q <= ?6)
+  AND (?7 IS NULL OR entries.finished_on >= ?7)
+  AND (?8 IS NULL OR entries.finished_on <= ?8)
+`
+
+type CountDeletedParams struct {
+	Medium       interface{} `json:"medium"`
+	Favourite    interface{} `json:"favourite"`
+	WorkID       interface{} `json:"work_id"`
+	Shelf        interface{} `json:"shelf"`
+	RatingMin    interface{} `json:"rating_min"`
+	RatingMax    interface{} `json:"rating_max"`
+	FinishedFrom interface{} `json:"finished_from"`
+	FinishedTo   interface{} `json:"finished_to"`
+}
+
+// How many entries the Deleted list holds under the same filters, so the line above the list is the list's own count.
+// Its shelf rule is ListDeletedPage's: an unnamed shelf is every deleted entry, because a wish she deleted is still
+// something restore should find, and the library's "not a wish" rule is about what she scans, not about what is gone.
+func (q *Queries) CountDeleted(ctx context.Context, arg CountDeletedParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDeleted,
+		arg.Medium,
+		arg.Favourite,
+		arg.WorkID,
+		arg.Shelf,
+		arg.RatingMin,
+		arg.RatingMax,
+		arg.FinishedFrom,
+		arg.FinishedTo,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countLibrary = `-- name: CountLibrary :one
 SELECT count(*) FROM entries JOIN works ON works.id = entries.work_id
-WHERE ((?1 = 1 AND entries.status = 'saved' AND entries.deleted_at IS NOT NULL)
-       OR (?1 = 0 AND entries.status = 'saved' AND entries.deleted_at IS NULL))
-  AND (?2 IS NULL OR works.medium = ?2)
-  AND (?3 IS NULL OR entries.favourite = ?3)
-  AND (?4 IS NULL OR entries.work_id = ?4)
-  AND CASE ?5
+WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
+  AND (?1 IS NULL OR works.medium = ?1)
+  AND (?2 IS NULL OR entries.favourite = ?2)
+  AND (?3 IS NULL OR entries.work_id = ?3)
+  AND CASE ?4
         WHEN 'want_to' THEN entries.completion = 'want_to'
         WHEN 'finished' THEN entries.completion = 'finished'
         WHEN 'abandoned' THEN entries.completion = 'abandoned'
         ELSE entries.completion <> 'want_to'
       END
-  AND (?6 IS NULL OR entries.rating_q >= ?6)
-  AND (?7 IS NULL OR entries.rating_q <= ?7)
-  AND (?8 IS NULL OR entries.finished_on >= ?8)
-  AND (?9 IS NULL OR entries.finished_on <= ?9)
+  AND (?5 IS NULL OR entries.rating_q >= ?5)
+  AND (?6 IS NULL OR entries.rating_q <= ?6)
+  AND (?7 IS NULL OR entries.finished_on >= ?7)
+  AND (?8 IS NULL OR entries.finished_on <= ?8)
 `
 
 type CountLibraryParams struct {
-	Deleted      interface{} `json:"deleted"`
 	Medium       interface{} `json:"medium"`
 	Favourite    interface{} `json:"favourite"`
 	WorkID       interface{} `json:"work_id"`
@@ -130,9 +177,11 @@ type CountLibraryParams struct {
 // How many entries the same filters would list, which is what the tool row says ("42 entries") and what tells her that
 // a filtered list has more beyond the page she is reading. It is deliberately independent of the sort and the cursor:
 // a total that changed with the page would not be a total. The shelf CASE is ListLibraryPage's, for the same reason.
+//
+// It is the library proper and not the Deleted list, which has its own count: the two lists apply different shelf
+// rules, and one count cannot describe both.
 func (q *Queries) CountLibrary(ctx context.Context, arg CountLibraryParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countLibrary,
-		arg.Deleted,
 		arg.Medium,
 		arg.Favourite,
 		arg.WorkID,
@@ -949,27 +998,52 @@ const listDeletedPage = `-- name: ListDeletedPage :many
 SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at, entries.completion, entries.progress FROM entries JOIN works ON works.id = entries.work_id
 WHERE entries.status = 'saved' AND entries.deleted_at IS NOT NULL
   AND (?1 IS NULL OR works.medium = ?1)
-  AND (?2 IS NULL OR entries.work_id = ?2)
-  AND (?3 IS NULL
-       OR (entries.deleted_at, entries.id) < (?4, ?3))
+  AND (?2 IS NULL OR entries.favourite = ?2)
+  AND (?3 IS NULL OR entries.work_id = ?3)
+  AND (?4 IS NULL
+       OR CASE ?4
+            WHEN 'want_to' THEN entries.completion = 'want_to'
+            WHEN 'finished' THEN entries.completion = 'finished'
+            WHEN 'abandoned' THEN entries.completion = 'abandoned'
+            ELSE entries.completion <> 'want_to'
+          END)
+  AND (?5 IS NULL OR entries.rating_q >= ?5)
+  AND (?6 IS NULL OR entries.rating_q <= ?6)
+  AND (?7 IS NULL OR entries.finished_on >= ?7)
+  AND (?8 IS NULL OR entries.finished_on <= ?8)
+  AND (?9 IS NULL
+       OR (entries.deleted_at, entries.id) < (?10, ?9))
 ORDER BY entries.deleted_at DESC, entries.id DESC
-LIMIT ?5
+LIMIT ?11
 `
 
 type ListDeletedPageParams struct {
 	Medium          interface{} `json:"medium"`
+	Favourite       interface{} `json:"favourite"`
 	WorkID          interface{} `json:"work_id"`
+	Shelf           interface{} `json:"shelf"`
+	RatingMin       interface{} `json:"rating_min"`
+	RatingMax       interface{} `json:"rating_max"`
+	FinishedFrom    interface{} `json:"finished_from"`
+	FinishedTo      interface{} `json:"finished_to"`
 	BeforeID        interface{} `json:"before_id"`
 	BeforeDeletedAt *string     `json:"before_deleted_at"`
 	RowLimit        int64       `json:"row_limit"`
 }
 
 // The Deleted list: soft-deleted saved entries, the most recently deleted first. It is the only list that shows
-// them, and restore is the only way out of it.
+// them, and restore is the only way out of it. Its filters are CountDeleted's, so the count and the rows agree: an
+// unnamed shelf is every deleted entry, and a named one narrows it.
 func (q *Queries) ListDeletedPage(ctx context.Context, arg ListDeletedPageParams) ([]Entry, error) {
 	rows, err := q.db.QueryContext(ctx, listDeletedPage,
 		arg.Medium,
+		arg.Favourite,
 		arg.WorkID,
+		arg.Shelf,
+		arg.RatingMin,
+		arg.RatingMax,
+		arg.FinishedFrom,
+		arg.FinishedTo,
 		arg.BeforeID,
 		arg.BeforeDeletedAt,
 		arg.RowLimit,

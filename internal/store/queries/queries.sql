@@ -326,9 +326,11 @@ LIMIT sqlc.arg(row_limit);
 -- How many entries the same filters would list, which is what the tool row says ("42 entries") and what tells her that
 -- a filtered list has more beyond the page she is reading. It is deliberately independent of the sort and the cursor:
 -- a total that changed with the page would not be a total. The shelf CASE is ListLibraryPage's, for the same reason.
+--
+-- It is the library proper and not the Deleted list, which has its own count: the two lists apply different shelf
+-- rules, and one count cannot describe both.
 SELECT count(*) FROM entries JOIN works ON works.id = entries.work_id
-WHERE ((sqlc.arg(deleted) = 1 AND entries.status = 'saved' AND entries.deleted_at IS NOT NULL)
-       OR (sqlc.arg(deleted) = 0 AND entries.status = 'saved' AND entries.deleted_at IS NULL))
+WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
   AND (sqlc.narg(medium) IS NULL OR works.medium = sqlc.narg(medium))
   AND (sqlc.narg(favourite) IS NULL OR entries.favourite = sqlc.narg(favourite))
   AND (sqlc.narg(work_id) IS NULL OR entries.work_id = sqlc.narg(work_id))
@@ -343,13 +345,47 @@ WHERE ((sqlc.arg(deleted) = 1 AND entries.status = 'saved' AND entries.deleted_a
   AND (sqlc.narg(finished_from) IS NULL OR entries.finished_on >= sqlc.narg(finished_from))
   AND (sqlc.narg(finished_to) IS NULL OR entries.finished_on <= sqlc.narg(finished_to));
 
+-- name: CountDeleted :one
+-- How many entries the Deleted list holds under the same filters, so the line above the list is the list's own count.
+-- Its shelf rule is ListDeletedPage's: an unnamed shelf is every deleted entry, because a wish she deleted is still
+-- something restore should find, and the library's "not a wish" rule is about what she scans, not about what is gone.
+SELECT count(*) FROM entries JOIN works ON works.id = entries.work_id
+WHERE entries.status = 'saved' AND entries.deleted_at IS NOT NULL
+  AND (sqlc.narg(medium) IS NULL OR works.medium = sqlc.narg(medium))
+  AND (sqlc.narg(favourite) IS NULL OR entries.favourite = sqlc.narg(favourite))
+  AND (sqlc.narg(work_id) IS NULL OR entries.work_id = sqlc.narg(work_id))
+  AND (sqlc.narg(shelf) IS NULL
+       OR CASE sqlc.narg(shelf)
+            WHEN 'want_to' THEN entries.completion = 'want_to'
+            WHEN 'finished' THEN entries.completion = 'finished'
+            WHEN 'abandoned' THEN entries.completion = 'abandoned'
+            ELSE entries.completion <> 'want_to'
+          END)
+  AND (sqlc.narg(rating_min) IS NULL OR entries.rating_q >= sqlc.narg(rating_min))
+  AND (sqlc.narg(rating_max) IS NULL OR entries.rating_q <= sqlc.narg(rating_max))
+  AND (sqlc.narg(finished_from) IS NULL OR entries.finished_on >= sqlc.narg(finished_from))
+  AND (sqlc.narg(finished_to) IS NULL OR entries.finished_on <= sqlc.narg(finished_to));
+
 -- name: ListDeletedPage :many
 -- The Deleted list: soft-deleted saved entries, the most recently deleted first. It is the only list that shows
--- them, and restore is the only way out of it.
+-- them, and restore is the only way out of it. Its filters are CountDeleted's, so the count and the rows agree: an
+-- unnamed shelf is every deleted entry, and a named one narrows it.
 SELECT entries.* FROM entries JOIN works ON works.id = entries.work_id
 WHERE entries.status = 'saved' AND entries.deleted_at IS NOT NULL
   AND (sqlc.narg(medium) IS NULL OR works.medium = sqlc.narg(medium))
+  AND (sqlc.narg(favourite) IS NULL OR entries.favourite = sqlc.narg(favourite))
   AND (sqlc.narg(work_id) IS NULL OR entries.work_id = sqlc.narg(work_id))
+  AND (sqlc.narg(shelf) IS NULL
+       OR CASE sqlc.narg(shelf)
+            WHEN 'want_to' THEN entries.completion = 'want_to'
+            WHEN 'finished' THEN entries.completion = 'finished'
+            WHEN 'abandoned' THEN entries.completion = 'abandoned'
+            ELSE entries.completion <> 'want_to'
+          END)
+  AND (sqlc.narg(rating_min) IS NULL OR entries.rating_q >= sqlc.narg(rating_min))
+  AND (sqlc.narg(rating_max) IS NULL OR entries.rating_q <= sqlc.narg(rating_max))
+  AND (sqlc.narg(finished_from) IS NULL OR entries.finished_on >= sqlc.narg(finished_from))
+  AND (sqlc.narg(finished_to) IS NULL OR entries.finished_on <= sqlc.narg(finished_to))
   AND (sqlc.narg(before_id) IS NULL
        OR (entries.deleted_at, entries.id) < (sqlc.narg(before_deleted_at), sqlc.narg(before_id)))
 ORDER BY entries.deleted_at DESC, entries.id DESC

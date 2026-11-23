@@ -43,18 +43,42 @@ LIMIT ?`, args...)
 	}
 	defer func() { _ = rows.Close() }()
 
-	hits := make([]domain.SearchHit, 0, limit)
+	// The index rows are read into memory first and the cursor is closed before anything else asks the reader pool
+	// for a connection. The pool is four connections; loading an entry per hit while holding this one leaked the
+	// connection until the whole search returned, so four concurrent searches deadlocked. The page is bounded
+	// (at most a hundred hits), so holding it is cheap.
+	type indexedRow struct {
+		entryID string
+		body    string
+		answers string
+		rank    float64
+	}
+	indexed := make([]indexedRow, 0, limit)
 	for rows.Next() {
-		var (
-			entryID string
-			body    string
-			answers string
-			rank    float64
-		)
-		if scanErr := rows.Scan(&entryID, &body, &answers, &rank); scanErr != nil {
+		var row indexedRow
+		if scanErr := rows.Scan(&row.entryID, &row.body, &row.answers, &row.rank); scanErr != nil {
 			return nil, 0, fmt.Errorf("store: scan search hit: %w", scanErr)
 		}
-		hit, hitErr := s.searchHit(ctx, entryID, body, answers, rank)
+		indexed = append(indexed, row)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, 0, fmt.Errorf("store: search rows: %w", rowsErr)
+	}
+	if closeErr := rows.Close(); closeErr != nil {
+		return nil, 0, fmt.Errorf("store: close search rows: %w", closeErr)
+	}
+
+	var total int
+	countSQL := `SELECT count(*) FROM entries_fts CROSS JOIN entries e ON e.id = entries_fts.entry_id
+JOIN works w ON w.id = e.work_id
+WHERE ` + strings.Join(where, " AND ")
+	if err := s.readers.QueryRowContext(ctx, countSQL, whereArgs(terms.Match, query)...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("store: count search: %w", err)
+	}
+
+	hits := make([]domain.SearchHit, 0, len(indexed))
+	for _, row := range indexed {
+		hit, hitErr := s.searchHit(ctx, row.entryID, row.body, row.answers, row.rank)
 		if errors.Is(hitErr, sql.ErrNoRows) {
 			// The index named an entry the table does not have. The next search will notice the counts disagree
 			// and rebuild; skipping the row is what keeps this one honest rather than papering over it.
@@ -64,17 +88,6 @@ LIMIT ?`, args...)
 			return nil, 0, hitErr
 		}
 		hits = append(hits, hit)
-	}
-	if rowsErr := rows.Err(); rowsErr != nil {
-		return nil, 0, fmt.Errorf("store: search rows: %w", rowsErr)
-	}
-
-	var total int
-	countSQL := `SELECT count(*) FROM entries_fts CROSS JOIN entries e ON e.id = entries_fts.entry_id
-JOIN works w ON w.id = e.work_id
-WHERE ` + strings.Join(where, " AND ")
-	if err := s.readers.QueryRowContext(ctx, countSQL, whereArgs(terms.Match, query)...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("store: count search: %w", err)
 	}
 	return hits, total, nil
 }

@@ -1197,3 +1197,49 @@ func TestLibraryTotalAndFilters(t *testing.T) {
 		}
 	}
 }
+
+// Bad: the Deleted list's total is its own. Its shelf rule is not the library's ("everything but a wish"), because a
+// deleted wish is still something Restore should find, so the count has to come from the same query the rows do.
+func TestDeletedListTotalMatchesItsRows(t *testing.T) {
+	h, engine, db := newREST(t)
+	ctx := context.Background()
+	review := aReviewedEntry(t, engine, db, "Piranesi", "book", "started slow", 17, "2026-09-28")
+	if err := db.SaveWork(ctx, domain.Work{ID: "w-wish", Medium: "book", Title: "House of Leaves"}); err != nil {
+		t.Fatalf("wish work: %v", err)
+	}
+	if err := db.CreateDraft(ctx, domain.Entry{
+		ID: "e-wish", WorkID: "w-wish", RatingScale: domain.RatingScale, Body: "meant to read it",
+		BodyOrigin: domain.BodyTyped, Status: domain.StatusSaved, Completion: domain.CompletionWantTo,
+	}); err != nil {
+		t.Fatalf("wish: %v", err)
+	}
+	for _, id := range []string{review.ID, "e-wish"} {
+		if rec := doJSON(t, h, http.MethodPost, "/api/entries/"+id+"/delete", nil); rec.Code != http.StatusNoContent {
+			t.Fatalf("delete %s = %d: %s", id, rec.Code, rec.Body)
+		}
+	}
+
+	type page struct {
+		Items []wireEntry `json:"items"`
+		Total int         `json:"total"`
+	}
+	read := func(target string) page {
+		t.Helper()
+		rec := doJSON(t, h, http.MethodGet, target, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d: %s", target, rec.Code, rec.Body)
+		}
+		var got page
+		decode(t, rec, &got)
+		return got
+	}
+
+	all := read("/api/entries?deleted=true")
+	if len(all.Items) != 2 || all.Total != 2 {
+		t.Fatalf("deleted = %d rows, total %d, want 2 and 2", len(all.Items), all.Total)
+	}
+	finished := read("/api/entries?deleted=true&completion=finished")
+	if len(finished.Items) != 1 || finished.Total != 1 {
+		t.Fatalf("deleted finished = %d rows, total %d, want 1 and 1", len(finished.Items), finished.Total)
+	}
+}

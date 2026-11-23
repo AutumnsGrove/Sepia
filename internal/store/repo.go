@@ -328,8 +328,11 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 	var rows []db.Entry
 	if query.Deleted {
 		page, err := s.ReadQueries().ListDeletedPage(ctx, db.ListDeletedPageParams{
-			Medium: mediumArg, WorkID: workArg, BeforeDeletedAt: nullableString(cursor.DeletedAt),
-			BeforeID: beforeID, RowLimit: int64(limit + 1),
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
+			RatingMin: ratingMinArg, RatingMax: ratingMaxArg,
+			FinishedFrom: fromArg, FinishedTo: toArg,
+			BeforeDeletedAt: nullableString(cursor.DeletedAt),
+			BeforeID:        beforeID, RowLimit: int64(limit + 1),
 		})
 		if err != nil {
 			return nil, domain.Cursor{}, fmt.Errorf("store: list deleted: %w", err)
@@ -415,11 +418,23 @@ func (s *Store) LibraryCount(ctx context.Context, query domain.LibraryQuery) (in
 	if query.To != "" {
 		toArg = query.To
 	}
-	total, err := s.ReadQueries().CountLibrary(ctx, db.CountLibraryParams{
-		Deleted: boolToInt(query.Deleted), Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg,
-		Shelf:     stringNull(string(query.Shelf)),
-		RatingMin: ratingMinArg, RatingMax: ratingMaxArg, FinishedFrom: fromArg, FinishedTo: toArg,
-	})
+	// The two lists have different shelf rules (the Deleted list has no "not a wish" default), so each has its own
+	// count rather than one number that would disagree with one of them.
+	var (
+		total int64
+		err   error
+	)
+	if query.Deleted {
+		total, err = s.ReadQueries().CountDeleted(ctx, db.CountDeletedParams{
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
+			RatingMin: ratingMinArg, RatingMax: ratingMaxArg, FinishedFrom: fromArg, FinishedTo: toArg,
+		})
+	} else {
+		total, err = s.ReadQueries().CountLibrary(ctx, db.CountLibraryParams{
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
+			RatingMin: ratingMinArg, RatingMax: ratingMaxArg, FinishedFrom: fromArg, FinishedTo: toArg,
+		})
+	}
 	if err != nil {
 		return 0, fmt.Errorf("store: count library: %w", err)
 	}

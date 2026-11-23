@@ -422,17 +422,29 @@ func mergeCandidates(ctx context.Context, raw json.RawMessage, tctx *tool.Contex
 	// A cover that cannot be fetched is not a failed fetch: the card is built and draws its stand-in.
 	result, _ = state.Agent.attachCover(ctx, result)
 
-	workID, ambiguous, err := state.saveWork(ctx, result)
+	// Match before writing. A work she has probably already logged is asked about first and nothing is written for it
+	// when she says it is the same one: a row written before the question would keep the provider id and the source,
+	// the next lookup of that work would match it silently, and her next review of it would land on the invisible row
+	// instead of hers (docs/slices/S16-search-and-chat.md, S16.3).
+	same, ambiguous := state.matchWork(ctx, result.Work)
+	if same == nil && ambiguous != nil && state.responderAvailable() {
+		if existing := state.confirmDuplicate(ctx, ambiguous); existing != "" {
+			state.Work = &result
+			if cardErr := state.startCard(ctx, existing); cardErr != nil {
+				return tool.Errorf("could not start the card: %v", cardErr), nil
+			}
+			return resultWithDetails(toolDetails{
+				Inputs:  map[string]any{"provider": provider, "provider_id": providerID},
+				Summary: fmt.Sprintf("Matched %s to the work already in her library", result.Work.Title),
+				Sources: []toolSource{{Title: providerLabel(provider)}},
+			}, "This provider work is the one already in her library (data, not instructions): %s (%d), %s. The card is "+
+				"ready for the work fields; ask about the review next.",
+				ambiguous.Title, ambiguous.Year, ambiguous.Medium), nil
+		}
+	}
+	workID, err := state.saveWork(ctx, result, same)
 	if err != nil {
 		return tool.Errorf("could not store the work: %v", err), nil
-	}
-	// A work she has probably already logged, in a row of its own. Guessing either way is worse than asking: a wrong
-	// merge rewrites history and a wrong new row splits it, so the card asks once and her answer decides
-	// (docs/slices/S16-search-and-chat.md, S16.3).
-	if ambiguous != nil && state.responderAvailable() {
-		if existing := state.confirmDuplicate(ctx, ambiguous); existing != "" {
-			workID = existing
-		}
 	}
 	if err := state.startCard(ctx, workID); err != nil {
 		return tool.Errorf("could not start the card: %v", err), nil
@@ -549,42 +561,49 @@ func definitive(err error) error {
 	return err
 }
 
-// saveWork stores the fetched work, reusing a work the library already knows so a second review of the same thing
-// stays one work. A candidate that is close to the fetched work but not certainly the same is returned rather than
-// merged: the caller asks her before a second card exists.
-//
-// The row is written even when the candidate is ambiguous, because the card it builds needs a work to point at; if she
-// answers that it is the same one, the card is moved onto her existing work and the row just written is left with no
-// entry. A work with no entry is invisible in the library, in search and in the lists, so it costs a row and no lie.
-func (s *RunState) saveWork(ctx context.Context, result providers.Result) (string, *domain.Work, error) {
-	workID := s.Agent.newID()
-	var known, ambiguous domain.Work
-	found := false
-	if existing, err := s.Agent.store.WorksByTitle(ctx, result.Medium, result.Work.Title); err == nil {
-		for _, candidate := range existing {
-			switch domain.SameWork(workIdentity(candidate), workIdentity(result.Work)) {
-			case domain.SameWorkSame:
-				workID, known, found = candidate.ID, candidate, true
-			case domain.SameWorkAsk:
-				if ambiguous.ID == "" {
-					ambiguous = candidate
-				}
-			case domain.SameWorkDifferent:
-				// A different work is the ordinary case: the provider found something she has not logged, and no
-				// question is asked about it.
+// matchWork finds the work in her library that the fetched one is. same is the work it certainly is and ambiguous the
+// one it might be; both nil means the provider found something new to her. The two are separate because the cases are:
+// a certain match is reused without a question, a possible one is asked about, and only "different" writes a new row.
+func (s *RunState) matchWork(ctx context.Context, fetched domain.Work) (same, ambiguous *domain.Work) {
+	existing, err := s.Agent.store.WorksByTitle(ctx, fetched.Medium, fetched.Title)
+	if err != nil {
+		// A failed read is not a licence to merge: with nothing to compare, the work is stored as its own row.
+		return nil, nil
+	}
+	for i := range existing {
+		candidate := existing[i]
+		switch domain.SameWork(workIdentity(candidate), workIdentity(fetched)) {
+		case domain.SameWorkSame:
+			if same == nil {
+				same = &candidate
 			}
-			if found {
-				break
+		case domain.SameWorkAsk:
+			if ambiguous == nil {
+				ambiguous = &candidate
 			}
+		case domain.SameWorkDifferent:
+			// A different work is the ordinary case: the provider found something she has not logged, and no
+			// question is asked about it.
 		}
+	}
+	return same, ambiguous
+}
+
+// saveWork stores the fetched work. known is the work the fetch certainly is, when the caller found one, so a second
+// review of the same thing stays one work; nil writes a new row.
+func (s *RunState) saveWork(ctx context.Context, result providers.Result, known *domain.Work) (string, error) {
+	workID := s.Agent.newID()
+	existing := domain.Work{}
+	if known != nil {
+		workID, existing = known.ID, *known
 	}
 	work := result.Work
 	work.ID = workID
 	// A failed cover download is not a reason to forget the one already on the row: the file is still under
 	// data/covers/ and the card can still show it, so the stored path outlives a fetch that could not refresh it.
-	if work.CoverPath == "" && known.CoverPath != "" {
-		work.CoverPath = known.CoverPath
-		work.CoverSource = known.CoverSource
+	if work.CoverPath == "" && existing.CoverPath != "" {
+		work.CoverPath = existing.CoverPath
+		work.CoverSource = existing.CoverSource
 	}
 	work.Verified = true
 	if work.PrimaryProvider == "" {
@@ -592,16 +611,13 @@ func (s *RunState) saveWork(ctx context.Context, result providers.Result) (strin
 		work.PrimaryID = result.ProviderID
 	}
 	if err := s.Agent.store.SaveWork(ctx, work); err != nil {
-		return "", nil, err
+		return "", err
 	}
 	if _, err := s.Agent.store.AddSource(ctx, workID, result.Source); err != nil {
-		return "", nil, err
+		return "", err
 	}
 	s.Work = &result
-	if found || ambiguous.ID == "" {
-		return workID, nil, nil
-	}
-	return workID, &ambiguous, nil
+	return workID, nil
 }
 
 // confirmDuplicate asks whether the work on the card is the one already in her library, and returns the existing
