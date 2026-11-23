@@ -234,6 +234,10 @@ export type ServerEvent =
       data?: {
         interaction_id: Id;
         by: 'user' | 'server';
+        /**
+         * True when the resolution carried an answer of hers that is not on the card yet. A skip carries none.
+         */
+        answers_pending?: boolean;
       };
     })
   | (ServerEnvelope & {

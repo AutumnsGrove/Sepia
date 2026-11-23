@@ -132,7 +132,10 @@ the current `draft_snapshot`.
   `ack: duplicate` carrying the first outcome, and changes nothing.
 - **An answer is on the card, not just in the log.** `draft_snapshot`'s card carries `answers_pending`: true while a
   `describe`/`question_form` answer she gave has no matching row on the entry. The agent re-publishes the card once it
-  stores her answers, which is the snapshot that clears it, and a `confirm` in the gap is refused.
+  stores her answers, which is the snapshot that clears it, and a `confirm` in the gap is refused. The
+  `interaction_resolved` event carries `answers_pending` too, so a tap that lands after the turn ended still says so,
+  and a skip carries none: skipping never holds Save up. `hello`'s draft carries it for a reconnect that has no
+  snapshot to replay.
 - **An answer outlives the turn that asked.** A turn can end while a card is still waiting, and her tap can arrive
   after it. The answer is stored either way, and the next turn for that session reads the answers already given
   instead of offering the same question again. A question is never answered twice into the card: the first answer

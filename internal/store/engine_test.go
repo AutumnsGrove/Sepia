@@ -71,7 +71,7 @@ func TestResolveInteractionOnce(t *testing.T) {
 	}
 
 	resolved, event, err := s.ResolveInteraction(ctx, "s1", interaction.ID, domain.ResolvedByUser,
-		json.RawMessage(`{"answers":[]}`), "m1")
+		json.RawMessage(`{"answers":[]}`), "m1", false)
 	if err != nil {
 		t.Fatalf("ResolveInteraction: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestResolveInteractionOnce(t *testing.T) {
 
 	// The first answer wins: a second changes nothing, appends nothing, and remembers nothing new.
 	if _, _, secondErr := s.ResolveInteraction(ctx, "s1", interaction.ID, domain.ResolvedByUser,
-		json.RawMessage(`{"answers":[1]}`), "m2"); !errors.Is(secondErr, ErrInteractionResolved) {
+		json.RawMessage(`{"answers":[1]}`), "m2", false); !errors.Is(secondErr, ErrInteractionResolved) {
 		t.Fatalf("second resolve = %v, want ErrInteractionResolved", secondErr)
 	}
 	head, err := s.HeadSequence(ctx, "s1")
@@ -111,7 +111,7 @@ func TestInteractionsAreNeverDeletedOrReopened(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenInteraction: %v", err)
 	}
-	if _, _, err := s.ResolveInteraction(ctx, "s1", interaction.ID, domain.ResolvedByServer, json.RawMessage(`null`), ""); err != nil {
+	if _, _, err := s.ResolveInteraction(ctx, "s1", interaction.ID, domain.ResolvedByServer, json.RawMessage(`null`), "", false); err != nil {
 		t.Fatalf("ResolveInteraction: %v", err)
 	}
 
@@ -219,7 +219,7 @@ func TestInteractionsAreReadableAfterTheFact(t *testing.T) {
 		t.Fatalf("OpenInteraction: %v", err)
 	}
 	if _, _, resolveErr := s.ResolveInteraction(ctx, "s1", first.ID, domain.ResolvedByUser,
-		json.RawMessage(`{"answers":["quiet"]}`), "m1"); resolveErr != nil {
+		json.RawMessage(`{"answers":["quiet"]}`), "m1", false); resolveErr != nil {
 		t.Fatalf("ResolveInteraction: %v", resolveErr)
 	}
 
@@ -289,7 +289,7 @@ func TestResolveInteractionRefusesAnotherSessionsQuestion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenInteraction: %v", err)
 	}
-	_, _, wrongSession := s.ResolveInteraction(ctx, "s2", interaction.ID, domain.ResolvedByUser, nil, "")
+	_, _, wrongSession := s.ResolveInteraction(ctx, "s2", interaction.ID, domain.ResolvedByUser, nil, "", false)
 	if !errors.Is(wrongSession, ErrNotFound) {
 		t.Fatalf("resolve from another session = %v, want ErrNotFound", wrongSession)
 	}

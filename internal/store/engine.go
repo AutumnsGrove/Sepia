@@ -95,7 +95,7 @@ func (s *Store) OpenInteraction(ctx context.Context, in Interaction) (domain.Int
 // ResolveInteraction answers an open question, appends the resolution event and remembers the client message in one
 // transaction. A second answer changes nothing and reports ErrInteractionResolved.
 func (s *Store) ResolveInteraction(ctx context.Context, sessionID, interactionID string, by domain.ResolvedBy,
-	resolution json.RawMessage, clientMsgID string,
+	resolution json.RawMessage, clientMsgID string, answersPending bool,
 ) (domain.Interaction, domain.SessionEvent, error) {
 	if resolution == nil {
 		resolution = json.RawMessage("null")
@@ -113,10 +113,15 @@ func (s *Store) ResolveInteraction(ctx context.Context, sessionID, interactionID
 		if row.ResolvedSeq.Valid {
 			return ErrInteractionResolved
 		}
-		payload, err := json.Marshal(map[string]any{
+		fields := map[string]any{
 			"interaction_id": interactionID,
 			"by":             string(by),
-		})
+		}
+		if answersPending {
+			// The client cannot see AddAnswers, so the resolution says whether her tap still has to reach the card.
+			fields["answers_pending"] = true
+		}
+		payload, err := json.Marshal(fields)
 		if err != nil {
 			return fmt.Errorf("store: encode resolution event: %w", err)
 		}
