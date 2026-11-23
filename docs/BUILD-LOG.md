@@ -1593,3 +1593,32 @@ arrives with no waiter — was rejected because it cannot survive a restart, whi
 Describe card open, answers it, then retries: the card must carry her pick. `TestReviewerAsksNothingSheHasAlreadyAnswered`
 proves the form is not offered again. `TestAddAnswersDoesNotAddASecondAnswerForAQuestion` failed with two rows before
 the store change.
+
+## 2026-11-23, fix, a save waits for the question it is holding
+
+The logging e2e failed on chromium twice, on different branches, and the database showed why: the split scenario builds
+the card before the Describe card is answered, `Save entry` is enabled because the card is confirmable, and a save made
+while the question is open writes the card as it was built. Her tapped answer was in the log and never reached the
+entry. The same run also polls for a saved entry's answer, so it failed once the save won the race.
+
+`Engine.Confirm` now refuses with `answer_pending` while a `describe` or `question_form` interaction is open, and the
+save bar says "Answer or skip the question first" and waits. Only those two kinds: a lookup choice that the agent has
+already answered by merging is not hers to answer, and refusing on it would block a card the model finished anyway.
+Skip stays one tap, so nothing is forced.
+
+Tests: the engine refuses and leaves the card a draft, the socket answers `answer_pending` and saves nothing, and the
+save bar is off with the sentence while either question kind is open. Each was watched failing first.
+
+**The review found the guard was half a guard.** Answering resolves the interaction immediately, so the refusal lifted
+the moment she tapped Done, while the agent had not yet written her answer onto the card: a confirm in that gap still
+saved a card without it, and the reducer turned Save back on for the whole model round trip. Both halves now key on the
+answer reaching the card, not on the question being open. The engine refuses while a resolved `describe` or
+`question_form` answer has no matching row on the entry, and the client keeps Save off from her tap until the next
+`draft_snapshot` clears it. `TestConfirmWaitsForHerAnswerToReachTheCard` answers, is refused, adds the answer the way
+`save_entry` does, and then saves with the answer on the entry.
+
+**A second review pass found the client half guessing.** Clearing the wait on any newer `draft_snapshot` is wrong both
+ways: `save_entry` writes the body and fields (a snapshot each) before it stores her answers, and a `save_entry` that
+only re-applies answers writes no snapshot at all. The card now says it itself: `answers_pending` rides on
+`draft_snapshot` and `hello`, computed by the same check `Confirm` uses, and `save_entry` publishes one more snapshot
+after `AddAnswers` so the client hears that her answers were stored. The client reads the flag and nothing else.

@@ -29,6 +29,10 @@ type Card struct {
 	Confirmable bool
 	Missing     []string
 
+	// AnswersPending is true while an answer she has given is not on the card yet: the agent applies her answers when
+	// it writes the card, and a save before that would store the card built before she tapped (issue #46).
+	AnswersPending bool
+
 	Checks      []Check
 	Tools       []ToolTrace
 	PrereadCost domain.CostSummary
@@ -73,6 +77,11 @@ func (e *Engine) Card(ctx context.Context, sessionID string) (Card, error) {
 // edited into.
 func (e *Engine) CardFor(ctx context.Context, sessionID string, entry domain.Entry, version int) (Card, error) {
 	card := Card{Draft: Draft{Version: version, Entry: entry}}
+	if entry.ID != "" {
+		if pending, pendingErr := e.answersPending(ctx, sessionID, entry.ID); pendingErr == nil {
+			card.AnswersPending = pending
+		}
+	}
 	open, err := e.store.OpenInteractions(ctx, sessionID)
 	if err != nil {
 		return Card{}, err

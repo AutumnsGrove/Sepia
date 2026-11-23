@@ -1098,6 +1098,10 @@ func saveEntry(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (to
 			return tool.Errorf("could not store her answers: %v", err), nil
 		}
 		state.Answers = nil
+		// The client keeps Save off until a card written after her answer arrives, and these rows are the answer.
+		if err := state.Agent.session.PublishAnswers(ctx, state.SessionID); err != nil {
+			state.Agent.log.Warn("answers stored but the card was not re-published", "session", state.SessionID, "err", err.Error())
+		}
 	}
 
 	// The card must still satisfy the save guard, even though it is not being saved yet: a card that cannot be

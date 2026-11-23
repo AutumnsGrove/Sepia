@@ -72,6 +72,11 @@ export interface SessionState {
   blocks: TranscriptBlock[];
   activity: ActivityRow[];
   interactions: OpenInteraction[];
+  /**
+   * True from the moment she answers a Describe or a question until the card is written again. The agent applies her
+   * answers when it writes the card, so a save in that gap would store the card built before she tapped (issue #46).
+   */
+  answersPending: boolean;
   draft: Draft | null;
   draftVersion: number;
   cost: SessionCost;
@@ -98,6 +103,7 @@ export function emptySession(sessionID = ''): SessionState {
     blocks: [],
     activity: [],
     interactions: [],
+    answersPending: false,
     draft: null,
     draftVersion: 0,
     cost: { total: 0, covered: 0 },
@@ -143,6 +149,9 @@ export function applyHello(state: SessionState, event: ServerEvent): SessionStat
         order: (data.full_state === true ? 1 : state.nextOrder) + index,
       }),
     ),
+    // The hello's card is the authority on whether an answer of hers is still on its way; a reconnect after the log was
+    // compacted carries no snapshot to clear a stale one (issue #46).
+    answersPending: ((data.draft ?? null) as Draft | null)?.answers_pending === true,
     // A hello is a new connection, not a new turn: an old error or queued count does not survive it.
     error: null,
   };
@@ -382,15 +391,33 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
 
     case 'interaction_resolved': {
       const data = dataOf<'interaction_resolved'>(event);
-      return { state: { ...state, interactions: withoutInteraction(state, data.interaction_id) } };
+      // The server says whether her tap carried an answer that still has to reach the card; a skip carries none, and
+      // the card the agent writes afterwards is what clears it (issue #46).
+      const pending = data.answers_pending === true ? true : state.answersPending;
+      return {
+        state: {
+          ...state,
+          answersPending: pending,
+          interactions: withoutInteraction(state, data.interaction_id),
+        },
+      };
     }
 
     case 'draft_snapshot': {
       const data = dataOf<'draft_snapshot'>(event);
       // A snapshot that arrives late must not move the card backwards. The version is the ordering rule.
       if (data.version < state.draftVersion) return { state };
+      // The server says whether her answer is on this card yet: a snapshot from before AddAnswers still carries the
+      // wait, and the one the agent publishes after it clears it (issue #46). Clearing on any snapshot would be wrong
+      // in both directions, because save_entry writes the card before it stores her answers.
+      const draft = data.draft as Draft;
       return {
-        state: { ...state, draft: data.draft as Draft, draftVersion: data.version },
+        state: {
+          ...state,
+          draft,
+          draftVersion: data.version,
+          answersPending: draft.answers_pending === true,
+        },
       };
     }
 

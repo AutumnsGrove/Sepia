@@ -167,6 +167,9 @@ type wireCard struct {
 	Why        *wireWhy         `json:"why,omitempty"`
 	CanConfirm bool             `json:"can_confirm"`
 	Missing    []string         `json:"missing"`
+	// AnswersPending is true while an answer she has given is not on the card yet (issue #46). The client keeps Save
+	// off for as long as it is set.
+	AnswersPending bool `json:"answers_pending"`
 }
 
 // valuesOf keeps a skipped answer's values an array. The contract says array and requires it, so nil would go out as
@@ -183,17 +186,20 @@ func valuesOf(values []string) []string {
 func (s *Server) wireCardOf(card session.Card) wireCard {
 	entry := card.Draft.Entry
 	out := wireCard{
-		Version:    card.Draft.Version,
-		Work:       wireWorkOf(card.Work),
-		Rating:     wireRating{Quarters: entry.Rating, Scale: domain.RatingScale, Favourite: entry.Favourite},
-		Verdict:    entry.Verdict,
-		Body:       entry.Body,
-		BodyOrigin: string(entry.BodyOrigin),
-		Format:     entry.Format,
-		Completion: string(entry.CompletionState()),
-		Progress:   entry.Progress,
-		FinishedOn: entry.FinishedOn,
-		Blocks:     wireBlocksOf(entry, card.Work, card.Answers, card.Sources),
+		Version:        card.Draft.Version,
+		Work:           wireWorkOf(card.Work),
+		Rating:         wireRating{Quarters: entry.Rating, Scale: domain.RatingScale, Favourite: entry.Favourite},
+		Verdict:        entry.Verdict,
+		Body:           entry.Body,
+		BodyOrigin:     string(entry.BodyOrigin),
+		Format:         entry.Format,
+		Completion:     string(entry.CompletionState()),
+		Progress:       entry.Progress,
+		FinishedOn:     entry.FinishedOn,
+		Blocks:         wireBlocksOf(entry, card.Work, card.Answers, card.Sources),
+		CanConfirm:     card.Confirmable,
+		Missing:        card.Missing,
+		AnswersPending: card.AnswersPending,
 	}
 	if len(entry.BodySpans) > 0 {
 		out.BodySpans = entry.BodySpans
@@ -217,6 +223,7 @@ func (s *Server) wireCardOf(card session.Card) wireCard {
 	out.Why = whyOf(card)
 	out.CanConfirm = card.Confirmable
 	out.Missing = card.Missing
+	out.AnswersPending = card.AnswersPending
 	if out.Missing == nil {
 		out.Missing = []string{}
 	}

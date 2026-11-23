@@ -409,3 +409,44 @@ func TestSocketAnswersAnInteractionOnce(t *testing.T) {
 		t.Fatalf("repeat answer ack = %v, want duplicate", got)
 	}
 }
+
+// A card that is ready while a question is open cannot be confirmed: the answer she has not given yet would never
+// reach the entry, and the save would be the card the model built before she tapped (issue #46).
+func TestSocketRefusesAConfirmWhileAQuestionIsOpen(t *testing.T) {
+	rig := newSocketRig(t)
+	defer rig.close()
+	ctx := context.Background()
+	sess, err := rig.engine.CreateEntry(ctx)
+	if err != nil {
+		t.Fatalf("CreateEntry: %v", err)
+	}
+	if _, appendErr := rig.engine.AppendUserMessage(ctx, sess.ID, "the lantern keeper was slow to start", "m1"); appendErr != nil {
+		t.Fatalf("AppendUserMessage: %v", appendErr)
+	}
+	if _, startErr := rig.engine.StartDraft(ctx, sess.ID, domain.Entry{
+		WorkID: "w1", Rating: 18, Body: "the lantern keeper was slow to start", BodyOrigin: domain.BodyTyped,
+	}); startErr != nil {
+		t.Fatalf("StartDraft: %v", startErr)
+	}
+	if _, askErr := rig.engine.Ask(ctx, sess.ID, "describe", map[string]any{
+		"categories": []any{map[string]any{"id": "feel", "label": "Feel", "tags": []any{}}},
+	}); askErr != nil {
+		t.Fatalf("Ask: %v", askErr)
+	}
+	client := dialFresh(t, rig, sess.ID)
+	client.expect("hello")
+	client.sendJSON(map[string]any{
+		"type": "confirm", "client_msg_id": "c1", "data": map[string]any{"base_version": 0},
+	})
+	ack := client.expect("ack")
+	if ack.field(t, "status") != "rejected" || ack.field(t, "reason") != "answer_pending" {
+		t.Fatalf("refusal = %+v, want answer_pending", ack)
+	}
+	draft, err := rig.engine.Draft(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+	if draft.Entry.Status != domain.StatusDraft {
+		t.Errorf("the card was saved: %+v", draft.Entry)
+	}
+}

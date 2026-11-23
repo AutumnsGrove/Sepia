@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
+	"github.com/AutumnsGrove/sepia/internal/store"
 )
 
 func TestCardCarriesTheWorkTheAnswersAndWhatWasLeftOut(t *testing.T) {
@@ -177,5 +178,76 @@ func TestWhySheetPrefersTheNewerPreReadWithinOneSecond(t *testing.T) {
 	}
 	if card.Checks[0].Probability != 0.99 {
 		t.Errorf("probability = %v, want 0.99: the older pre-read replaced the newer one", card.Checks[0].Probability)
+	}
+}
+
+// The card tells the client whether an answer she gave is on it yet: the agent stores her answers when it writes the
+// card, so the gap between the tap and that write is visible and a save can wait for it (issue #46).
+func TestCardSaysWhenHerAnswerIsNotOnIt(t *testing.T) {
+	e, db, sess := draftSession(t)
+	ctx := context.Background()
+	question, err := e.Ask(ctx, sess.ID, "describe", map[string]any{
+		"categories": []any{map[string]any{"id": "feel", "label": "Feel", "tags": []any{}}},
+	})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	card, err := e.Card(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Card: %v", err)
+	}
+	if card.AnswersPending {
+		t.Error("the card says an answer is pending before she has answered")
+	}
+	if _, answerErr := e.Answer(ctx, sess.ID, question.ID,
+		json.RawMessage(`{"selected":{"feel":["moving"]},"skip_all":false}`), "a1"); answerErr != nil {
+		t.Fatalf("Answer: %v", answerErr)
+	}
+	card, err = e.Card(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Card: %v", err)
+	}
+	if !card.AnswersPending {
+		t.Error("the card does not say her answer is still on its way")
+	}
+	if addErr := db.AddAnswers(ctx, card.Draft.Entry.ID, []domain.Answer{
+		{QuestionID: "feel", Category: "feel", Type: domain.AnswerTags, Values: []string{"moving"}},
+	}); addErr != nil {
+		t.Fatalf("AddAnswers: %v", addErr)
+	}
+	card, err = e.Card(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Card: %v", err)
+	}
+	if card.AnswersPending {
+		t.Error("the card still says her answer is pending after it was stored")
+	}
+}
+
+// PublishAnswers is how the client hears that her answers were stored: no other event announces rows added to a saved
+// or drafted entry.
+func TestPublishAnswersAppendsASnapshot(t *testing.T) {
+	e, _, sess := draftSession(t)
+	ctx := context.Background()
+	before, err := e.HeadSequence(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if publishErr := e.PublishAnswers(ctx, sess.ID); publishErr != nil {
+		t.Fatalf("PublishAnswers: %v", publishErr)
+	}
+	after, err := e.HeadSequence(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after <= before {
+		t.Fatalf("head = %d, want a snapshot appended after %d", after, before)
+	}
+	events, err := e.EventsSince(ctx, sess.ID, before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Kind != store.EventDraftSnapshot {
+		t.Fatalf("events = %+v, want one draft_snapshot", events)
 	}
 }

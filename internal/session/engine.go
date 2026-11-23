@@ -264,14 +264,21 @@ func (e *Engine) Answer(ctx context.Context, sessionID, interactionID string, va
 	if err != nil {
 		return domain.Interaction{}, err
 	}
-	question, _, err := e.store.ResolveInteraction(ctx, sessionID, interactionID, domain.ResolvedByUser, body, clientMsgID)
+	// The client cannot see the answers land, so the resolution itself says whether her tap still has to reach the
+	// card: a skip carries no answer of hers and nothing is pending (issue #46). The ids come from what she sent, not
+	// from the stored row, which has no resolution until this call writes one.
+	pending := false
+	if ids, ok := answeredIDs(body); ok && len(ids) > 0 {
+		pending = true
+	}
+	question, _, err := e.store.ResolveInteraction(ctx, sessionID, interactionID, domain.ResolvedByUser, body, clientMsgID, pending)
 	return question, err
 }
 
 // Withdraw closes a question the service no longer needs answered, such as a lookup question whose work arrived by
 // another route. It is recorded as resolved by the server, so the card can clear it on every device.
 func (e *Engine) Withdraw(ctx context.Context, sessionID, interactionID string) (domain.Interaction, error) {
-	question, _, err := e.store.ResolveInteraction(ctx, sessionID, interactionID, domain.ResolvedByServer, json.RawMessage("null"), "")
+	question, _, err := e.store.ResolveInteraction(ctx, sessionID, interactionID, domain.ResolvedByServer, json.RawMessage("null"), "", false)
 	return question, err
 }
 
@@ -447,14 +454,24 @@ type Refusal struct {
 // Error renders the refusal for a log; the code is what the client receives.
 func (r *Refusal) Error() string { return r.Code + ": " + r.Message }
 
+// The two interaction kinds that carry her answers. A card built before they are resolved would be saved without
+// them, so a confirm waits for her answer or her skip (issue #46).
+const (
+	InteractionDescribe  = "describe"
+	InteractionQuestions = "question_form"
+)
+
 // The codes a draft operation can be refused with.
 const (
 	CodeUnknownField = "unknown_field"
 	CodeInvalidValue = "invalid_value"
 	CodeStaleVersion = "stale_version"
 	CodeNotADraft    = "not_a_draft"
-	CodeMessageLong  = "message_too_long"
-	CodeSessionFull  = "session_full"
+	// CodeAnswerPending means a question the card asked her is still waiting, so confirming would save the card
+	// without what she just tapped.
+	CodeAnswerPending = "answer_pending"
+	CodeMessageLong   = "message_too_long"
+	CodeSessionFull   = "session_full"
 	// CodeAlreadyAccepted means the tap was already taken: the database refuses a second accept.
 	CodeAlreadyAccepted = "already_accepted"
 )
@@ -620,6 +637,26 @@ func (e *Engine) Confirm(ctx context.Context, sessionID string, in ConfirmReques
 	draft, err := e.Draft(ctx, sessionID)
 	if err != nil {
 		return domain.Entry{}, 0, nil, err
+	}
+	// A card can be built while a question is still open, and confirming then would save the card the model built
+	// before her answer: the tap is stored in the log and the entry goes without it (issue #46). Answer or skip first.
+	for _, open := range draft.Open {
+		if open.Kind == InteractionDescribe || open.Kind == InteractionQuestions {
+			return domain.Entry{}, 0, nil, &Refusal{
+				Code: CodeAnswerPending, Message: "Answer or skip the question first.",
+			}
+		}
+	}
+	// Answering is not the same as the answer being on the card: the agent applies her answers when it writes the card,
+	// and a confirm in that gap would save the card built before she tapped.
+	pending, err := e.answersPending(ctx, sessionID, draft.Entry.ID)
+	if err != nil {
+		return domain.Entry{}, 0, nil, err
+	}
+	if pending {
+		return domain.Entry{}, 0, nil, &Refusal{
+			Code: CodeAnswerPending, Message: "Her answer is still on its way to the card.",
+		}
 	}
 	// The hub remembers the target while the process is up. After a restart it is the session's own record that
 	// says what this card revises, so a revision cannot quietly become a second entry.
@@ -1236,4 +1273,80 @@ func (q *Queue) Queued(sessionID string) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	return q.pending[sessionID]
+}
+
+// PublishAnswers re-publishes the card once her answers are stored. The client waits for a card written after her
+// answer before it allows a save, and AddAnswers writes rows that no event otherwise announces: without this, the card
+// the client holds would never say the answer arrived (issue #46).
+func (e *Engine) PublishAnswers(ctx context.Context, sessionID string) error {
+	draft, err := e.Draft(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	_, err = e.Append(ctx, sessionID, store.EventDraftSnapshot,
+		map[string]any{"version": draft.Version, "draft": draft.Entry})
+	return err
+}
+
+// answersPending reports whether she has answered a question whose answer is not on the card yet. The agent applies
+// answers when it writes the card (AddAnswers), so a resolved interaction with no matching row is exactly the gap
+// between her tap and the card that carries it.
+func (e *Engine) answersPending(ctx context.Context, sessionID, entryID string) (bool, error) {
+	interactions, err := e.store.Interactions(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+	var held map[string]bool
+	for _, interaction := range interactions {
+		if interaction.ResolvedBy != domain.ResolvedByUser {
+			continue
+		}
+		ids, ok := answeredIDs(interaction.Resolution)
+		if !ok || len(ids) == 0 {
+			continue
+		}
+		if held == nil {
+			answers, readErr := e.store.Answers(ctx, entryID)
+			if readErr != nil {
+				return false, readErr
+			}
+			held = make(map[string]bool, len(answers))
+			for _, answer := range answers {
+				held[answer.QuestionID] = true
+			}
+		}
+		for _, id := range ids {
+			if !held[id] {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// answeredIDs reads the question ids out of a resolution. It does not map labels onto values: it only needs to know
+// which questions she answered, so it can tell whether the card has them.
+func answeredIDs(resolution json.RawMessage) ([]string, bool) {
+	var answer struct {
+		Selected map[string][]string `json:"selected"`
+		Answers  []struct {
+			ID     string   `json:"id"`
+			Value  string   `json:"value"`
+			Values []string `json:"values"`
+		} `json:"answers"`
+	}
+	if json.Unmarshal(resolution, &answer) != nil {
+		return nil, false
+	}
+	var ids []string
+	for category := range answer.Selected {
+		ids = append(ids, category)
+	}
+	for _, given := range answer.Answers {
+		if given.Value == "" && len(given.Values) == 0 {
+			continue
+		}
+		ids = append(ids, given.ID)
+	}
+	return ids, true
 }
