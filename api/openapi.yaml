@@ -118,6 +118,22 @@ paths:
             but not a work she only means to read, because a wish is not a review and has no finish date to group
             by. want_to is that list, one chip away.
           schema: { $ref: "#/components/schemas/Completion" }
+        - name: rating_min
+          in: query
+          description: The lowest quarter-star rating the list includes, 1 to 20.
+          schema: { type: integer, minimum: 1, maximum: 20 }
+        - name: rating_max
+          in: query
+          description: The highest quarter-star rating the list includes, 1 to 20.
+          schema: { type: integer, minimum: 1, maximum: 20 }
+        - name: finished_from
+          in: query
+          description: The earliest finish date the list includes. An entry with no finish date is outside a date filter.
+          schema: { type: string, format: date }
+        - name: finished_to
+          in: query
+          description: The latest finish date the list includes, inclusive.
+          schema: { type: string, format: date }
         - { name: sort, in: query, schema: { $ref: "#/components/schemas/LibrarySort" } }
         - name: deleted
           in: query
@@ -134,10 +150,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items, next_cursor]
+                required: [items, next_cursor, total]
                 properties:
                   items: { type: array, items: { $ref: "#/components/schemas/Entry" } }
                   next_cursor: { type: [string, "null"] }
+                  total:
+                    type: integer
+                    minimum: 0
+                    description: >-
+                      How many entries the filters hold in all, not how many are on this page. It does not change with
+                      the cursor: a total that grew as the reader scrolled would not be one.
 
   /api/entries/{id}:
     get:
@@ -226,9 +248,13 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [items, total]
                 properties:
                   items: { type: array, items: { $ref: "#/components/schemas/SearchHit" } }
+                  total:
+                    type: integer
+                    minimum: 0
+                    description: How many entries matched, not how many fitted on the page.
         "400": { $ref: "#/components/responses/BadRequest" }
 
   /api/export:
@@ -662,8 +688,22 @@ components:
         kind: { enum: [entry, work, chat] }
         id: { type: string }
         title: { type: string, maxLength: 500 }
-        snippet: { type: string, maxLength: 500 }
-        score: { type: number }
+        snippet:
+          type: string
+          maxLength: 500
+          description: >-
+            The sentence the match was found in. The matched words are wrapped in U+E000 and U+E001, Unicode private-use
+            characters rather than HTML: the snippet is her own text, so the browser escapes everything between them
+            and a review of "<script>" stays a sentence about a script. Empty when only the title matched, because the
+            row already shows the title.
+        score:
+          type: number
+          description: A relevance score where a bigger number is a better match. The order already follows it.
+        entry:
+          description: >-
+            The entry the hit names, with its work, so a result row draws without a request per hit. Present for
+            kind entry, which is the only kind produced today.
+          $ref: "#/components/schemas/Entry"
       additionalProperties: false
 
     ExportJob:

@@ -257,6 +257,11 @@ func TestRESTShapesValidateAgainstTheOpenAPIDocument(t *testing.T) {
 	}
 	validateSchema(t, compiler, "WorkDetail", wireWorkDetailOf(workView))
 	validateSchema(t, compiler, "Work", wireWorkOf(workView.Work))
+	// A search hit is an entry with its work, plus the sentence it was found in.
+	validateSchema(t, compiler, "SearchHit", wireSearchHitOf(domain.SearchHit{
+		Kind: "entry", ID: entry.ID, Title: workView.Work.Title,
+		Snippet: "a quiet book about \uE000light\uE001 and memory", Score: 1.5, Entry: entry, Work: workView.Work,
+	}))
 
 	revisions, _, err := engine.RevisionsPage(ctx, entry.ID, 0, 10)
 	if err != nil {
