@@ -303,11 +303,11 @@ func TestACandidateThumbIsNotTheWorksCover(t *testing.T) {
 	scriptFilm(r.fake)
 	ctx := context.Background()
 
-	thumb, err := r.agent.CandidateCover(ctx, providers.ProviderTMDB, "movie:101", r.tmdb.URL()+"/t/p/w92/lantern.jpg")
+	thumb, err := r.agent.CandidateCover(ctx, providers.ProviderTMDB, r.tmdb.URL()+"/t/p/w92/lantern.jpg")
 	if err != nil {
 		t.Fatalf("CandidateCover: %v", err)
 	}
-	if thumb.Path != "covers/tmdb-movie-101-thumb.png" {
+	if !strings.HasPrefix(thumb.Path, "covers/tmdb-thumb-") {
 		t.Errorf("thumb path = %q, want its own name beside the work's", thumb.Path)
 	}
 
@@ -323,7 +323,7 @@ func TestACandidateThumbThatFailsIsNotFatal(t *testing.T) {
 	scriptFilm(r.fake)
 	ctx := context.Background()
 
-	if _, err := r.agent.CandidateCover(ctx, providers.ProviderTMDB, "movie:404", r.tmdb.URL()+"/t/p/w92/missing.jpg"); err == nil {
+	if _, err := r.agent.CandidateCover(ctx, providers.ProviderTMDB, r.tmdb.URL()+"/t/p/w92/missing.jpg"); err == nil {
 		t.Fatal("a missing thumb was reported as a success")
 	}
 	// The picker is not the card: the work she picks still gets its cover after a failed thumb.

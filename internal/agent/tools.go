@@ -521,7 +521,7 @@ func candidateOptions(candidates []providers.Candidate) []map[string]any {
 		options = append(options, map[string]any{
 			"id": c.Provider + "|" + c.ProviderID, "provider": c.Provider, "provider_id": c.ProviderID,
 			"title": c.Title, "year": c.Year, "creator": c.Creator, "medium": c.Medium,
-			"thumb_url": providers.ThumbPath(c.Provider, c.ProviderID, c.ThumbURL),
+			"thumb_url": providers.ThumbPath(c.Provider, c.ThumbURL),
 		})
 	}
 	return options
@@ -531,11 +531,11 @@ func candidateOptions(candidates []providers.Candidate) []map[string]any {
 // cache a saved cover uses. It is the thumb route's half: the card cannot load a provider's image under the page's CSP,
 // so the route asks here and serves the file from this origin. The thumb is stored under its own cache name, so it is
 // never served later as the work's full cover.
-func (a *Agent) CandidateCover(ctx context.Context, provider, id, coverURL string) (providers.Cover, error) {
+func (a *Agent) CandidateCover(ctx context.Context, provider, coverURL string) (providers.Cover, error) {
 	if a.finder == nil {
 		return providers.Cover{}, errors.New("the metadata services are not set up")
 	}
-	return a.finder.Cover(ctx, provider, providers.ThumbKey(id), coverURL)
+	return a.finder.CandidateCover(ctx, provider, coverURL)
 }
 
 // attachCover keeps a local copy of the fetched work's cover and returns the result carrying it.
