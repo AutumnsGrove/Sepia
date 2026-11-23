@@ -1556,6 +1556,10 @@ streamed from an agent sitting idle, and it refused every update, restart includ
 500 page (#38), so the update was blocked by the one thing the update would fix.
 
 `Responder.Wait` is where a turn parks, so it counts parked sessions now, and `busy()` ignores exactly those. A parked
-turn writes nothing and reading nothing would be lost: the restart kills it, her answer is stored if she taps it
-anyway, and #39 makes the next turn read it. `TestUpdateAllowedWhileATurnWaitsOnHer` was refused with 409 before the
-change; the case without a waiter still is.
+turn writes nothing, so the restart kills it and nothing she is reading is lost: her answer is stored if she taps it
+anyway, and #39 (the same release) makes the next turn read it. `TestUpdateAllowedWhileATurnWaitsOnHer` was refused
+with 409 before the change; the case without a waiter still is.
+
+A parked turn with a message queued behind it is still busy. That message lives only in memory and was already
+acknowledged, so the client has dropped it from its outbox and a restart would lose it; the review caught that and
+`TestUpdateRefusedWhileAParkedTurnHasAQueuedMessage` covers it.

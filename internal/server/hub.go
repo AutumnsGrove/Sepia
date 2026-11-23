@@ -249,12 +249,19 @@ func (h *hub) runTurn(ctx context.Context, sessionID string, msg queuedMessage) 
 // turn reads it.
 func (h *hub) busy() bool {
 	h.mu.Lock()
-	sessions := make([]string, 0, len(h.turns))
-	for sessionID := range h.turns {
-		sessions = append(sessions, sessionID)
+	running := make([]string, 0, len(h.turns))
+	for sessionID, state := range h.turns {
+		// A queued message behind a parked turn lives only in memory and was already acknowledged, so the client has
+		// dropped it from its outbox. A restart would lose her words outright, so that session is busy whatever the
+		// front turn is doing.
+		if state.queued != nil {
+			h.mu.Unlock()
+			return true
+		}
+		running = append(running, sessionID)
 	}
 	h.mu.Unlock()
-	for _, sessionID := range sessions {
+	for _, sessionID := range running {
 		if h.responder == nil || !h.responder.parkedOn(sessionID) {
 			return true
 		}

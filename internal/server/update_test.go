@@ -338,3 +338,39 @@ func TestUpdateAllowedWhileATurnWaitsOnHer(t *testing.T) {
 		t.Errorf("requested = %q", body)
 	}
 }
+
+// A parked turn can have a message queued behind it: that message lives only in memory, was already acknowledged, and
+// the client has dropped it from its outbox. A restart would lose her words, so the session stays busy.
+func TestUpdateRefusedWhileAParkedTurnHasAQueuedMessage(t *testing.T) {
+	cfg, dir := updateConfig(t)
+	writeSignal(t, dir, "available", `{"latest":"r221","latest_digest":"ghcr.io/autumnsgrove/sepia@sha256:`+strings.Repeat("d", 64)+`","update_available":true}`)
+	s := newServer(cfg, Deps{}, slog.New(slog.NewTextHandler(io.Discard, nil)), assets())
+	h := s.routes()
+
+	s.hub.mu.Lock()
+	s.hub.turns["session-1"] = &turn{queued: &queuedMessage{text: "and the ending too"}}
+	s.hub.mu.Unlock()
+	defer func() {
+		s.hub.mu.Lock()
+		delete(s.hub.turns, "session-1")
+		s.hub.mu.Unlock()
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = s.hub.responder.Wait(ctx, "session-1", "interaction-1")
+	}()
+	time.Sleep(50 * time.Millisecond)
+
+	rec := do(t, h, http.MethodPost, "/api/update/start", "localhost:8893", "http://localhost:8893", nil)
+	cancel()
+	<-done
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409: %s", rec.Code, rec.Body)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "requested")); err == nil {
+		t.Error("a refused request was written anyway")
+	}
+}
