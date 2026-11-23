@@ -1531,3 +1531,18 @@ the tie with `id`, which is random in production, so the card's ANSWERS block ha
 differently on each read. It ties on `rowid` now, the same fix `ListDecisionCalls` needed. The new store test writes
 two answers whose ids sort against insertion order; it failed on the old query. `TestAnswersRoundTrip` could not catch
 this because the test store's ids rise with the clock.
+## 2026-11-22, fix, a failed screen no longer takes the app down
+
+SvelteKit's built-in error page was all there was, so a component that threw while drawing replaced the whole app with
+a bare "500 Internal Error": no title, no back, nothing to tap, and the only way out was to leave Sepia. That is what
+made one stored entry unreachable rather than merely unopenable (#38).
+
+There is a `web/src/routes/+error.svelte` now, which SvelteKit renders inside the layout for a failed `load` and for a
+component that throws while it draws. It says one sentence, never the error's own text (which can carry a row or a
+path), and offers Back and Reload, or Back and Home for a path that does not exist.
+
+A `<svelte:boundary>` in the layout was tried first and did not catch a page's render error: the route still fell
+through to the framework's 500. The `+error.svelte` is the mechanism that works for this app, which is client-rendered.
+
+The gallery's `boundary` state throws on purpose, and the e2e asserts the fallback appears and the document still has
+its `main`; a second case walks a path that does not exist and finds the 404 copy.
