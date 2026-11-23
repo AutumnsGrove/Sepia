@@ -1546,3 +1546,20 @@ through to the framework's 500. The `+error.svelte` is the mechanism that works 
 
 The gallery's `boundary` state throws on purpose, and the e2e asserts the fallback appears and the document still has
 its `main`; a second case walks a path that does not exist and finds the 404 copy.
+
+## 2026-11-23, fix, a turn waiting on her does not block an update
+
+She could not update the potato: the panel said "Finish the reply first" while nothing was being written. The session
+with the *A Closed and Common Orbit* card has had a turn parked on a Describe question since 04:09, and the clock stops
+while she decides, so that turn never ends. `hub.busy()` was `len(h.turns) > 0`, which cannot tell a reply being
+streamed from an agent sitting idle, and it refused every update, restart included. On r199 the session also drew the
+500 page (#38), so the update was blocked by the one thing the update would fix.
+
+`Responder.Wait` is where a turn parks, so it counts parked sessions now, and `busy()` ignores exactly those. A parked
+turn writes nothing, so the restart kills it and nothing she is reading is lost: her answer is stored if she taps it
+anyway, and #39 (the same release) makes the next turn read it. `TestUpdateAllowedWhileATurnWaitsOnHer` was refused
+with 409 before the change; the case without a waiter still is.
+
+A parked turn with a message queued behind it is still busy. That message lives only in memory and was already
+acknowledged, so the client has dropped it from its outbox and a restart would lose it; the review caught that and
+`TestUpdateRefusedWhileAParkedTurnHasAQueuedMessage` covers it.
