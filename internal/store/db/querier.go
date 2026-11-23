@@ -66,6 +66,8 @@ type Querier interface {
 	LinkRevisionTarget(ctx context.Context, arg LinkRevisionTargetParams) error
 	LinkSessionEntry(ctx context.Context, arg LinkSessionEntryParams) error
 	ListActiveSessions(ctx context.Context, limit int64) ([]Session, error)
+	// Every answer for an entry is written in one transaction, so created_at is identical for all of them; rowid is
+	// insertion order, while id is random, so ordering the tie by id would shuffle the card's ANSWERS block on every read.
 	ListAnswers(ctx context.Context, entryID string) ([]Answer, error)
 	// A session's decisions calls, oldest first, for the "why" sheet. The ledger holds odds and costs, never her text.
 	// created_at is whole seconds, so two calls in the same second tie; rowid is insertion order, while id is random, so
