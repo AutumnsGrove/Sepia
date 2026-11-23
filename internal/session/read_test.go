@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
 )
@@ -140,5 +141,41 @@ func TestWhySheetKeepsOneRowPerCheck(t *testing.T) {
 		if again.Checks[i] != card.Checks[i] {
 			t.Fatalf("the sheet reordered between reads:\n%+v\n%+v", card.Checks, again.Checks)
 		}
+	}
+}
+
+// created_at is whole seconds, so two pre-reads in the same second tie. Production ids are random, so ordering the
+// tie by id can hand the older row back last and the sheet would keep the stale odds. rowid is insertion order.
+func TestWhySheetPrefersTheNewerPreReadWithinOneSecond(t *testing.T) {
+	e, db, sess := draftSession(t)
+	ctx := context.Background()
+	at := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	record := func(id string, probability float64) {
+		t.Helper()
+		odds, err := json.Marshal(map[string]map[string]float64{
+			"intent": {"log_review": probability, "chitchat": 0.01},
+		})
+		if err != nil {
+			t.Fatalf("marshal odds: %v", err)
+		}
+		if err := db.RecordDecisionCall(ctx, domain.DecisionCall{
+			ID: id, SessionID: sess.ID, Odds: odds, Fired: []string{"intent"}, CreatedAt: at,
+		}); err != nil {
+			t.Fatalf("RecordDecisionCall: %v", err)
+		}
+	}
+	// The newer row's id sorts before the older one's, which is what a random id does for half the pairs.
+	record("id-zzzz-first", 0.94)
+	record("id-aaaa-second", 0.99)
+
+	card, err := e.Card(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Card: %v", err)
+	}
+	if len(card.Checks) != 1 {
+		t.Fatalf("checks = %+v, want one row", card.Checks)
+	}
+	if card.Checks[0].Probability != 0.99 {
+		t.Errorf("probability = %v, want 0.99: the older pre-read replaced the newer one", card.Checks[0].Probability)
 	}
 }
