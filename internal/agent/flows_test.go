@@ -978,3 +978,33 @@ func TestPipelineKeepsADifferentWorkApart(t *testing.T) {
 		t.Fatalf("the card's work = %+v, %v", work, err)
 	}
 }
+
+// Her time is not the model's: a turn that is waiting on her answer must not run out of clock, however long she
+// takes. The deadline is for the model and the services; the pause is the whole point of turnClock.
+func TestPipelineHerAnswerDoesNotSpendTheDeadline(t *testing.T) {
+	r := newRig(t, rigOptions{script: bookScript(), turnDeadline: 300 * time.Millisecond})
+	scriptBook(r.fake)
+	r.responder.script("describe", map[string]any{"selected": map[string][]string{"feel": {"moving"}}})
+	answerQuestions(t, r)
+	// Slower than the whole turn budget: if the clock were running, the turn would be gone before she tapped.
+	r.responder.delay = 900 * time.Millisecond
+	ctx := context.Background()
+	sess, _ := r.session.CreateEntry(ctx)
+	out, err := r.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1"})
+	if err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if hasNotice(t, r, sess.ID, "turn_timeout") {
+		t.Fatal("the turn timed out while it was waiting for her answer")
+	}
+	if out.Draft == nil {
+		t.Fatal("no card: her answer went nowhere")
+	}
+	answers, err := r.store.Answers(context.Background(), out.Draft.Entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(answers) == 0 {
+		t.Error("the picks she tapped were not recorded")
+	}
+}

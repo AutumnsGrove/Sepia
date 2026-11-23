@@ -33,6 +33,7 @@ const states = [
   'screen-candidates',
   'screen-describe',
   'screen-draft',
+  'screen-repeat-pre-read',
   'screen-saved',
   'screen-unverified',
   'screen-fidelity',

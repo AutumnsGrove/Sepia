@@ -236,6 +236,9 @@ export const screenNames = [
   'screen-candidates',
   'screen-describe',
   'screen-draft',
+  // Not a mockup frame: the regression guard for issue #38. A second pre-read repeats every check, the why
+  // sheet used to key its rows by the text it printed, and one duplicate key took the whole route down.
+  'screen-repeat-pre-read',
   'screen-saved',
   'screen-unverified',
   'screen-fidelity',
@@ -302,6 +305,26 @@ export function screenFixture(name: string): ScreenFixture {
           activity: [act(2, 'Matched The Lantern Keeper (1999)'), act(3, 'Read the ending')],
           draft: draft(),
           draftVersion: 4,
+        }),
+      };
+    case 'screen-repeat-pre-read':
+      return {
+        ...base,
+        session: session({
+          blocks: [you(1)],
+          draft: draft({
+            why: {
+              ...draft().why,
+              checks: [
+                { check: 'intent', option: 'log_review', probability: 0.94, fired: true },
+                { check: 'medium', option: 'book', probability: 0.55, fired: true },
+                // The same two names again, which is what Try again leaves behind.
+                { check: 'intent', option: 'log_review', probability: 0.98, fired: true },
+                { check: 'medium', option: 'book', probability: 0.61, fired: true },
+              ],
+            },
+          }),
+          draftVersion: 6,
         }),
       };
     case 'screen-saved':

@@ -409,7 +409,9 @@ SELECT * FROM entry_revisions WHERE entry_id = sqlc.arg(entry_id) AND revision =
 
 -- name: ListDecisionCalls :many
 -- A session's decisions calls, oldest first, for the "why" sheet. The ledger holds odds and costs, never her text.
+-- created_at is whole seconds, so two calls in the same second tie; rowid is insertion order, while id is random, so
+-- id would let a later pre-read come back before the one it supersedes (and the sheet would keep the stale odds).
 SELECT * FROM decision_calls
 WHERE session_id = sqlc.narg(session_id)
-ORDER BY created_at, id
+ORDER BY created_at, rowid
 LIMIT sqlc.arg(row_limit);

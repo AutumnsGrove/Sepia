@@ -299,34 +299,54 @@ func IsNotFound(err error) bool { return errors.Is(err, store.ErrNotFound) }
 // IsDuplicate reports whether a client message was already applied.
 func IsDuplicate(err error) bool { return errors.Is(err, store.ErrDuplicateClientMessage) }
 
+// whyChecksCap bounds the sheet. The check vocabulary is small and fixed, so this only bites on a session with a
+// pathological ledger; it is here so the sheet can never grow without a bound.
+const whyChecksCap = 25
+
 // receipts fills the "why" sheet from the two ledgers and the tool events. A read failure is not fatal: a sheet
 // with a missing number is still readable, and the card must never fail because a receipt did.
 func (e *Engine) receipts(ctx context.Context, sessionID string, card *Card) {
 	calls, err := e.store.DecisionCalls(ctx, sessionID)
 	if err == nil {
+		// One row per check name, in the order the names first appear. A session runs the pre-read more than once
+		// (a second message, or Try again, which re-runs it by design) and every run asks the same questions, so a
+		// row per call repeats them. The newest answer is the one that describes the card; an earlier read is stale,
+		// not a second opinion. A repeated row is also what took the whole session page down, because the sheet
+		// keys its list by the text it prints (issue #38).
+		at := make(map[string]int, whyChecksCap)
 		for _, call := range calls {
 			card.PrereadCost = card.PrereadCost.Add(call.Cost())
 			var odds map[string]map[string]float64
 			if json.Unmarshal(call.Odds, &odds) != nil {
 				continue
 			}
-			for name, options := range odds {
-				option, probability := winningOption(options)
+			// The odds are a JSON object and Go's map iteration is random, so the sheet used to reshuffle itself
+			// between renders. The names are sorted so the same ledger always draws the same sheet.
+			names := make([]string, 0, len(odds))
+			for name := range odds {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				option, probability := winningOption(odds[name])
 				if option == "" {
 					continue
 				}
 				fired := containsString(call.Fired, name) || (name == "extract_fidelity" && len(call.Fired) > 0)
-				card.Checks = append(card.Checks, Check{
-					Name: name, Option: option, Probability: probability, Fired: fired,
-				})
+				check := Check{Name: name, Option: option, Probability: probability, Fired: fired}
+				if i, seen := at[name]; seen {
+					card.Checks[i] = check
+				} else {
+					at[name] = len(card.Checks)
+					card.Checks = append(card.Checks, check)
+				}
 				if name == "extract_fidelity" {
 					card.Fidelity = fidelityOf(call.Fired, option)
 				}
 			}
-			if len(card.Checks) >= 25 {
-				card.Checks = card.Checks[:25]
-				break
-			}
+		}
+		if len(card.Checks) > whyChecksCap {
+			card.Checks = card.Checks[:whyChecksCap]
 		}
 	}
 	if turns, turnErr := e.store.TurnCalls(ctx, sessionID); turnErr == nil {
