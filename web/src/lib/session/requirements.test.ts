@@ -36,7 +36,10 @@ describe('what Save is waiting for', () => {
   it('waits for the question she has not answered', () => {
     // The card is confirmable, but a question that carries her answer is still open: saving now would store the card
     // the model built before she tapped, and her answer would never reach it (issue #46).
-    const state = saveState(draft({ can_confirm: true, missing: [] }), true);
+    const state = saveState(
+      draft({ can_confirm: true, missing: [] }),
+      'Answer or skip the question first',
+    );
     expect(state.allowed).toBe(false);
     expect(state.reason).toBe('Answer or skip the question first');
   });

@@ -54,7 +54,7 @@ var errorInfo = map[ErrorCode]struct {
 	Copy   string
 }{
 	CodeAlreadyAccepted:      {Status: 409, Copy: "That field was already accepted."},
-	CodeAnswerPending:        {Status: 409, Copy: "Answer or skip the question first."},
+	CodeAnswerPending:        {Status: 409, Copy: "Your answer is still on its way to the card."},
 	CodeBackupInProgress:     {Status: 409, Copy: "A backup is already running."},
 	CodeBadContentType:       {Status: 415, Copy: "Send that as JSON."},
 	CodeBadHost:              {Status: 400, Copy: "This address is not Sepia."},

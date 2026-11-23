@@ -1608,3 +1608,11 @@ Skip stays one tap, so nothing is forced.
 
 Tests: the engine refuses and leaves the card a draft, the socket answers `answer_pending` and saves nothing, and the
 save bar is off with the sentence while either question kind is open. Each was watched failing first.
+
+**The review found the guard was half a guard.** Answering resolves the interaction immediately, so the refusal lifted
+the moment she tapped Done, while the agent had not yet written her answer onto the card: a confirm in that gap still
+saved a card without it, and the reducer turned Save back on for the whole model round trip. Both halves now key on the
+answer reaching the card, not on the question being open. The engine refuses while a resolved `describe` or
+`question_form` answer has no matching row on the entry, and the client keeps Save off from her tap until the next
+`draft_snapshot` clears it. `TestConfirmWaitsForHerAnswerToReachTheCard` answers, is refused, adds the answer the way
+`save_entry` does, and then saves with the answer on the entry.

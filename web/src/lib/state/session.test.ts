@@ -265,3 +265,47 @@ describe('the one transcript order', () => {
     expect(timeline(once).map((row) => row.order)).toEqual([1, 2, 3]);
   });
 });
+
+describe('her answers on their way to the card', () => {
+  function at(seq: number, type: string, data: Record<string, unknown>): ServerEvent {
+    return {
+      seq,
+      type,
+      session_id: 's_8f2',
+      ts: '2026-11-23T12:00:00Z',
+      data,
+    } as unknown as ServerEvent;
+  }
+
+  it('keeps Save waiting from her tap until the card is written again', () => {
+    // The agent applies an answer when it writes the card, so the gap between the tap and the write is exactly when a
+    // save would store the card built before she answered (issue #46).
+    let state = applyEvent(
+      emptySession('s_8f2'),
+      at(1, 'interaction_request', { interaction_id: 'i1', kind: 'describe', payload: {} }),
+    ).state;
+    expect(state.answersPending).toBe(false);
+
+    state = applyEvent(
+      state,
+      at(2, 'interaction_resolved', { by: 'user', interaction_id: 'i1' }),
+    ).state;
+    expect(state.interactions).toHaveLength(0);
+    expect(state.answersPending).toBe(true);
+
+    state = applyEvent(state, at(3, 'draft_snapshot', { version: 5, draft: { version: 5 } })).state;
+    expect(state.answersPending).toBe(false);
+  });
+
+  it('does not wait for a choice that carries no answer of hers', () => {
+    let state = applyEvent(
+      emptySession('s_8f2'),
+      at(1, 'interaction_request', { interaction_id: 'i1', kind: 'choose_candidate', payload: {} }),
+    ).state;
+    state = applyEvent(
+      state,
+      at(2, 'interaction_resolved', { by: 'user', interaction_id: 'i1' }),
+    ).state;
+    expect(state.answersPending).toBe(false);
+  });
+});

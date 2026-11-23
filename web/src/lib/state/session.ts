@@ -72,6 +72,11 @@ export interface SessionState {
   blocks: TranscriptBlock[];
   activity: ActivityRow[];
   interactions: OpenInteraction[];
+  /**
+   * True from the moment she answers a Describe or a question until the card is written again. The agent applies her
+   * answers when it writes the card, so a save in that gap would store the card built before she tapped (issue #46).
+   */
+  answersPending: boolean;
   draft: Draft | null;
   draftVersion: number;
   cost: SessionCost;
@@ -98,6 +103,7 @@ export function emptySession(sessionID = ''): SessionState {
     blocks: [],
     activity: [],
     interactions: [],
+    answersPending: false,
     draft: null,
     draftVersion: 0,
     cost: { total: 0, covered: 0 },
@@ -382,15 +388,33 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
 
     case 'interaction_resolved': {
       const data = dataOf<'interaction_resolved'>(event);
-      return { state: { ...state, interactions: withoutInteraction(state, data.interaction_id) } };
+      const answered = state.interactions.find((row) => row.id === data.interaction_id);
+      // Her answer is on its way to the card, not on it: Save waits for the card to be written (issue #46).
+      const pending =
+        state.answersPending ||
+        (answered !== undefined &&
+          (answered.kind === 'describe' || answered.kind === 'question_form'));
+      return {
+        state: {
+          ...state,
+          answersPending: pending,
+          interactions: withoutInteraction(state, data.interaction_id),
+        },
+      };
     }
 
     case 'draft_snapshot': {
       const data = dataOf<'draft_snapshot'>(event);
       // A snapshot that arrives late must not move the card backwards. The version is the ordering rule.
       if (data.version < state.draftVersion) return { state };
+      // The card was written after her answer, which is where the agent puts it.
       return {
-        state: { ...state, draft: data.draft as Draft, draftVersion: data.version },
+        state: {
+          ...state,
+          draft: data.draft as Draft,
+          draftVersion: data.version,
+          answersPending: false,
+        },
       };
     }
 

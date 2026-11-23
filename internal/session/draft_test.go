@@ -502,3 +502,56 @@ func TestConfirmRefusedWhileAQuestionIsOpen(t *testing.T) {
 		t.Errorf("status = %q, want the card left as a draft", entry.Entry.Status)
 	}
 }
+
+// Answering is not the same as the answer being on the card. The agent applies her answers when it writes the card, so
+// a confirm in that gap would save the card built before she tapped. The card has to wait for the write, not the tap.
+func TestConfirmWaitsForHerAnswerToReachTheCard(t *testing.T) {
+	e, db, sess := draftSession(t)
+	ctx := context.Background()
+	if _, err := e.EditDraft(ctx, sess.ID, Edit{BaseVersion: 0, Set: patch(map[string]any{
+		"rating": 18, "body": "A quiet book about light and memory.",
+	})}); err != nil {
+		t.Fatalf("EditDraft: %v", err)
+	}
+	question, err := e.Ask(ctx, sess.ID, "describe", map[string]any{
+		"categories": []any{map[string]any{"id": "feel", "label": "Feel", "tags": []any{}}},
+	})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if _, answerErr := e.Answer(ctx, sess.ID, question.ID,
+		json.RawMessage(`{"selected":{"feel":["moving"]},"skip_all":false}`), "a1"); answerErr != nil {
+		t.Fatalf("Answer: %v", answerErr)
+	}
+	// She has answered, but the card has not been written since: saving now would drop her pick.
+	if _, _, _, pendingErr := e.Confirm(ctx, sess.ID, ConfirmRequest{BaseVersion: 1}); !isRefusal(pendingErr, CodeAnswerPending) {
+		t.Fatalf("Confirm = %v, want a %s refusal", pendingErr, CodeAnswerPending)
+	}
+	// The agent writes the answered card, which is where her answers land.
+	draft, err := e.Draft(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+	if addErr := db.AddAnswers(ctx, draft.Entry.ID, []domain.Answer{
+		{QuestionID: "feel", Category: "feel", Type: domain.AnswerTags, Values: []string{"moving"}},
+	}); addErr != nil {
+		t.Fatalf("AddAnswers: %v", addErr)
+	}
+	entry, _, _, confirmErr := e.Confirm(ctx, sess.ID, ConfirmRequest{BaseVersion: 1})
+	if confirmErr != nil {
+		t.Fatalf("Confirm after the card was written: %v", confirmErr)
+	}
+	answers, err := db.Answers(ctx, entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(answers) != 1 || answers[0].QuestionID != "feel" {
+		t.Errorf("answers = %+v, want her pick on the saved entry", answers)
+	}
+}
+
+// isRefusal reports whether err is a refusal with the given code.
+func isRefusal(err error, code string) bool {
+	var refusal *Refusal
+	return errors.As(err, &refusal) && refusal.Code == code
+}
