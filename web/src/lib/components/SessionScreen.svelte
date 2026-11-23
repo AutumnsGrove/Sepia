@@ -13,7 +13,7 @@
   import { copyFor } from '../contract/codes';
   import { composerState } from '../session/composer';
   import { errorText, problemText, uiCopy } from '../session/copy';
-  import { saveState } from '../session/requirements';
+  import { saveState, waitingOnAnswer } from '../session/requirements';
   import {
     cardMode,
     sessionTitle,
@@ -75,7 +75,16 @@
   const closed = $derived(session.status !== 'active');
   const working = $derived(isWorking(session));
   const rows = $derived(timeline(session));
-  const save = $derived(saveState(session.draft));
+  // A card can be ready while a question that carries her answer is still open; saving then would drop the answer
+  // (issue #46), so the bar says so and Save waits for her answer or her skip.
+  const answerPending = $derived(
+    session.answersPending
+      ? 'Saving waits until your answer is on the card'
+      : waitingOnAnswer(session.interactions.map((row) => row.kind))
+        ? 'Answer or skip the question first'
+        : '',
+  );
+  const save = $derived(saveState(session.draft, answerPending));
   const unverifiedCount = $derived(
     (session.draft?.unverified ?? []).filter((field) => field.from_image !== true).length,
   );

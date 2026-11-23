@@ -623,6 +623,10 @@ const eventsSchema = `{
             "type": "string",
             "maxLength": 64
           }
+        },
+        "answers_pending": {
+          "type": "boolean",
+          "description": "True while an answer she has given is not on the card yet: the agent applies her answers when it writes the card, so a save in that gap would store the card built before she tapped (issue #46)."
         }
       },
       "additionalProperties": false
@@ -1238,6 +1242,10 @@ const eventsSchema = `{
                         "user",
                         "server"
                       ]
+                    },
+                    "answers_pending": {
+                      "type": "boolean",
+                      "description": "True when the resolution carried an answer of hers that is not on the card yet. A skip carries none."
                     }
                   },
                   "additionalProperties": false

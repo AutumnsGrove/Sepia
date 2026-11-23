@@ -7,6 +7,11 @@
       "copy": "That field was already accepted."
     },
     {
+      "code": "answer_pending",
+      "status": 409,
+      "copy": "Your answer is still on its way to the card."
+    },
+    {
       "code": "backup_in_progress",
       "status": 409,
       "copy": "A backup is already running."

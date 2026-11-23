@@ -110,7 +110,7 @@ something new.
 | `draft_edit` | `base_version`, `set` (field to value map) | Direct edit of the card. Stale `base_version` means `rejected` plus a fresh `draft_snapshot` |
 | `accept_unverified` | `base_version`, `fields[]` or `all` | Accept web-derived or manual fields into the canonical work |
 | `include_left_out` | `base_version`, `segment_id` | Move a left-out segment into the body |
-| `confirm` | `base_version` | The one commit. Rejected if the version is stale or the card does not satisfy section 2 of `ENTRY_CARD.md` |
+| `confirm` | `base_version` | The one commit. Rejected if the version is stale, the card does not satisfy section 2 of `ENTRY_CARD.md`, or a `describe`/`question_form` question is still open, or she has answered one and the answer is not on the card yet: saving in either gap would store the card the model built before her answer (`answer_pending`) |
 | `retry` | none | Runs the failed turn again for her last message. The message is already stored, so it is not appended a second time. Refused while a turn is in flight |
 | `reopen` | `entry_id`, `mode` (`revision` or `new`), `revision` (optional) | Opens a draft of a saved entry, so Edit on a saved card needs no new lookup. `mode: revision` is the ordinary edit and keeps the previous version in the revisions table; `mode: new` is Log again, a fresh card on the same work with nothing filled in. `revision: n` restores that version as the draft, so confirming makes it the newest version and keeps the one it replaced. The session must be active and have no card yet, and the entry must be saved and not deleted |
 | `discard` | none | Throw the draft away; the session closes |
@@ -130,6 +130,12 @@ the current `draft_snapshot`.
 - **Offline outbox.** While the socket is down, the client keeps what I type, marked "will send when you are back online", and sends it on reconnect with its original `client_msg_id`, so a message typed in a tunnel is neither lost nor sent twice.
 - **Idempotency.** The server remembers each `client_msg_id` for the life of the session. A repeat gets
   `ack: duplicate` carrying the first outcome, and changes nothing.
+- **An answer is on the card, not just in the log.** `draft_snapshot`'s card carries `answers_pending`: true while a
+  `describe`/`question_form` answer she gave has no matching row on the entry. The agent re-publishes the card once it
+  stores her answers, which is the snapshot that clears it, and a `confirm` in the gap is refused. The
+  `interaction_resolved` event carries `answers_pending` too, so a tap that lands after the turn ended still says so,
+  and a skip carries none: skipping never holds Save up. `hello`'s draft carries it for a reconnect that has no
+  snapshot to replay.
 - **An answer outlives the turn that asked.** A turn can end while a card is still waiting, and her tap can arrive
   after it. The answer is stored either way, and the next turn for that session reads the answers already given
   instead of offering the same question again. A question is never answered twice into the card: the first answer

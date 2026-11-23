@@ -4,6 +4,7 @@
 
 export const errorCodes = {
   'already_accepted': { status: 409, copy: 'That field was already accepted.' },
+  'answer_pending': { status: 409, copy: 'Your answer is still on its way to the card.' },
   'backup_in_progress': { status: 409, copy: 'A backup is already running.' },
   'bad_content_type': { status: 415, copy: 'Send that as JSON.' },
   'bad_host': { status: 400, copy: 'This address is not Sepia.' },
