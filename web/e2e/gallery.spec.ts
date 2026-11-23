@@ -64,6 +64,23 @@ const states = [
 ];
 
 test.describe('the gallery', () => {
+  // Not in the `states` list: this one has no section to screenshot, it has a fallback to find. It is the probe for
+  // issue #40, where a render error replaced the whole app with SvelteKit's bare 500 page.
+  test('a screen that throws keeps the app and offers a way out', async ({ page }) => {
+    await page.goto('/gallery?state=boundary');
+    await expect(page.getByRole('heading', { name: 'This screen did not load' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();
+    // The fallback is a screen inside the app, not the whole document.
+    await expect(page.locator('main')).toHaveCount(1);
+  });
+
+  test('a path that does not exist says so, and points home', async ({ page }) => {
+    await page.goto('/no-such-screen');
+    await expect(page.getByRole('heading', { name: 'There is nothing here' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
+  });
+
   test('lists every state', async ({ page }) => {
     await page.goto('/gallery');
     await expect(page.getByRole('heading', { level: 1, name: 'Gallery' })).toBeVisible();
