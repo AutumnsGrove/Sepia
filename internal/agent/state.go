@@ -14,6 +14,7 @@ import (
 	"github.com/AutumnsGrove/nova/message"
 	"github.com/AutumnsGrove/nova/provider"
 
+	"github.com/AutumnsGrove/sepia/internal/banks"
 	"github.com/AutumnsGrove/sepia/internal/decisions"
 	"github.com/AutumnsGrove/sepia/internal/domain"
 	"github.com/AutumnsGrove/sepia/internal/providers"
@@ -184,6 +185,10 @@ func (s *RunState) ask(ctx context.Context, kind string, payload any) (json.RawM
 // still waiting: a timeout, a restart, a retry. The answer is stored either way, but the turn that asked is gone, so
 // the next turn reads it from the log instead of asking again and dropping what she already tapped (issue #39).
 //
+// The answers go through the same bank the live path uses. A choice option's label is what the client sends and what
+// she reads on the button; the stable value is what the card stores, so a hydrated answer is mapped exactly as
+// askQuestions maps one. A question the bank no longer offers keeps what it was given rather than being dropped.
+//
 // The categories and questions are walked in the payload's order, not the answer map's, so the card's answers come out
 // in the order they were offered. A question answered twice keeps the newer answer: the older one is what she
 // corrected.
@@ -193,6 +198,7 @@ func (s *RunState) rememberAnswers(ctx context.Context) {
 		s.Agent.log.Warn("answered questions could not be read", "session", s.SessionID, "err", err.Error())
 		return
 	}
+	chips, offeredQuestions := s.offeredVocabulary()
 	at := make(map[string]int, len(s.Answers))
 	for i, answer := range s.Answers {
 		at[answer.QuestionID] = i
@@ -222,6 +228,12 @@ func (s *RunState) rememberAnswers(ctx context.Context) {
 				if len(values) == 0 {
 					continue
 				}
+				if offered := chips[category.ID]; offered != nil {
+					values = mapThrough(values, offered)
+				}
+				if len(values) == 0 {
+					continue
+				}
 				put(domain.Answer{
 					QuestionID: category.ID, Category: category.ID, Type: domain.AnswerTags, Values: values,
 				})
@@ -232,34 +244,68 @@ func (s *RunState) rememberAnswers(ctx context.Context) {
 			if json.Unmarshal(question.Payload, &payload) != nil || json.Unmarshal(question.Resolution, &answer) != nil {
 				continue
 			}
-			got := make(map[string]struct {
-				Value   string
-				Values  []string
-				Skipped bool
-			}, len(answer.Answers))
+			given := make(map[string]questionAnswerItem, len(answer.Answers))
 			for _, item := range answer.Answers {
-				got[item.ID] = struct {
-					Value   string
-					Values  []string
-					Skipped bool
-				}{item.Value, item.Values, item.Skipped}
+				given[item.ID] = item
 			}
 			for _, item := range payload.Questions {
-				given, ok := got[item.ID]
+				got, ok := given[item.ID]
 				if !ok {
 					continue
 				}
-				values := given.Values
-				if len(values) == 0 && given.Value != "" {
-					values = []string{given.Value}
+				values := got.Values
+				if len(values) == 0 && got.Value != "" {
+					values = []string{got.Value}
+				}
+				if question, known := offeredQuestions[item.ID]; known {
+					values = matchOptions(question, values)
 				}
 				put(domain.Answer{
 					QuestionID: item.ID, Prompt: item.Prompt, Type: domain.AnswerType(item.Type),
-					Values: values, Skipped: given.Skipped || len(values) == 0,
+					Values: values, Skipped: got.Skipped || len(values) == 0,
 				})
 			}
 		}
 	}
+}
+
+// offeredVocabulary is the bank's chips and questions for this turn's medium, keyed the way askDescribe and
+// askQuestions key them: a category's chip label or value onto its value, and a question by its id.
+func (s *RunState) offeredVocabulary() (map[string]map[string]string, map[string]banks.Question) {
+	if s.Medium == "" || s.Agent.banks == nil {
+		return nil, nil
+	}
+	selection, err := banks.Select(s.Agent.banks, banks.Request{Medium: s.Medium, Format: s.MediumFormat()})
+	if err != nil {
+		s.Agent.log.Warn("the question bank could not be read for her earlier answers", "err", err.Error())
+		return nil, nil
+	}
+	chips := make(map[string]map[string]string, len(selection.Categories))
+	for _, category := range selection.Categories {
+		values := make(map[string]string, len(category.Chips))
+		for _, chip := range category.Chips {
+			values[chip.Value] = chip.Value
+			values[chip.Label] = chip.Value
+		}
+		chips[category.Name] = values
+	}
+	questions := make(map[string]banks.Question, len(selection.Questions))
+	for _, question := range selection.Questions {
+		questions[question.ID] = question
+	}
+	return chips, questions
+}
+
+// mapThrough keeps the values the offered set knows, in the order they were given. Anything else is not a chip she
+// could have tapped.
+func mapThrough(values []string, offered map[string]string) []string {
+	kept := make([]string, 0, len(values))
+	for _, value := range values {
+		if mapped, ok := offered[value]; ok {
+			kept = append(kept, mapped)
+		}
+	}
+	return kept
 }
 
 // answered reports whether this turn already holds an answer for a question, so it is not offered again.

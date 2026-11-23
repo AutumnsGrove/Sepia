@@ -1134,3 +1134,62 @@ func TestReviewerAsksNothingSheHasAlreadyAnswered(t *testing.T) {
 		t.Errorf("the reviewer asked %d questions she had already answered: %+v", len(open), open)
 	}
 }
+
+// A remembered answer is mapped the way the live one is: the client sends the option's label, and the card stores the
+// option's stable value. Read raw, the card would say "It landed" where the live path says "landed".
+func TestRememberedAnswersMapLabelsLikeTheLivePath(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, rigOptions{script: bookScript()})
+	scriptBook(r.fake)
+	sess, _ := r.session.CreateEntry(ctx)
+	selection, err := banks.Select(r.agent.banks, banks.Request{Medium: "book"})
+	if err != nil {
+		t.Fatalf("banks.Select: %v", err)
+	}
+	var question banks.Question
+	var option banks.Option
+	for _, candidate := range selection.Questions {
+		if candidate.Type != "choice" {
+			continue
+		}
+		for _, candidateOption := range candidate.Options {
+			if candidateOption.Label != candidateOption.Value {
+				question, option = candidate, candidateOption
+				break
+			}
+		}
+		if question.ID != "" {
+			break
+		}
+	}
+	if question.ID == "" {
+		t.Fatal("no choice question whose label differs from its value")
+	}
+	payload := questionPayload{Questions: []questionItem{{
+		ID: question.ID, Prompt: question.Prompt, Type: question.Type,
+	}}}
+	opened, err := r.session.Ask(ctx, sess.ID, "question_form", payload)
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	resolution, err := json.Marshal(questionAnswer{Answers: []questionAnswerItem{
+		{ID: question.ID, Value: option.Label},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// She answered after the turn that asked had ended.
+	if _, err := r.session.Answer(ctx, sess.ID, opened.ID, json.RawMessage(resolution), "answer-1"); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+
+	state := &RunState{Agent: r.agent, SessionID: sess.ID, Medium: "book"}
+	state.rememberAnswers(ctx)
+	if len(state.Answers) != 1 {
+		t.Fatalf("answers = %+v, want one", state.Answers)
+	}
+	got := state.Answers[0].Values
+	if len(got) != 1 || got[0] != option.Value {
+		t.Errorf("values = %v, want the stable value %q rather than the label %q", got, option.Value, option.Label)
+	}
+}
