@@ -948,7 +948,7 @@ func (q *Queries) ListAnswers(ctx context.Context, entryID string) ([]Answer, er
 const listDecisionCalls = `-- name: ListDecisionCalls :many
 SELECT id, session_id, message_index, backend, model, odds_json, fired_json, cost_usd, latency_ms, created_at, cost_source, allowance_usd FROM decision_calls
 WHERE session_id = ?1
-ORDER BY created_at, id
+ORDER BY created_at, rowid
 LIMIT ?2
 `
 
@@ -958,6 +958,8 @@ type ListDecisionCallsParams struct {
 }
 
 // A session's decisions calls, oldest first, for the "why" sheet. The ledger holds odds and costs, never her text.
+// created_at is whole seconds, so two calls in the same second tie; rowid is insertion order, while id is random, so
+// id would let a later pre-read come back before the one it supersedes (and the sheet would keep the stale odds).
 func (q *Queries) ListDecisionCalls(ctx context.Context, arg ListDecisionCallsParams) ([]DecisionCall, error) {
 	rows, err := q.db.QueryContext(ctx, listDecisionCalls, arg.SessionID, arg.RowLimit)
 	if err != nil {
