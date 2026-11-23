@@ -68,6 +68,8 @@ type Querier interface {
 	ListActiveSessions(ctx context.Context, limit int64) ([]Session, error)
 	ListAnswers(ctx context.Context, entryID string) ([]Answer, error)
 	// A session's decisions calls, oldest first, for the "why" sheet. The ledger holds odds and costs, never her text.
+	// created_at is whole seconds, so two calls in the same second tie; rowid is insertion order, while id is random, so
+	// id would let a later pre-read come back before the one it supersedes (and the sheet would keep the stale odds).
 	ListDecisionCalls(ctx context.Context, arg ListDecisionCallsParams) ([]DecisionCall, error)
 	// The Deleted list: soft-deleted saved entries, the most recently deleted first. It is the only list that shows
 	// them, and restore is the only way out of it. Its filters are CountDeleted's, so the count and the rows agree: an
