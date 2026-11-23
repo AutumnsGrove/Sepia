@@ -79,6 +79,10 @@ browser:
 
 - **Update is refused while a reply is being written,** and the panel says "Finish the reply first". A turn in
   flight would be killed by the restart. Drafts, sessions and entries are in SQLite and are untouched.
+- **A turn waiting on her answer does not block an update.** The clock stops while she decides, so such a turn would
+  otherwise never end and no update could run until she answered — on the very screen the update refreshes (issue
+  #47). The restart kills nothing she is reading, her answer is stored if she taps it afterwards, and the next turn
+  reads it ([`PROTOCOL.md`](PROTOCOL.md) section 6).
 - **Open sessions reconnect on their own.** The WebSocket drops, the client reconnects with its last
   sequence number ([`PROTOCOL.md`](PROTOCOL.md) section 6), and the update never loses a draft.
 - **The new server may carry a new embedded frontend.** `hello` includes the server's version, and a client
