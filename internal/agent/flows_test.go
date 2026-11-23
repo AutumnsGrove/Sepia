@@ -12,6 +12,7 @@ import (
 	"github.com/AutumnsGrove/nova/provider"
 	"github.com/AutumnsGrove/nova/tool"
 
+	"github.com/AutumnsGrove/sepia/internal/banks"
 	"github.com/AutumnsGrove/sepia/internal/domain"
 	"github.com/AutumnsGrove/sepia/internal/providers"
 	"github.com/AutumnsGrove/sepia/internal/session"
@@ -1006,5 +1007,130 @@ func TestPipelineHerAnswerDoesNotSpendTheDeadline(t *testing.T) {
 	}
 	if len(answers) == 0 {
 		t.Error("the picks she tapped were not recorded")
+	}
+}
+
+// Her answer must outlive the turn that asked for it. A turn that times out while a card waits leaves the answer with
+// nobody to take it, and the retry used to ask her the same thing again and drop the first answer (issue #39).
+func TestPipelineHerAnswerOutlivesTheTurnThatAsked(t *testing.T) {
+	ctx := context.Background()
+	// The first turn ends while the Describe card waits, which is what a timeout or a restart leaves behind. It is
+	// stopped here rather than timed out because the clock pauses while she decides, by design.
+	first := newRig(t, rigOptions{script: bookScript()})
+	scriptBook(first.fake)
+	// No answer is scripted for the Describe card, so the tool that opened it gives up, the turn finishes, and the
+	// card is left waiting with her name on it: the state a timeout or a restart leaves behind.
+	first.responder.script("choose_candidate", "openlibrary|OL1W")
+	sess, _ := first.session.CreateEntry(ctx)
+	if _, err := first.agent.HandleMessage(ctx, TurnInput{SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1"}); err != nil {
+		t.Fatalf("first turn: %v", err)
+	}
+	open, err := first.store.OpenInteractions(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var describe domain.Interaction
+	for _, question := range open {
+		if question.Kind == "describe" {
+			describe = question
+		}
+	}
+	if describe.ID == "" {
+		t.Fatalf("no describe card was left open: %+v", open)
+	}
+	// She taps the chips after the turn is gone. The service stores the answer and acknowledges it; it used to go
+	// nowhere.
+	if _, answerErr := first.session.Answer(ctx, sess.ID, describe.ID,
+		json.RawMessage(`{"selected":{"feel":["moving"]},"skip_all":false}`), "answer-1"); answerErr != nil {
+		t.Fatalf("Answer: %v", answerErr)
+	}
+
+	// The retry runs the same message again on the same session. Its transcript already carries the first turn's
+	// replies, so the world's script is indexed past them: every slot is a save_entry, and the card is rebuilt with
+	// what she has answered.
+	saves := make([]world.ChatTurn, 8)
+	for i := range saves {
+		saves[i] = world.ChatTurn{ToolCalls: []world.ChatToolCall{toolCall(
+			fmt.Sprintf("retry-%d", i), "save_entry",
+			`{"body_quotes":["the middle dragged a bit but the end stayed with me"],"verdict_quote":"stayed with me"}`,
+		)}}
+	}
+	second := newRig(t, rigOptions{script: append(saves, world.ChatTurn{Text: "The card is ready."})})
+	second.store = first.store
+	second.session = first.session
+	second.agent.store = first.store
+	second.agent.session = first.session
+	second.responder.session = first.session
+	second.responder.store = first.store
+	scriptBook(second.fake)
+	out, err := second.agent.HandleMessage(ctx, TurnInput{
+		SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1", Retry: true,
+	})
+	if err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if out.Draft == nil {
+		t.Fatal("no card after the retry")
+	}
+	all, err := first.store.Interactions(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	describes := 0
+	for _, question := range all {
+		if question.Kind == "describe" {
+			describes++
+		}
+	}
+	if describes != 1 {
+		t.Errorf("the describe card was offered %d times, want once: her answer was already there", describes)
+	}
+	answers, err := first.store.Answers(ctx, out.Draft.Entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, answer := range answers {
+		if answer.QuestionID == "feel" && len(answer.Values) == 1 && answer.Values[0] == "moving" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("answers = %+v, want her pick: feel = moving", answers)
+	}
+}
+
+// The reviewer asks only for what she has not answered. A card a finished turn left behind has her picks in the log,
+// and offering the same questions again is how her first answer got lost (issue #39).
+func TestReviewerAsksNothingSheHasAlreadyAnswered(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, rigOptions{script: bookScript()})
+	scriptBook(r.fake)
+	sess, _ := r.session.CreateEntry(ctx)
+	selection, err := banks.Select(r.agent.banks, banks.Request{
+		Medium: "book", CoveredTopics: []string{"story", "pacing"},
+	})
+	if err != nil {
+		t.Fatalf("banks.Select: %v", err)
+	}
+	answers := []domain.Answer{
+		{QuestionID: "feel", Category: "feel", Type: domain.AnswerTags, Values: []string{"moving"}},
+	}
+	for _, question := range selection.Questions {
+		answers = append(answers, domain.Answer{
+			QuestionID: question.ID, Prompt: question.Prompt, Type: domain.AnswerType(question.Type),
+			Values: []string{"the ending landed"},
+		})
+	}
+	state := &RunState{Agent: r.agent, SessionID: sess.ID, Medium: "book", AskedDescribe: true, Answers: answers}
+	if _, askErr := askReviewer(ctx, json.RawMessage(`{}`), &tool.Context{Data: state}); askErr != nil {
+		t.Fatalf("askReviewer: %v", askErr)
+	}
+	open, err := r.store.OpenInteractions(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(open) != 0 {
+		t.Errorf("the reviewer asked %d questions she had already answered: %+v", len(open), open)
 	}
 }

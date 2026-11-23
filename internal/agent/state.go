@@ -180,6 +180,98 @@ func (s *RunState) ask(ctx context.Context, kind string, payload any) (json.RawM
 	return s.waitForHer(ctx, question.ID)
 }
 
+// rememberAnswers seeds the turn with the answers she has already given in this session. A turn can end with a card
+// still waiting: a timeout, a restart, a retry. The answer is stored either way, but the turn that asked is gone, so
+// the next turn reads it from the log instead of asking again and dropping what she already tapped (issue #39).
+//
+// The categories and questions are walked in the payload's order, not the answer map's, so the card's answers come out
+// in the order they were offered. A question answered twice keeps the newer answer: the older one is what she
+// corrected.
+func (s *RunState) rememberAnswers(ctx context.Context) {
+	answered, err := s.Agent.session.Answered(ctx, s.SessionID)
+	if err != nil {
+		s.Agent.log.Warn("answered questions could not be read", "session", s.SessionID, "err", err.Error())
+		return
+	}
+	at := make(map[string]int, len(s.Answers))
+	for i, answer := range s.Answers {
+		at[answer.QuestionID] = i
+	}
+	put := func(answer domain.Answer) {
+		if i, seen := at[answer.QuestionID]; seen {
+			s.Answers[i] = answer
+			return
+		}
+		at[answer.QuestionID] = len(s.Answers)
+		s.Answers = append(s.Answers, answer)
+	}
+	for _, question := range answered {
+		switch question.Kind {
+		case "describe":
+			var payload describePayload
+			var answer describeAnswer
+			if json.Unmarshal(question.Payload, &payload) != nil || json.Unmarshal(question.Resolution, &answer) != nil {
+				continue
+			}
+			s.AskedDescribe = true
+			if answer.SkipAll {
+				s.skipAll = true
+			}
+			for _, category := range payload.Categories {
+				values := answer.Selected[category.ID]
+				if len(values) == 0 {
+					continue
+				}
+				put(domain.Answer{
+					QuestionID: category.ID, Category: category.ID, Type: domain.AnswerTags, Values: values,
+				})
+			}
+		case "question_form":
+			var payload questionPayload
+			var answer questionAnswer
+			if json.Unmarshal(question.Payload, &payload) != nil || json.Unmarshal(question.Resolution, &answer) != nil {
+				continue
+			}
+			got := make(map[string]struct {
+				Value   string
+				Values  []string
+				Skipped bool
+			}, len(answer.Answers))
+			for _, item := range answer.Answers {
+				got[item.ID] = struct {
+					Value   string
+					Values  []string
+					Skipped bool
+				}{item.Value, item.Values, item.Skipped}
+			}
+			for _, item := range payload.Questions {
+				given, ok := got[item.ID]
+				if !ok {
+					continue
+				}
+				values := given.Values
+				if len(values) == 0 && given.Value != "" {
+					values = []string{given.Value}
+				}
+				put(domain.Answer{
+					QuestionID: item.ID, Prompt: item.Prompt, Type: domain.AnswerType(item.Type),
+					Values: values, Skipped: given.Skipped || len(values) == 0,
+				})
+			}
+		}
+	}
+}
+
+// answered reports whether this turn already holds an answer for a question, so it is not offered again.
+func (s *RunState) answered(questionID string) bool {
+	for _, answer := range s.Answers {
+		if answer.QuestionID == questionID {
+			return true
+		}
+	}
+	return false
+}
+
 // waitForHer blocks on her answer with the turn's deadline stopped. Only an explicit stop, which cancels the
 // context, ends the wait early.
 func (s *RunState) waitForHer(ctx context.Context, interactionID string) (json.RawMessage, error) {

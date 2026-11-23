@@ -1523,3 +1523,27 @@ so one render error still blanks the whole app; that is what made the entry unre
 
 **Live check for the operator.** After the update, open the half-finished *A Closed and Common Orbit* draft on the
 potato. It should open on the card, and **How this was read** should show each check once.
+
+## 2026-11-22, fix, an answer outlives the turn that asked for it
+
+**The bug she hit.** On 2026-11-15 the agent opened a Describe card and the turn ended while it waited. Eight days
+later she tapped the chips and submitted: the server wrote `interaction_resolved by user` and acknowledged it, and then
+nothing happened. `Engine.Answer` resolves the interaction row and `hub.responder.deliver` hands the value to the turn
+waiting on it, and by then there was no turn. The retry that followed asked the same question again under a new id, the
+card's `answers` block was still empty, and her taps looked like they had been thrown away. They had been: the answers
+only ever lived in the turn's memory.
+
+**Fixed.** A turn now starts by reading the answers the session already has (`Engine.Answered`, then
+`RunState.rememberAnswers`), and `ask_reviewer` offers only what she has not answered: a Describe she has answered is
+not offered again, and a question already in the card is left out of the form. `AddAnswers` also refuses a second row
+for the same question, because an answer is never deleted and a retried turn says the same answers again; a duplicate
+would put one question on the card twice.
+
+**What this does not do.** It does not resume the turn that died, and it does not re-run the model on its own: the next
+turn (her next message, or Try again) is what reads the answers. The alternative — starting a turn when an answer
+arrives with no waiter — was rejected because it cannot survive a restart, which is half of what leaves a card waiting.
+
+**Tests, each seen failing first.** `TestPipelineHerAnswerOutlivesTheTurnThatAsked` runs a turn that ends with the
+Describe card open, answers it, then retries: the card must carry her pick. `TestReviewerAsksNothingSheHasAlreadyAnswered`
+proves the form is not offered again. `TestAddAnswersDoesNotAddASecondAnswerForAQuestion` failed with two rows before
+the store change.

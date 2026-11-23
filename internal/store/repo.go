@@ -583,7 +583,22 @@ func (s *Store) EntryTags(ctx context.Context, entryID string) ([]domain.Tag, er
 func (s *Store) AddAnswers(ctx context.Context, entryID string, answers []domain.Answer) error {
 	now := s.Now().UTC().Format(timeLayout)
 	return s.InTx(ctx, func(q *db.Queries) error {
+		// An answer is never deleted (invariant 4), so the first one she gave for a question is the one that stands.
+		// A retried turn remembers the answers it already has and offers them again; a second row would put the same
+		// question on the card twice.
+		existing, err := q.ListAnswers(ctx, entryID)
+		if err != nil {
+			return fmt.Errorf("store: list answers: %w", err)
+		}
+		held := make(map[string]bool, len(existing))
+		for _, row := range existing {
+			held[row.QuestionID] = true
+		}
 		for _, a := range answers {
+			if held[a.QuestionID] {
+				continue
+			}
+			held[a.QuestionID] = true
 			values, err := json.Marshal(a.Values)
 			if err != nil {
 				return fmt.Errorf("store: encode answer: %w", err)
