@@ -235,15 +235,20 @@ func TestSearchFilters(t *testing.T) {
 	searchable(t, s, "e-book", "Piranesi", "slow to start", "book", 17, "2026-09-28")
 	ctx := context.Background()
 
+	favourite := true
+	if err := raw(t, s, `UPDATE entries SET favourite = 1 WHERE id = 'e-film'`); err != nil {
+		t.Fatalf("favourite: %v", err)
+	}
 	cases := map[string]domain.SearchQuery{
 		"medium":     {Text: "slow", Medium: "book"},
+		"favourite":  {Text: "slow", Favourite: &favourite},
 		"rating min": {Text: "slow", RatingMin: 18},
 		"rating max": {Text: "slow", RatingMax: 18},
 		"date from":  {Text: "slow", From: "2026-10-01"},
 		"date to":    {Text: "slow", To: "2026-09-30"},
 	}
 	want := map[string]string{
-		"medium": "e-book", "rating min": "e-film", "rating max": "e-book",
+		"medium": "e-book", "favourite": "e-film", "rating min": "e-film", "rating max": "e-book",
 		"date from": "e-film", "date to": "e-book",
 	}
 	for name, query := range cases {
@@ -317,5 +322,94 @@ func TestRebuildSearchIndex(t *testing.T) {
 	}
 	if hits, total := search(t, s, "slow"); len(hits) != 2 || total != 2 {
 		t.Fatalf("hits = %+v total = %d", hits, total)
+	}
+}
+
+// Bad: the index can name an entry the table does not have, and the counts can still agree (one row extra, one row
+// missing). The hit is skipped rather than answered with half a row, and the rest of the page is still served.
+func TestSearchSkipsAnIndexRowWithNoEntry(t *testing.T) {
+	s := openTest(t)
+	searchable(t, s, "e1", "Dune", "the world felt so lived in", "book", 18, "2026-10-30")
+	// A ghost row and a saved entry that is not indexed: two rows in the index, two in the library, so nothing looks
+	// out of step and the repair does not run.
+	if err := raw(t, s, `INSERT INTO entries_fts (entry_id, title, body, answers) VALUES ('ghost', 'Dune', 'lived', '')`); err != nil {
+		t.Fatalf("ghost row: %v", err)
+	}
+	if err := raw(t, s, `DELETE FROM entries_fts WHERE entry_id = 'e1'`); err != nil {
+		t.Fatalf("unindex the entry: %v", err)
+	}
+	if err := raw(t, s, `UPDATE entries SET body = 'the world felt drunk in' WHERE id = 'e1'`); err != nil {
+		t.Fatalf("leave the entry unindexed: %v", err)
+	}
+	hits, total, err := s.Search(context.Background(), domain.SearchQuery{Text: "lived", Limit: 10})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	// The ghost is skipped rather than answered with a half row. The count joins the entries table, so a row naming no
+	// entry is not counted either: the page and the count agree, which is what the screen says out loud.
+	if len(hits) != 0 || total != 0 {
+		t.Fatalf("hits = %+v, total = %d, want the ghost skipped", hits, total)
+	}
+}
+
+// Sad: a store that is closed says so rather than answering from nothing, on all three search paths.
+func TestSearchOnAClosedStore(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	searchable(t, s, "e1", "Dune", "the world felt so lived in", "book", 18, "2026-10-30")
+	if err := s.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if _, _, err := s.Search(ctx, domain.SearchQuery{Text: "lived", Limit: 10}); err == nil {
+		t.Error("a search on a closed store was answered")
+	}
+	if _, err := s.SearchIndexDrifted(ctx); err == nil {
+		t.Error("a drift check on a closed store was answered")
+	}
+	if _, err := s.RebuildSearchIndex(ctx); err == nil {
+		t.Error("a rebuild on a closed store was answered")
+	}
+}
+
+// The count the list shows is the filters', not the page's, and every filter the list has narrows it.
+func TestLibraryCountFollowsTheFilters(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	searchable(t, s, "e-film", "Blade Runner 2049", "slow and deliberate", "film", 19, "2026-10-27")
+	if err := s.SaveWork(ctx, domain.Work{ID: "w-e-book", Medium: "book", Title: "Piranesi"}); err != nil {
+		t.Fatalf("book work: %v", err)
+	}
+	book := sampleEntry("e-book", "w-e-book", 15)
+	book.Status, book.Completion, book.FinishedOn, book.Favourite = domain.StatusSaved, domain.CompletionFinished, "2026-09-28", true
+	if err := s.CreateDraft(ctx, book); err != nil {
+		t.Fatalf("book: %v", err)
+	}
+	searchable(t, s, "e-want", "House of Leaves", "meant to read it", "book", 0, "")
+	if err := raw(t, s, `UPDATE entries SET completion = 'want_to', rating_q = 0 WHERE id = 'e-want'`); err != nil {
+		t.Fatalf("wish: %v", err)
+	}
+	favorite := true
+	cases := map[string]struct {
+		query domain.LibraryQuery
+		want  int
+	}{
+		"the library":   {domain.LibraryQuery{}, 2},
+		"a medium":      {domain.LibraryQuery{Medium: "book"}, 1},
+		"a favourite":   {domain.LibraryQuery{Favourite: &favorite}, 1},
+		"a rating min":  {domain.LibraryQuery{RatingMin: 16}, 1},
+		"a rating max":  {domain.LibraryQuery{RatingMax: 16}, 1},
+		"a date range":  {domain.LibraryQuery{From: "2026-09-01", To: "2026-09-30"}, 1},
+		"a shelf":       {domain.LibraryQuery{Shelf: domain.CompletionWantTo}, 1},
+		"the deleted":   {domain.LibraryQuery{Deleted: true}, 0},
+		"nothing there": {domain.LibraryQuery{Medium: "album"}, 0},
+	}
+	for name, c := range cases {
+		got, err := s.LibraryCount(ctx, c.query)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got != c.want {
+			t.Errorf("%s: count = %d, want %d", name, got, c.want)
+		}
 	}
 }
