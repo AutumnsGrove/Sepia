@@ -546,8 +546,12 @@ export interface components {
             kind: "entry" | "work" | "chat";
             id: string;
             title: string;
+            /** @description The sentence the match was found in. The matched words are wrapped in U+E000 and U+E001, Unicode private-use characters rather than HTML: the snippet is her own text, so the browser escapes everything between them and a review of "<script>" stays a sentence about a script. Empty when only the title matched, because the row already shows the title. */
             snippet: string;
+            /** @description A relevance score where a bigger number is a better match. The order already follows it. */
             score?: number;
+            /** @description The entry the hit names, with its work, so a result row draws without a request per hit. Present for kind entry, which is the only kind produced today. */
+            entry?: components["schemas"]["Entry"];
         };
         ExportJob: {
             id: string;
@@ -820,6 +824,14 @@ export interface operations {
                 work?: string;
                 /** @description The shelf. Omitted is the library proper, which is everything she has reviewed: finished and abandoned, but not a work she only means to read, because a wish is not a review and has no finish date to group by. want_to is that list, one chip away. */
                 completion?: components["schemas"]["Completion"];
+                /** @description The lowest quarter-star rating the list includes, 1 to 20. */
+                rating_min?: number;
+                /** @description The highest quarter-star rating the list includes, 1 to 20. */
+                rating_max?: number;
+                /** @description The earliest finish date the list includes. An entry with no finish date is outside a date filter. */
+                finished_from?: string;
+                /** @description The latest finish date the list includes, inclusive. */
+                finished_to?: string;
                 sort?: components["schemas"]["LibrarySort"];
                 /** @description false is the library, which hides deleted entries. true is the Deleted list, which holds only them. A deleted entry is never paged with the entries that are still there. */
                 deleted?: boolean;
@@ -842,6 +854,8 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["Entry"][];
                         next_cursor: string | null;
+                        /** @description How many entries the filters hold in all, not how many are on this page. It does not change with the cursor: a total that grew as the reader scrolled would not be one. */
+                        total: number;
                     };
                 };
             };
@@ -987,6 +1001,8 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: components["schemas"]["SearchHit"][];
+                        /** @description How many entries matched, not how many fitted on the page. */
+                        total: number;
                     };
                 };
             };
