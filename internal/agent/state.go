@@ -198,7 +198,7 @@ func (s *RunState) rememberAnswers(ctx context.Context) {
 		s.Agent.log.Warn("answered questions could not be read", "session", s.SessionID, "err", err.Error())
 		return
 	}
-	chips, offeredQuestions := s.offeredVocabulary()
+	chips, offeredQuestions := s.offeredVocabulary(ctx)
 	at := make(map[string]int, len(s.Answers))
 	for i, answer := range s.Answers {
 		at[answer.QuestionID] = i
@@ -271,11 +271,16 @@ func (s *RunState) rememberAnswers(ctx context.Context) {
 
 // offeredVocabulary is the bank's chips and questions for this turn's medium, keyed the way askDescribe and
 // askQuestions key them: a category's chip label or value onto its value, and a question by its id.
-func (s *RunState) offeredVocabulary() (map[string]map[string]string, map[string]banks.Question) {
-	if s.Medium == "" || s.Agent.banks == nil {
+func (s *RunState) offeredVocabulary(ctx context.Context) (map[string]map[string]string, map[string]banks.Question) {
+	medium := s.reviewMedium(ctx)
+	if medium == "" || s.Agent.banks == nil {
 		return nil, nil
 	}
-	selection, err := banks.Select(s.Agent.banks, banks.Request{Medium: s.Medium, Format: s.MediumFormat()})
+	// The same request askReviewer makes, covered topics included: a covered topic changes which questions are
+	// offered, and a question missing here would keep the label she tapped instead of its value.
+	selection, err := banks.Select(s.Agent.banks, banks.Request{
+		Medium: medium, Format: s.MediumFormat(), CoveredTopics: s.PreRead.Topics,
+	})
 	if err != nil {
 		s.Agent.log.Warn("the question bank could not be read for her earlier answers", "err", err.Error())
 		return nil, nil
@@ -306,6 +311,21 @@ func mapThrough(values []string, offered map[string]string) []string {
 		}
 	}
 	return kept
+}
+
+// reviewMedium is the medium the questions are chosen for: this turn's, or the card's work when the pre-read did not
+// name one (it is off, or decisions is not configured). askReviewer and rememberAnswers both read it here, so the two
+// cannot disagree about which questions, and which options, exist.
+func (s *RunState) reviewMedium(ctx context.Context) string {
+	if s.Medium != "" {
+		return s.Medium
+	}
+	if s.Draft != nil {
+		if work, err := s.Agent.store.Work(ctx, s.Draft.Entry.WorkID); err == nil {
+			return work.Medium
+		}
+	}
+	return ""
 }
 
 // answered reports whether this turn already holds an answer for a question, so it is not offered again.

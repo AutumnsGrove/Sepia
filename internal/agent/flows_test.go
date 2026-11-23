@@ -13,6 +13,7 @@ import (
 	"github.com/AutumnsGrove/nova/tool"
 
 	"github.com/AutumnsGrove/sepia/internal/banks"
+	"github.com/AutumnsGrove/sepia/internal/decisions"
 	"github.com/AutumnsGrove/sepia/internal/domain"
 	"github.com/AutumnsGrove/sepia/internal/providers"
 	"github.com/AutumnsGrove/sepia/internal/session"
@@ -1142,28 +1143,27 @@ func TestRememberedAnswersMapLabelsLikeTheLivePath(t *testing.T) {
 	r := newRig(t, rigOptions{script: bookScript()})
 	scriptBook(r.fake)
 	sess, _ := r.session.CreateEntry(ctx)
-	selection, err := banks.Select(r.agent.banks, banks.Request{Medium: "book"})
+	// A covered topic changes which questions are offered; the remembered answer has to be read through the same
+	// selection or the question is missing from the vocabulary and keeps its label (the review's repro).
+	covered := []string{"ending"}
+	selection, err := banks.Select(r.agent.banks, banks.Request{Medium: "book", CoveredTopics: covered})
 	if err != nil {
 		t.Fatalf("banks.Select: %v", err)
 	}
+	// book_reread only appears when the ending is covered, which is exactly the question a selection built without
+	// the covered topics cannot map.
 	var question banks.Question
-	var option banks.Option
 	for _, candidate := range selection.Questions {
-		if candidate.Type != "choice" {
-			continue
-		}
-		for _, candidateOption := range candidate.Options {
-			if candidateOption.Label != candidateOption.Value {
-				question, option = candidate, candidateOption
-				break
-			}
-		}
-		if question.ID != "" {
-			break
+		if candidate.ID == "book_reread" {
+			question = candidate
 		}
 	}
-	if question.ID == "" {
-		t.Fatal("no choice question whose label differs from its value")
+	if question.ID == "" || len(question.Options) == 0 {
+		t.Fatalf("book_reread is not offered when the ending is covered: %+v", selection.Questions)
+	}
+	option := question.Options[1] // "Maybe" for the value "maybe"
+	if option.Label == option.Value {
+		t.Fatalf("the option's label and value are the same: %+v", option)
 	}
 	payload := questionPayload{Questions: []questionItem{{
 		ID: question.ID, Prompt: question.Prompt, Type: question.Type,
@@ -1183,7 +1183,10 @@ func TestRememberedAnswersMapLabelsLikeTheLivePath(t *testing.T) {
 		t.Fatalf("Answer: %v", err)
 	}
 
-	state := &RunState{Agent: r.agent, SessionID: sess.ID, Medium: "book"}
+	state := &RunState{
+		Agent: r.agent, SessionID: sess.ID, Medium: "book",
+		PreRead: decisions.Outcome{Topics: covered},
+	}
 	state.rememberAnswers(ctx)
 	if len(state.Answers) != 1 {
 		t.Fatalf("answers = %+v, want one", state.Answers)
