@@ -1267,8 +1267,8 @@ func TestRememberedAnswerFindsTheMediumThroughThePipeline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.session.Answer(ctx, sess.ID, opened.ID, json.RawMessage(resolution), "answer-1"); err != nil {
-		t.Fatalf("Answer: %v", err)
+	if _, answerErr := first.session.Answer(ctx, sess.ID, opened.ID, json.RawMessage(resolution), "answer-1"); answerErr != nil {
+		t.Fatalf("Answer: %v", answerErr)
 	}
 
 	// The next turn runs with the pre-read off, so nothing names the medium but the card.
@@ -1287,10 +1287,10 @@ func TestRememberedAnswerFindsTheMediumThroughThePipeline(t *testing.T) {
 	second.responder.session = first.session
 	second.responder.store = first.store
 	scriptBook(second.fake)
-	if _, err := second.agent.HandleMessage(ctx, TurnInput{
+	if _, turnErr := second.agent.HandleMessage(ctx, TurnInput{
 		SessionID: sess.ID, Text: bookMessage, ClientMsgID: "m1", Retry: true,
-	}); err != nil {
-		t.Fatalf("second turn: %v", err)
+	}); turnErr != nil {
+		t.Fatalf("second turn: %v", turnErr)
 	}
 	answers, err := first.store.Answers(ctx, out.Draft.Entry.ID)
 	if err != nil {
