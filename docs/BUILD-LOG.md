@@ -1616,3 +1616,9 @@ answer reaching the card, not on the question being open. The engine refuses whi
 `question_form` answer has no matching row on the entry, and the client keeps Save off from her tap until the next
 `draft_snapshot` clears it. `TestConfirmWaitsForHerAnswerToReachTheCard` answers, is refused, adds the answer the way
 `save_entry` does, and then saves with the answer on the entry.
+
+**A second review pass found the client half guessing.** Clearing the wait on any newer `draft_snapshot` is wrong both
+ways: `save_entry` writes the body and fields (a snapshot each) before it stores her answers, and a `save_entry` that
+only re-applies answers writes no snapshot at all. The card now says it itself: `answers_pending` rides on
+`draft_snapshot` and `hello`, computed by the same check `Confirm` uses, and `save_entry` publishes one more snapshot
+after `AddAnswers` so the client hears that her answers were stored. The client reads the flag and nothing else.

@@ -487,6 +487,10 @@ export interface Draft {
     | [string, string, string, string, string, string, string, string]
     | [string, string, string, string, string, string, string, string, string]
     | [string, string, string, string, string, string, string, string, string, string];
+  /**
+   * True while an answer she has given is not on the card yet: the agent applies her answers when it writes the card, so a save in that gap would store the card built before she tapped (issue #46).
+   */
+  answers_pending?: boolean;
 }
 export interface Work {
   id?: Id;

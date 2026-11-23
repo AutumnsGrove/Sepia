@@ -1268,6 +1268,19 @@ func (q *Queue) Queued(sessionID string) bool {
 	return q.pending[sessionID]
 }
 
+// PublishAnswers re-publishes the card once her answers are stored. The client waits for a card written after her
+// answer before it allows a save, and AddAnswers writes rows that no event otherwise announces: without this, the card
+// the client holds would never say the answer arrived (issue #46).
+func (e *Engine) PublishAnswers(ctx context.Context, sessionID string) error {
+	draft, err := e.Draft(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	_, err = e.Append(ctx, sessionID, store.EventDraftSnapshot,
+		map[string]any{"version": draft.Version, "draft": draft.Entry})
+	return err
+}
+
 // answersPending reports whether she has answered a question whose answer is not on the card yet. The agent applies
 // answers when it writes the card (AddAnswers), so a resolved interaction with no matching row is exactly the gap
 // between her tap and the card that carries it.
