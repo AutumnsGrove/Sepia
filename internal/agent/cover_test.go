@@ -294,3 +294,41 @@ func TestARefreshWritesOnlyTheCover(t *testing.T) {
 		t.Errorf("work = %q (%d), want the newer metadata %q (%d) to survive", stored.Title, stored.Year, newer.Title, newer.Year)
 	}
 }
+
+// A candidate's thumb is fetched and served before the work is merged, so it must not land on the name the work's
+// own cover will use: the cache is keyed by provider and id, and a candidate and the work she picks from it share
+// one. The suffix is what keeps the 44-pixel thumb out of the entry card.
+func TestACandidateThumbIsNotTheWorksCover(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+	scriptFilm(r.fake)
+	ctx := context.Background()
+
+	thumb, err := r.agent.CandidateCover(ctx, providers.ProviderTMDB, r.tmdb.URL()+"/t/p/w92/lantern.jpg")
+	if err != nil {
+		t.Fatalf("CandidateCover: %v", err)
+	}
+	if !strings.HasPrefix(thumb.Path, "covers/tmdb-thumb-") {
+		t.Errorf("thumb path = %q, want its own name beside the work's", thumb.Path)
+	}
+
+	work := saveOneFilm(t, r)
+	if work.CoverPath == thumb.Path {
+		t.Fatalf("the work's cover is the candidate's thumbnail (%q)", work.CoverPath)
+	}
+}
+
+// A thumb the provider cannot give costs the card its cover and nothing else: the picker draws the stand-in.
+func TestACandidateThumbThatFailsIsNotFatal(t *testing.T) {
+	r := newRig(t, rigOptions{script: filmScript()})
+	scriptFilm(r.fake)
+	ctx := context.Background()
+
+	if _, err := r.agent.CandidateCover(ctx, providers.ProviderTMDB, r.tmdb.URL()+"/t/p/w92/missing.jpg"); err == nil {
+		t.Fatal("a missing thumb was reported as a success")
+	}
+	// The picker is not the card: the work she picks still gets its cover after a failed thumb.
+	work := saveOneFilm(t, r)
+	if work.CoverPath == "" {
+		t.Error("a failed candidate thumb cost the work its cover")
+	}
+}

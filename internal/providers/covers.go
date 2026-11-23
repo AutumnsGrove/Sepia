@@ -3,6 +3,8 @@ package providers
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
@@ -50,10 +52,21 @@ type Cover struct {
 
 // Cover keeps a local copy of a cover, fetching it only when there is no fresh one.
 //
-// Nothing here trusts the URL: it must be https (or the loopback the tests use), its host must be one the config
-// names, and the bytes must be an image whose dimensions can be read. A failed download writes nothing, so the
-// card falls back to its placeholder rather than to a broken file.
+// Nothing here trusts the URL: its origin must be one the config named, and the bytes must be an image whose dimensions
+// can be read. A failed download writes nothing, so the card falls back to its placeholder rather than to a broken file.
+//
+// The origin rule is scheme, host and port together, not a host alone. The dev and test world names a loopback host on a
+// port, and every other service on the board shares that host: a host allow-list would turn a cover URL into a fetch of
+// whatever answers locally, and the thumb route feeds this from a page.
 func (f *Finder) Cover(ctx context.Context, provider, id, coverURL string) (Cover, error) {
+	// The provider name becomes part of a stored file's name, so it has to be one this finder was built with. The
+	// thumb route takes it straight from a query, and a name is not a path.
+	if _, ok := f.fetchers[provider]; !ok {
+		return Cover{}, &Error{
+			Provider: provider, Op: "cover", Reason: ReasonUnavailable,
+			Err: fmt.Errorf("provider %q is not one this finder knows", provider),
+		}
+	}
 	if cover, ok := f.freshCover(provider, id); ok {
 		return cover, nil
 	}
@@ -64,16 +77,10 @@ func (f *Finder) Cover(ctx context.Context, provider, id, coverURL string) (Cove
 	if err != nil || parsed.Host == "" {
 		return Cover{}, &Error{Provider: provider, Op: "cover", Reason: ReasonUnavailable, Err: errors.New("cover URL is not a URL")}
 	}
-	if parsed.Scheme != "https" && !f.loopbackHost(parsed.Hostname()) {
-		return Cover{}, &Error{
-			Provider: provider, Op: "cover", Reason: ReasonUnavailable,
-			Err: fmt.Errorf("cover host %q is not allowed", parsed.Hostname()),
-		}
-	}
-	if !f.allowedCover(parsed.Hostname()) {
+	if !f.coverOriginAllowed(parsed) {
 		return Cover{}, &Error{
 			Provider: provider, Op: "cover", Reason: ReasonUnauthorized,
-			Err: fmt.Errorf("cover host %q is not one the config names", parsed.Hostname()),
+			Err: fmt.Errorf("cover origin %q is not one the config names", parsed.Scheme+"://"+parsed.Host),
 		}
 	}
 
@@ -147,14 +154,57 @@ func (f *Finder) Cover(ctx context.Context, provider, id, coverURL string) (Cove
 // CoverDir is where covers live inside the data directory. It is the one place that name appears.
 const CoverDir = "covers"
 
-// coverName builds the stored file name: provider, a sanitised id and the extension. The id is reduced to
-// letters, digits, dash and underscore, with every other run collapsed to one dash, so an id from a provider can
-// never name a path outside the cover directory and never produces a name with a dot in it.
+// ThumbKey names a candidate's thumbnail in the cover cache. It is a hash of the source URL and never the id a request
+// names: a page that could choose the stored name could write a new file for every id it invented, and nothing in the
+// tree evicts those. One source is one file, however many times it is drawn.
+func thumbKey(coverURL string) string {
+	sum := sha256.Sum256([]byte(coverURL))
+	return "thumb-" + hex.EncodeToString(sum[:8])
+}
+
+// CandidateCover stores a candidate's thumbnail. It is Cover with a key derived from the source, because the URL comes
+// from a page rather than from a provider response she is logging.
+func (f *Finder) CandidateCover(ctx context.Context, provider, coverURL string) (Cover, error) {
+	return f.Cover(ctx, provider, thumbKey(coverURL), coverURL)
+}
+
+// ThumbPath is the app-served URL a candidate's cover is drawn from. The page's CSP allows images from this origin
+// only, so a payload that carried the provider's own URL drew nothing at all; the route fetches the provider's copy
+// through Cover and serves it from here. The source travels with the path because only the lookup that found the
+// candidate knows it, and the route validates it again before anything is downloaded.
+func ThumbPath(provider, coverURL string) string {
+	if strings.TrimSpace(coverURL) == "" {
+		return ""
+	}
+	query := url.Values{}
+	query.Set("provider", provider)
+	query.Set("src", coverURL)
+	return "/api/thumb?" + query.Encode()
+}
+
+// coverName builds the stored file name: provider, a sanitised id and the extension. Both are reduced to letters,
+// digits, dash and underscore, with every other run collapsed to one dash, so a name from a provider can never name a
+// path outside the cover directory and never produces a name with a dot in it. Cover only calls this with a provider
+// it was built with; the sanitising is what makes that belt hold if a later caller forgets.
 func coverName(provider, id, ext string) string {
+	part := fileNamePart(provider)
+	key := fileNamePart(id)
+	if key == "" {
+		key = "unnamed"
+	}
+	name := part + "-" + key
+	if ext != "" {
+		name += "." + ext
+	}
+	return name
+}
+
+// fileNamePart reduces one part of a stored file's name to letters, digits, dash and underscore.
+func fileNamePart(part string) string {
 	var b strings.Builder
-	b.Grow(len(id))
+	b.Grow(len(part))
 	lastDash := false
-	for _, r := range id {
+	for _, r := range part {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_':
 			b.WriteRune(r)
@@ -166,14 +216,7 @@ func coverName(provider, id, ext string) string {
 			}
 		}
 	}
-	name := provider + "-" + strings.Trim(b.String(), "-_")
-	if name == provider+"-" {
-		name = provider + "-unnamed"
-	}
-	if ext != "" {
-		name += "." + ext
-	}
-	return name
+	return strings.Trim(b.String(), "-_")
 }
 
 // freshCover finds an existing cover that is still inside the freshness window.
@@ -245,18 +288,39 @@ func readCoverBody(r io.Reader) ([]byte, error) {
 	return body, nil
 }
 
-// loopbackHost reports whether a host is this machine, which is what the world's https-less URL is.
-func (f *Finder) loopbackHost(host string) bool {
-	return host == "127.0.0.1" || host == "::1" || host == "localhost"
+// coverOriginAllowed reports whether a cover URL is one the config named: same scheme, host and port as one of the
+// configured cover bases. A userinfo part is refused too, so a URL cannot smuggle a credential into a fetch or into the
+// name it is stored under.
+func (f *Finder) coverOriginAllowed(parsed *url.URL) bool {
+	if parsed.User != nil {
+		return false
+	}
+	origin := originOf(parsed)
+	for _, allowed := range f.coverOrigins {
+		if origin == allowed {
+			return true
+		}
+	}
+	return false
 }
 
-// allowedCover reports whether a host is one the config named, or loopback for a test.
-func (f *Finder) allowedCover(host string) bool {
-	if f.loopbackHost(host) {
-		return true
+// originOf is the scheme, host and port of a URL, lower-cased so a host's case cannot matter.
+func originOf(parsed *url.URL) string {
+	return strings.ToLower(parsed.Scheme + "://" + parsed.Host)
+}
+
+// coverOriginsFrom reads the origins of the configured cover bases. A base's path is not part of it: the size prefix
+// TMDB appends is not a security boundary, and a provider may change it without changing what it is.
+func coverOriginsFrom(bases ...string) []string {
+	out := make([]string, 0, len(bases))
+	for _, base := range bases {
+		parsed, err := url.Parse(base)
+		if err != nil || parsed.Host == "" {
+			continue
+		}
+		out = append(out, originOf(parsed))
 	}
-	_, ok := f.coverHosts[host]
-	return ok
+	return out
 }
 
 // coverHostsFrom reads the hosts of the configured cover bases.
