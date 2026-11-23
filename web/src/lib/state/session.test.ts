@@ -293,7 +293,17 @@ describe('her answers on their way to the card', () => {
     expect(state.interactions).toHaveLength(0);
     expect(state.answersPending).toBe(true);
 
-    state = applyEvent(state, at(3, 'draft_snapshot', { version: 5, draft: { version: 5 } })).state;
+    // A card written before her answer is stored still says the wait is on; the one published after it clears it.
+    state = applyEvent(
+      state,
+      at(3, 'draft_snapshot', { version: 5, draft: { version: 5, answers_pending: true } }),
+    ).state;
+    expect(state.answersPending).toBe(true);
+
+    state = applyEvent(
+      state,
+      at(4, 'draft_snapshot', { version: 5, draft: { version: 5, answers_pending: false } }),
+    ).state;
     expect(state.answersPending).toBe(false);
   });
 

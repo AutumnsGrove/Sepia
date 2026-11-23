@@ -407,13 +407,16 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
       const data = dataOf<'draft_snapshot'>(event);
       // A snapshot that arrives late must not move the card backwards. The version is the ordering rule.
       if (data.version < state.draftVersion) return { state };
-      // The card was written after her answer, which is where the agent puts it.
+      // The server says whether her answer is on this card yet: a snapshot from before AddAnswers still carries the
+      // wait, and the one the agent publishes after it clears it (issue #46). Clearing on any snapshot would be wrong
+      // in both directions, because save_entry writes the card before it stores her answers.
+      const draft = data.draft as Draft;
       return {
         state: {
           ...state,
-          draft: data.draft as Draft,
+          draft,
           draftVersion: data.version,
-          answersPending: false,
+          answersPending: draft.answers_pending === true,
         },
       };
     }
