@@ -609,6 +609,28 @@ func wireWorkDetailOf(view session.WorkView) wireWorkDetail {
 	return out
 }
 
+// wireSearchHit is one search result: the entry it names, with its work, and the sentence the match was found in. The
+// snippet carries the match markers as they are; the browser splits on them and escapes the text between, so a review
+// that contains HTML is a review about HTML rather than a page that runs it.
+type wireSearchHit struct {
+	Kind    string     `json:"kind"`
+	ID      string     `json:"id"`
+	Title   string     `json:"title"`
+	Snippet string     `json:"snippet"`
+	Score   float64    `json:"score"`
+	Entry   *wireEntry `json:"entry,omitempty"`
+}
+
+func wireSearchHitOf(hit domain.SearchHit) wireSearchHit {
+	out := wireSearchHit{
+		Kind: hit.Kind, ID: hit.ID, Title: clipRunes(hit.Title, 500),
+		Snippet: clipRunes(hit.Snippet, 500), Score: hit.Score,
+	}
+	entry := wireEntryOf(session.EntryView{Entry: hit.Entry, Work: hit.Work})
+	out.Entry = &entry
+	return out
+}
+
 type wireRevision struct {
 	ID        string    `json:"id"`
 	EntryID   string    `json:"entry_id"`

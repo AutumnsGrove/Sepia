@@ -44,6 +44,13 @@ type DecisionCall struct {
 	AllowanceUsd float64 `json:"allowance_usd"`
 }
 
+type EntriesFt struct {
+	EntryID string `json:"entry_id"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
+	Answers string `json:"answers"`
+}
+
 type Entry struct {
 	ID            string  `json:"id"`
 	WorkID        string  `json:"work_id"`

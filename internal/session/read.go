@@ -192,6 +192,17 @@ func (e *Engine) Library(ctx context.Context, query domain.LibraryQuery, cursor 
 	return e.store.LibraryPage(ctx, query, cursor, limit)
 }
 
+// LibraryCount is how many entries the same filters hold in all, which is what the tool row's total is.
+func (e *Engine) LibraryCount(ctx context.Context, query domain.LibraryQuery) (int, error) {
+	return e.store.LibraryCount(ctx, query)
+}
+
+// Search asks the full-text index for her own words, with the count of everything that matched rather than the count
+// of the page.
+func (e *Engine) Search(ctx context.Context, query domain.SearchQuery) ([]domain.SearchHit, int, error) {
+	return e.store.Search(ctx, query)
+}
+
 // Sessions is one page of sessions, newest first. before is the opaque cursor from the previous page.
 func (e *Engine) Sessions(ctx context.Context, state domain.SessionState, kind domain.SessionKind, before string,
 	limit int,

@@ -72,13 +72,19 @@ S09 needs S02, S07 and S08. S13 needs a working app (S09 and S12).
 | S13 | [Deploy and update](S13-deploy-and-update.md) | 1 | done |
 | S14 | [Backups](S14-backups.md) | 1 | done |
 | S15 | [Web fallback](S15-web-fallback.md) | 2 | planned |
-| S16 | [Library search and chat](S16-search-and-chat.md) | 2 | planned |
+| S16 | [Library search and chat](S16-search-and-chat.md) | 2 | search built (S16.1, S16.2, S16.3, S16.6); the general chat (S16.4, S16.5) is the next pull request |
 | S17 | [More media](S17-more-media.md) | 2 | planned (template) |
 | S18 | [Screenshot import](S18-screenshot-import.md) | 3 | planned |
 | S19 | [Export, import, verify](S19-export-import-verify.md) | 4 | planned |
 | S20 | [Parked](S20-parked.md) | 5 and 6 | parked |
 | S21 | [Wishlist and didn't finish](S21-wishlist-and-unfinished.md) | 2 | done |
 | #31 | Library design pass | 2 | open, not yet a slice |
+
+**S16's first half is built.** The index, the query parser, `/api/search`, the rating and date filters,
+the totals, the duplicate ask and the Library screen's search box are done and tested; the general chat (an
+`edit_entry` tool that opens a revision, the Ask button, the chat start screen and the answer list) is the second pull
+request, in a pull request of its own. The slice is one entry in the table above because it is one plan, and both
+halves follow the same decisions.
 
 **Open, and not yet owned by a slice.** [#31](https://github.com/AutumnsGrove/Sepia/issues/31) decides how the
 three shelves are laid out and the ordering of the undated tail (wanted rows sort by id rather than by when they were

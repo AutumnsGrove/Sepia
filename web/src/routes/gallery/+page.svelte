@@ -50,6 +50,7 @@
     'ix-describe',
     'ix-form',
     'ix-revisit',
+    'ix-same-work',
     'ix-gap',
     'ix-lookup',
     'socket',
@@ -164,6 +165,19 @@
     options: [
       { value: 'new_entry', label: 'A new entry' },
       { value: 'edit_existing', label: 'Edit the old one' },
+    ],
+  };
+  const sameWorkPayload = {
+    previous: {
+      work_id: 'w_9',
+      title: 'The Lantern Keeper',
+      year: 1999,
+      creator: 'Ada Voss',
+      medium: 'book',
+    },
+    options: [
+      { value: 'same', label: 'The same work' },
+      { value: 'different', label: 'A different work' },
     ],
   };
   const gapPayload = { field: 'rating', prompt: 'How many stars would you give it?' };
@@ -517,6 +531,12 @@
     <section>
       <h2>Interaction · logged before</h2>
       <InteractionCard kind="revisit_choice" payload={revisitPayload} onanswer={answered} />
+    </section>
+  {/if}
+  {#if only('ix-same-work')}
+    <section>
+      <h2>Interaction · probably already logged</h2>
+      <InteractionCard kind="same_work_choice" payload={sameWorkPayload} onanswer={answered} />
     </section>
   {/if}
   {#if only('ix-gap')}

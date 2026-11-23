@@ -48,7 +48,16 @@ describe('list merging', () => {
   });
 
   it('starts empty and says so', () => {
-    expect(emptyList<Row>()).toEqual({ items: [], cursor: null, hasMore: false });
+    expect(emptyList<Row>()).toEqual({ items: [], cursor: null, hasMore: false, total: 0 });
+  });
+
+  it('carries the count the endpoint reports, and keeps it across a load more', () => {
+    const first = replaceList({ items: [row('1')], next_cursor: 'c2', total: 42 });
+    expect(first.total).toBe(42);
+    const more = appendList(first, { items: [row('2')], next_cursor: null }, key);
+    expect(more.total).toBe(42);
+    // An endpoint that does not count leaves the list at zero rather than inventing a number.
+    expect(replaceList({ items: [row('1')], next_cursor: null }).total).toBe(0);
   });
 });
 

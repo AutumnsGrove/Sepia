@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/contract"
 	"github.com/AutumnsGrove/sepia/internal/domain"
@@ -363,6 +364,26 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		}
 		shelf = parsed
 	}
+	ratingMin, ok := queryRating(query.Get("rating_min"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_value", "A rating filter is between 1 and 20.")
+		return
+	}
+	ratingMax, ok := queryRating(query.Get("rating_max"))
+	if !ok || (ratingMin > 0 && ratingMax > 0 && ratingMin > ratingMax) {
+		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a rating range Sepia knows.")
+		return
+	}
+	finishedFrom, ok := queryDate(query.Get("finished_from"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a date Sepia knows.")
+		return
+	}
+	finishedTo, ok := queryDate(query.Get("finished_to"))
+	if !ok || (finishedFrom != "" && finishedTo != "" && finishedFrom > finishedTo) {
+		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a date range Sepia knows.")
+		return
+	}
 	limit, ok := queryLimit(r)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a page size.")
@@ -374,7 +395,7 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		keys = 4
 	}
 	signature := cursorSignature("entries", medium, boolText(favourite), work, string(shelf), string(sort),
-		strconv.FormatBool(deleted))
+		strconv.FormatBool(deleted), strconv.Itoa(ratingMin), strconv.Itoa(ratingMax), finishedFrom, finishedTo)
 	parts, ok := boundCursor(query.Get("cursor"), signature, keys)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a cursor Sepia gave you.")
@@ -402,9 +423,17 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	ctx := r.Context()
-	entries, next, err := s.engine.Library(ctx, domain.LibraryQuery{
+	filters := domain.LibraryQuery{
 		Medium: medium, Favourite: favourite, Work: work, Shelf: shelf, Sort: sort, Deleted: deleted,
-	}, cursor, limit)
+		RatingMin: ratingMin, RatingMax: ratingMax, From: finishedFrom, To: finishedTo,
+	}
+	entries, next, err := s.engine.Library(ctx, filters, cursor, limit)
+	if err != nil {
+		s.restError(w, err)
+		return
+	}
+	// The total is the filters', not the page's: it is what the tool row says, and it does not move as she scrolls.
+	total, err := s.engine.LibraryCount(ctx, filters)
 	if err != nil {
 		s.restError(w, err)
 		return
@@ -432,7 +461,32 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		}
 		cursorOut = &encoded
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": cursorOut})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": cursorOut, "total": total})
+}
+
+// queryRating reads a quarter-star bound. Zero is "not filtered", because a stored rating is 1 to 20 and the one value
+// that cannot be a rating is the one that means no bound.
+func queryRating(raw string) (int, bool) {
+	if raw == "" {
+		return 0, true
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 || value > 20 {
+		return 0, false
+	}
+	return value, true
+}
+
+// queryDate reads a finish-date bound, inclusive, as a plain YYYY-MM-DD day. A nonsense date is refused rather than
+// parsed loosely: "31 Feb" silently becoming March is a filter she did not ask for.
+func queryDate(raw string) (string, bool) {
+	if raw == "" {
+		return "", true
+	}
+	if _, err := time.Parse("2006-01-02", raw); err != nil {
+		return "", false
+	}
+	return raw, true
 }
 
 // boolText keeps "not filtered" apart from "filtered to false" in a cursor's signature, so the two lists cannot share
@@ -585,7 +639,9 @@ func (s *Server) serveWork(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, wireWorkDetailOf(view))
 }
 
-// search is S16. The route exists so a frontend can build against it, and refuses plainly until then.
+// search finds her own words: the work's title, the review body and the answers she gave. The text never reaches
+// FTS5's syntax raw (domain.ParseSearchText), and a search that is too long or too many words is refused with plain
+// copy rather than quietly cut.
 func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	if !s.needEngine(w) {
 		return
@@ -595,11 +651,32 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_value", "Type something to search for.")
 		return
 	}
-	if len(query) > 200 {
-		writeError(w, http.StatusBadRequest, "invalid_value", "That search is too long.")
+	if _, err := domain.ParseSearchText(query); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrSearchTooLong):
+			writeError(w, http.StatusBadRequest, "invalid_value", "That search is too long.")
+		case errors.Is(err, domain.ErrSearchTooManyWords):
+			writeError(w, http.StatusBadRequest, "invalid_value", "Try fewer words.")
+		default:
+			writeError(w, http.StatusBadRequest, "invalid_value", "Type something to search for.")
+		}
 		return
 	}
-	s.notBuilt(w, r)
+	limit, ok := queryLimit(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_value", "That is not a page size.")
+		return
+	}
+	hits, total, err := s.engine.Search(r.Context(), domain.SearchQuery{Text: query, Limit: limit})
+	if err != nil {
+		s.restError(w, err)
+		return
+	}
+	items := make([]wireSearchHit, 0, len(hits))
+	for _, hit := range hits {
+		items = append(items, wireSearchHitOf(hit))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
 }
 
 func (s *Server) exportStub(w http.ResponseWriter, r *http.Request) {
