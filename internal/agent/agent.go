@@ -239,9 +239,6 @@ func (a *Agent) HandleMessage(ctx context.Context, in TurnInput) (Outcome, error
 	if err := a.resolveMedium(ctx, state); err != nil {
 		return Outcome{}, err
 	}
-	// Her earlier answers come after the medium is known, because they are read through the same bank the live path
-	// uses: a label she tapped has to become the option's stable value, not stay a label.
-	state.rememberAnswers(ctx)
 
 	// A card may already exist from an earlier turn; the state reads it so the model sees the work and the
 	// parsed fields it already has.
@@ -253,6 +250,11 @@ func (a *Agent) HandleMessage(ctx context.Context, in TurnInput) (Outcome, error
 	} else if !errors.Is(err, session.ErrNoDraft) {
 		return Outcome{}, err
 	}
+
+	// Her earlier answers are read after the card, because they are mapped through the same bank the live path uses
+	// and that needs the medium: the pre-read's, or the card's work when the pre-read did not name one. A label she
+	// tapped has to become the option's stable value, not stay a label.
+	state.rememberAnswers(ctx)
 
 	if a.provider == nil {
 		if err := a.notice(ctx, in.SessionID, "warn", "model_off",

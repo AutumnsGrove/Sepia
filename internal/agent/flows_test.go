@@ -1196,3 +1196,45 @@ func TestRememberedAnswersMapLabelsLikeTheLivePath(t *testing.T) {
 		t.Errorf("values = %v, want the stable value %q rather than the label %q", got, option.Value, option.Label)
 	}
 }
+
+// With the pre-read off there is no medium on the turn, and the card's own work is what the live path falls back to.
+// A remembered answer has to find it too, or the label she tapped stays a label.
+func TestRememberedAnswerFindsTheMediumOnTheCard(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, rigOptions{script: bookScript()})
+	scriptBook(r.fake)
+	sess, _ := r.session.CreateEntry(ctx)
+	if err := r.store.SaveWork(ctx, domain.Work{
+		ID: "w-book", Medium: "book", Title: "The Lantern Keeper", Verified: true,
+	}); err != nil {
+		t.Fatalf("SaveWork: %v", err)
+	}
+	payload := questionPayload{Questions: []questionItem{{
+		ID: "book_length", Prompt: "Was it the right length?", Type: "choice",
+	}}}
+	opened, err := r.session.Ask(ctx, sess.ID, "question_form", payload)
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	resolution, err := json.Marshal(questionAnswer{Answers: []questionAnswerItem{
+		{ID: "book_length", Value: "About right"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.session.Answer(ctx, sess.ID, opened.ID, json.RawMessage(resolution), "answer-1"); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+
+	state := &RunState{
+		Agent: r.agent, SessionID: sess.ID,
+		Draft: &session.Draft{Version: 1, Entry: domain.Entry{WorkID: "w-book"}},
+	}
+	state.rememberAnswers(ctx)
+	if len(state.Answers) != 1 {
+		t.Fatalf("answers = %+v, want one", state.Answers)
+	}
+	if got := state.Answers[0].Values; len(got) != 1 || got[0] != "right" {
+		t.Errorf("values = %v, want the stable value %q rather than the label", got, "right")
+	}
+}
