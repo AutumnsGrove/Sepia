@@ -409,14 +409,14 @@ func openCover(dataDir, name string) (*os.File, os.FileInfo, error) {
 // fetched is a 404 and the card draws its stand-in, which is how every other cover failure is handled.
 func (s *Server) serveThumb(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	provider, id, src := query.Get("provider"), query.Get("id"), query.Get("src")
+	provider, src := query.Get("provider"), query.Get("src")
 	// No model means no finder in this build: the thumb is decoration, so it is a missing image rather than a refusal
 	// the card would have to explain.
 	if s.model == nil {
 		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
 		return
 	}
-	cover, err := s.model.CandidateCover(r.Context(), provider, id, src)
+	cover, err := s.model.CandidateCover(r.Context(), provider, src)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "No such cover.")
 		return

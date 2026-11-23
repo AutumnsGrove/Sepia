@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1260,7 +1261,7 @@ func TestACandidateThumbIsFetchedAndServedFromThisOrigin(t *testing.T) {
 	defer rig.close()
 	handler := rig.server.Config.Handler
 	remote := rig.tmdb.URL() + "/t/p/w92/lantern.jpg"
-	path := providers.ThumbPath(providers.ProviderTMDB, "movie:101", remote)
+	path := providers.ThumbPath(providers.ProviderTMDB, remote)
 
 	rec := doJSON(t, handler, http.MethodGet, path, nil)
 	if rec.Code != http.StatusOK {
@@ -1272,9 +1273,14 @@ func TestACandidateThumbIsFetchedAndServedFromThisOrigin(t *testing.T) {
 	if !bytes.Equal(rec.Body.Bytes(), world.SamplePoster()) {
 		t.Error("the served thumb is not the provider's image")
 	}
-	// Its own name in the cache: the work's cover will take the plain one, and a thumb must not stand in for it.
-	if _, err := os.Stat(filepath.Join(rig.dataDir, providers.CoverDir, "tmdb-movie-101-thumb.png")); err != nil {
-		t.Fatalf("thumb not stored under its own name: %v", err)
+	// Its own name in the cache, derived from the source: the work's cover will take the plain one, and a thumb must
+	// not stand in for it.
+	stored, err := os.ReadDir(filepath.Join(rig.dataDir, providers.CoverDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 1 || !strings.HasPrefix(stored[0].Name(), "tmdb-thumb-") {
+		t.Fatalf("covers = %v, want the one thumb under its own name", stored)
 	}
 	if calls := rig.tmdb.Calls("/t/p/w92/lantern.jpg"); calls != 1 {
 		t.Fatalf("provider calls = %d, want one", calls)
@@ -1299,12 +1305,12 @@ func TestAThumbIsRefusedUnlessItIsFromAConfiguredHost(t *testing.T) {
 
 	for name, path := range map[string]string{
 		"a host the config does not name": providers.ThumbPath(
-			providers.ProviderTMDB, "movie:101", "https://example.test/x.jpg"),
+			providers.ProviderTMDB, "https://example.test/x.jpg"),
 		"a plain-http host": providers.ThumbPath(
-			providers.ProviderTMDB, "movie:101", "http://192.0.2.10/x.jpg"),
+			providers.ProviderTMDB, "http://192.0.2.10/x.jpg"),
 		"a provider that is not one it knows": providers.ThumbPath(
-			"../../etc", "passwd", rig.tmdb.URL()+"/t/p/w92/lantern.jpg"),
-		"no source at all": "/api/thumb?provider=tmdb&id=movie:101",
+			"../../etc", rig.tmdb.URL()+"/t/p/w92/lantern.jpg"),
+		"no source at all": "/api/thumb?provider=tmdb",
 	} {
 		if rec := doJSON(t, handler, http.MethodGet, path, nil); rec.Code != http.StatusNotFound {
 			t.Errorf("%s = %d, want 404: %s", name, rec.Code, rec.Body)
@@ -1319,7 +1325,7 @@ func TestAThumbIsRefusedUnlessItIsFromAConfiguredHost(t *testing.T) {
 	if len(entries) != 0 {
 		t.Errorf("a refused thumb left %d file(s) in the cover cache", len(entries))
 	}
-	post := doJSON(t, handler, http.MethodPost, "/api/thumb?provider=tmdb&id=movie:101", map[string]any{})
+	post := doJSON(t, handler, http.MethodPost, "/api/thumb?provider=tmdb", map[string]any{})
 	if post.Code != http.StatusMethodNotAllowed {
 		t.Errorf("POST = %d, want 405", post.Code)
 	}
@@ -1329,7 +1335,7 @@ func TestAThumbIsRefusedUnlessItIsFromAConfiguredHost(t *testing.T) {
 func TestAThumbTheProviderDoesNotHaveIsA404(t *testing.T) {
 	rig := newFlowRig(t)
 	defer rig.close()
-	path := providers.ThumbPath(providers.ProviderTMDB, "movie:101", rig.tmdb.URL()+"/t/p/w92/missing.jpg")
+	path := providers.ThumbPath(providers.ProviderTMDB, rig.tmdb.URL()+"/t/p/w92/missing.jpg")
 
 	if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, path, nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("missing thumb = %d, want 404: %s", rec.Code, rec.Body)
@@ -1340,5 +1346,29 @@ func TestAThumbTheProviderDoesNotHaveIsA404(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Errorf("a missing thumb left %d file(s)", len(entries))
+	}
+}
+
+// Another service on the same machine is not a cover origin, even though it shares the loopback host the dev cover base
+// names. Without that rule the thumb route is a client-driven fetch of whatever is listening locally, which is what the
+// review of #53 reproduced.
+func TestAThumbCannotBeAnotherLocalService(t *testing.T) {
+	rig := newFlowRig(t)
+	defer rig.close()
+
+	var asked atomic.Int32
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked.Add(1)
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(world.SamplePoster())
+	}))
+	defer other.Close()
+
+	path := providers.ThumbPath(providers.ProviderTMDB, other.URL+"/secret.png")
+	if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, path, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("thumb from another local service = %d, want 404: %s", rec.Code, rec.Body)
+	}
+	if n := asked.Load(); n != 0 {
+		t.Errorf("the other local service was asked %d time(s), want none", n)
 	}
 }

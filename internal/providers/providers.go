@@ -185,8 +185,9 @@ type Finder struct {
 	dataDir   string
 	// covers is the shared plumbing for cover downloads: they go to an image host, not to an API, but the
 	// deadline, the user agent and the failure taxonomy are the same.
-	covers     *client
-	coverHosts map[string]bool
+	covers *client
+	// coverOrigins is where a cover may come from: the scheme, host and port of each configured cover base.
+	coverOrigins []string
 }
 
 // Config wires the clients. Every URL has a default, so a test only overrides the ones the world serves.
@@ -226,11 +227,11 @@ type HTTPDoer interface {
 func NewFinder(cfg Config) *Finder {
 	cfg = withDefaults(cfg)
 	f := &Finder{
-		fetchers:   map[string]Fetcher{},
-		cache:      newCache(cfg.CacheTTL, cfg.Clock),
-		clock:      cfg.Clock,
-		dataDir:    cfg.DataDir,
-		coverHosts: coverHostsFrom(cfg.TMDBCoverBase, cfg.OpenLibraryCoverBase),
+		fetchers:     map[string]Fetcher{},
+		cache:        newCache(cfg.CacheTTL, cfg.Clock),
+		clock:        cfg.Clock,
+		dataDir:      cfg.DataDir,
+		coverOrigins: coverOriginsFrom(cfg.TMDBCoverBase, cfg.OpenLibraryCoverBase),
 		covers: &client{
 			provider:  "covers",
 			http:      cfg.HTTPClient,

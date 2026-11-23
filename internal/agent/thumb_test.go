@@ -32,8 +32,11 @@ func TestACandidatePointsItsCoverAtTheApp(t *testing.T) {
 		t.Errorf("thumb_url = %q, want the app's thumb route", thumb)
 	}
 	query := parsed.Query()
-	if query.Get("provider") != providers.ProviderOpenLibrary || query.Get("id") != "OL1W" {
-		t.Errorf("thumb_url = %q, want the provider and id it stands for", thumb)
+	if query.Get("provider") != providers.ProviderOpenLibrary {
+		t.Errorf("thumb_url = %q, want the provider it stands for", thumb)
+	}
+	if query.Has("id") {
+		t.Errorf("thumb_url = %q, want no client-chosen id", thumb)
 	}
 	if query.Get("src") != remote {
 		t.Errorf("src = %q, want the provider's URL for the app to fetch", query.Get("src"))
