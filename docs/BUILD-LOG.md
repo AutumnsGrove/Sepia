@@ -1622,3 +1622,35 @@ ways: `save_entry` writes the body and fields (a snapshot each) before it stores
 only re-applies answers writes no snapshot at all. The card now says it itself: `answers_pending` rides on
 `draft_snapshot` and `hello`, computed by the same check `Confirm` uses, and `save_entry` publishes one more snapshot
 after `AddAnswers` so the client hears that her answers were stored. The client reads the flag and nothing else.
+
+## 2026-11-23, fix, a candidate's cover comes through the app
+
+The picker drew initials for every candidate. The browser said why: `img-src 'self' data:` refused
+`https://covers.openlibrary.org/...`, so `InteractionCard`'s `<Cover url={candidate.thumb_url}>` was blocked before it
+drew, and the payload had been carrying the provider's URL since the first lookup. Seen on the potato while checking a
+draft (issue #53).
+
+Two ways to fix it. Loosening `img-src` to the two provider hosts is smaller, but it tells those services her IP every
+time a picker is drawn, and the CSP note in `vite.config.ts` says the point of `'self'` is that the app loads nothing
+from a third-party origin. So the cover is proxied instead: the payload names `/api/thumb?provider=…&id=…&src=…`, and
+the route fetches the provider's copy through the download, size, dimension and rate limits a saved cover already uses
+(`Finder.Cover`) and serves the stored file from this origin. The CSP is unchanged.
+
+Three things the proxy needed to be safe. The route is not an open image fetch: `Finder.Cover` refuses a host the
+config does not name (it already did) and now also refuses a provider name it was not built with, because the provider
+is part of the stored file's name and the name arrives in a query. `coverName` sanitises both halves for the same
+reason. A thumb is stored under its own key (`<id>-thumb`), because the cache is keyed by provider and id and a
+candidate and the work she picks from it share one: without the suffix, a candidate's small cover would have been
+served later as the work's own, which no test would have noticed for months.
+
+Tests, each watched failing first. `TestACandidatePointsItsCoverAtTheApp` asserts the payload's `thumb_url` names this
+origin and carries the provider's URL as `src`, and that a candidate with no cover carries none at all.
+`TestACandidateThumbIsFetchedAndServedFromThisOrigin` fetches through the world and gets the provider's bytes back,
+stored under `covers/tmdb-movie-101-thumb.png`, with a redraw served from the cache rather than a second provider call.
+`TestAThumbIsRefusedUnlessItIsFromAConfiguredHost` and `TestAThumbTheProviderDoesNotHaveIsA404` cover the bad and sad
+routes, and both assert nothing was written into the cover cache. `TestACandidateThumbIsNotTheWorksCover` is the
+collision: the thumb and the work's cover are different files. The logging e2e now requires the picker's first cover to
+decode (`naturalWidth > 0`), which is the assertion the old payload failed.
+
+Checked by eye at 390×844 against the dev stack's split scenario: the first candidate draws its poster and the second,
+which the world gives no cover, draws its initials stand-in.

@@ -1251,3 +1251,94 @@ func TestDeletedListTotalMatchesItsRows(t *testing.T) {
 		t.Fatalf("deleted finished = %d rows, total %d, want 1 and 1", len(finished.Items), finished.Total)
 	}
 }
+
+// A candidate's cover is drawn from the app: the page's CSP is img-src 'self' data:, and the provider's image host is
+// not 'self', so the picker's <img> never loaded and every candidate showed its initials (issue #53). The payload
+// names this route, and the app fetches the provider's copy through the same cache and limits a saved cover uses.
+func TestACandidateThumbIsFetchedAndServedFromThisOrigin(t *testing.T) {
+	rig := newFlowRig(t)
+	defer rig.close()
+	handler := rig.server.Config.Handler
+	remote := rig.tmdb.URL() + "/t/p/w92/lantern.jpg"
+	path := providers.ThumbPath(providers.ProviderTMDB, "movie:101", remote)
+
+	rec := doJSON(t, handler, http.MethodGet, path, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("thumb = %d: %s", rec.Code, rec.Body)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "image/png" {
+		t.Errorf("content type = %q, want the stored file's", ct)
+	}
+	if !bytes.Equal(rec.Body.Bytes(), world.SamplePoster()) {
+		t.Error("the served thumb is not the provider's image")
+	}
+	// Its own name in the cache: the work's cover will take the plain one, and a thumb must not stand in for it.
+	if _, err := os.Stat(filepath.Join(rig.dataDir, providers.CoverDir, "tmdb-movie-101-thumb.png")); err != nil {
+		t.Fatalf("thumb not stored under its own name: %v", err)
+	}
+	if calls := rig.tmdb.Calls("/t/p/w92/lantern.jpg"); calls != 1 {
+		t.Fatalf("provider calls = %d, want one", calls)
+	}
+
+	// A redraw is the stored copy, not a second download: a picker that draws again must not spend provider calls.
+	again := doJSON(t, handler, http.MethodGet, path, nil)
+	if again.Code != http.StatusOK {
+		t.Fatalf("second thumb = %d: %s", again.Code, again.Body)
+	}
+	if calls := rig.tmdb.Calls("/t/p/w92/lantern.jpg"); calls != 1 {
+		t.Errorf("provider calls after a redraw = %d, want the stored copy", calls)
+	}
+}
+
+// The thumb route is not an open image fetch. A host the config does not name is refused even over https, a provider
+// name is not a path, and a request with no source fetches nothing at all.
+func TestAThumbIsRefusedUnlessItIsFromAConfiguredHost(t *testing.T) {
+	rig := newFlowRig(t)
+	defer rig.close()
+	handler := rig.server.Config.Handler
+
+	for name, path := range map[string]string{
+		"a host the config does not name": providers.ThumbPath(
+			providers.ProviderTMDB, "movie:101", "https://example.test/x.jpg"),
+		"a plain-http host": providers.ThumbPath(
+			providers.ProviderTMDB, "movie:101", "http://192.0.2.10/x.jpg"),
+		"a provider that is not one it knows": providers.ThumbPath(
+			"../../etc", "passwd", rig.tmdb.URL()+"/t/p/w92/lantern.jpg"),
+		"no source at all": "/api/thumb?provider=tmdb&id=movie:101",
+	} {
+		if rec := doJSON(t, handler, http.MethodGet, path, nil); rec.Code != http.StatusNotFound {
+			t.Errorf("%s = %d, want 404: %s", name, rec.Code, rec.Body)
+		}
+	}
+
+	// A refusal writes nothing, and the route is a read: a thumb is never posted.
+	entries, err := os.ReadDir(filepath.Join(rig.dataDir, providers.CoverDir))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a refused thumb left %d file(s) in the cover cache", len(entries))
+	}
+	post := doJSON(t, handler, http.MethodPost, "/api/thumb?provider=tmdb&id=movie:101", map[string]any{})
+	if post.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST = %d, want 405", post.Code)
+	}
+}
+
+// A provider that has stopped serving an image costs the candidate its cover and nothing else, and leaves no file.
+func TestAThumbTheProviderDoesNotHaveIsA404(t *testing.T) {
+	rig := newFlowRig(t)
+	defer rig.close()
+	path := providers.ThumbPath(providers.ProviderTMDB, "movie:101", rig.tmdb.URL()+"/t/p/w92/missing.jpg")
+
+	if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, path, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("missing thumb = %d, want 404: %s", rec.Code, rec.Body)
+	}
+	entries, err := os.ReadDir(filepath.Join(rig.dataDir, providers.CoverDir))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a missing thumb left %d file(s)", len(entries))
+	}
+}

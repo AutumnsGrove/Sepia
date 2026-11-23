@@ -86,7 +86,7 @@ One mechanism for every question the service asks me. `interaction_request.kind`
 | `kind` | When | Payload | Response `value` |
 |---|---|---|---|
 | `choose_medium` | The medium read is split | `options[]` (for example book, film) | the chosen option |
-| `choose_candidate` | After a lookup | `candidates[]` (3 to 5, each with provider, id, title, year, creator, medium, thumb) and a "none of these" | a candidate id, or `none` |
+| `choose_candidate` | After a lookup | `candidates[]` (3 to 5, each with provider, id, title, year, creator, medium, `thumb_url`) and a "none of these". `thumb_url` is a path on this origin (`/api/thumb?...`), never the provider's own URL: the page's CSP loads images from `'self'` only, so the app fetches the provider's copy and serves it | a candidate id, or `none` |
 | `describe` | The Describe it step | `categories[]` (id, label, `covered` when I already mentioned it, `tags[]` of `{value, label, tone}`, `hints[]` of tag values) | `selected` (a map of category id to tag values), or `skip_all`. Hints are never pre-selected |
 | `question_form` | The single questions that remain | `questions[]` (id, prompt, type, options, optional `hint`), at most three | `answers[]`, with skipped questions marked, or `skip_all` |
 | `revisit_choice` | The work is already in the library | the previous entry's summary | `new_entry` or `edit_existing` |

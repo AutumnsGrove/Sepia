@@ -54,6 +54,14 @@ type Cover struct {
 // names, and the bytes must be an image whose dimensions can be read. A failed download writes nothing, so the
 // card falls back to its placeholder rather than to a broken file.
 func (f *Finder) Cover(ctx context.Context, provider, id, coverURL string) (Cover, error) {
+	// The provider name becomes part of a stored file's name, so it has to be one this finder was built with. The
+	// thumb route takes it straight from a query, and a name is not a path.
+	if _, ok := f.fetchers[provider]; !ok {
+		return Cover{}, &Error{
+			Provider: provider, Op: "cover", Reason: ReasonUnavailable,
+			Err: fmt.Errorf("provider %q is not one this finder knows", provider),
+		}
+	}
 	if cover, ok := f.freshCover(provider, id); ok {
 		return cover, nil
 	}
@@ -147,14 +155,49 @@ func (f *Finder) Cover(ctx context.Context, provider, id, coverURL string) (Cove
 // CoverDir is where covers live inside the data directory. It is the one place that name appears.
 const CoverDir = "covers"
 
-// coverName builds the stored file name: provider, a sanitised id and the extension. The id is reduced to
-// letters, digits, dash and underscore, with every other run collapsed to one dash, so an id from a provider can
-// never name a path outside the cover directory and never produces a name with a dot in it.
+// ThumbKey is the cover cache key a candidate's thumbnail is stored under. The cache is keyed by provider and id, and
+// a candidate and the work she picks from it share one, so the suffix is what keeps a candidate's small cover from
+// later being served as the work's own.
+func ThumbKey(id string) string { return id + "-thumb" }
+
+// ThumbPath is the app-served URL a candidate's cover is drawn from. The page's CSP allows images from this origin
+// only, so a payload that carried the provider's own URL drew nothing at all; the route fetches the provider's copy
+// through Cover and serves it from here. The source travels with the path because only the lookup that found the
+// candidate knows it, and the route validates it again before anything is downloaded.
+func ThumbPath(provider, id, coverURL string) string {
+	if strings.TrimSpace(coverURL) == "" {
+		return ""
+	}
+	query := url.Values{}
+	query.Set("provider", provider)
+	query.Set("id", id)
+	query.Set("src", coverURL)
+	return "/api/thumb?" + query.Encode()
+}
+
+// coverName builds the stored file name: provider, a sanitised id and the extension. Both are reduced to letters,
+// digits, dash and underscore, with every other run collapsed to one dash, so a name from a provider can never name a
+// path outside the cover directory and never produces a name with a dot in it. Cover only calls this with a provider
+// it was built with; the sanitising is what makes that belt hold if a later caller forgets.
 func coverName(provider, id, ext string) string {
+	part := fileNamePart(provider)
+	key := fileNamePart(id)
+	if key == "" {
+		key = "unnamed"
+	}
+	name := part + "-" + key
+	if ext != "" {
+		name += "." + ext
+	}
+	return name
+}
+
+// fileNamePart reduces one part of a stored file's name to letters, digits, dash and underscore.
+func fileNamePart(part string) string {
 	var b strings.Builder
-	b.Grow(len(id))
+	b.Grow(len(part))
 	lastDash := false
-	for _, r := range id {
+	for _, r := range part {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_':
 			b.WriteRune(r)
@@ -166,14 +209,7 @@ func coverName(provider, id, ext string) string {
 			}
 		}
 	}
-	name := provider + "-" + strings.Trim(b.String(), "-_")
-	if name == provider+"-" {
-		name = provider + "-unnamed"
-	}
-	if ext != "" {
-		name += "." + ext
-	}
-	return name
+	return strings.Trim(b.String(), "-_")
 }
 
 // freshCover finds an existing cover that is still inside the freshness window.
