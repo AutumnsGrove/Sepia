@@ -555,3 +555,51 @@ func isRefusal(err error, code string) bool {
 	var refusal *Refusal
 	return errors.As(err, &refusal) && refusal.Code == code
 }
+
+// The event is what tells the client her answer is still on its way, so the flag has to be on it: a real answer sets
+// it, a skip does not (issue #46). The server cannot see AddAnswers from outside, so this event is the notice.
+func TestResolutionSaysWhetherAnAnswerIsPending(t *testing.T) {
+	e, _, sess := draftSession(t)
+	ctx := context.Background()
+	answer := func(value string) map[string]any {
+		t.Helper()
+		question, err := e.Ask(ctx, sess.ID, "describe", map[string]any{
+			"categories": []any{map[string]any{"id": "feel", "label": "Feel", "tags": []any{}}},
+		})
+		if err != nil {
+			t.Fatalf("Ask: %v", err)
+		}
+		before, err := e.HeadSequence(ctx, sess.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, answerErr := e.Answer(ctx, sess.ID, question.ID, json.RawMessage(value), "a-"+question.ID); answerErr != nil {
+			t.Fatalf("Answer: %v", answerErr)
+		}
+		events, err := e.EventsSince(ctx, sess.ID, before)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, event := range events {
+			if event.Kind != "interaction_resolved" {
+				continue
+			}
+			var payload map[string]any
+			if unmarshalErr := json.Unmarshal(event.Payload, &payload); unmarshalErr != nil {
+				t.Fatalf("payload: %v", unmarshalErr)
+			}
+			return payload
+		}
+		t.Fatal("no interaction_resolved event")
+		return nil
+	}
+
+	picked := answer(`{"selected":{"feel":["moving"]},"skip_all":false}`)
+	if picked["answers_pending"] != true {
+		t.Errorf("payload = %+v, want answers_pending on a real answer", picked)
+	}
+	skipped := answer(`{"selected":{},"skip_all":true}`)
+	if _, present := skipped["answers_pending"]; present {
+		t.Errorf("payload = %+v, want no answers_pending on a skip", skipped)
+	}
+}

@@ -264,13 +264,12 @@ func (e *Engine) Answer(ctx context.Context, sessionID, interactionID string, va
 	if err != nil {
 		return domain.Interaction{}, err
 	}
-	// The client cannot see the answers land, so the resolution itself says whether her tap still has to reach the card:
-	// a skip carries no answer of hers and nothing is pending (issue #46).
+	// The client cannot see the answers land, so the resolution itself says whether her tap still has to reach the
+	// card: a skip carries no answer of hers and nothing is pending (issue #46). The ids come from what she sent, not
+	// from the stored row, which has no resolution until this call writes one.
 	pending := false
-	if question, readErr := e.store.Interaction(ctx, interactionID); readErr == nil {
-		if ids, ok := answeredIDs(question); ok && len(ids) > 0 {
-			pending = true
-		}
+	if ids, ok := answeredIDs(body); ok && len(ids) > 0 {
+		pending = true
 	}
 	question, _, err := e.store.ResolveInteraction(ctx, sessionID, interactionID, domain.ResolvedByUser, body, clientMsgID, pending)
 	return question, err
@@ -1302,7 +1301,7 @@ func (e *Engine) answersPending(ctx context.Context, sessionID, entryID string) 
 		if interaction.ResolvedBy != domain.ResolvedByUser {
 			continue
 		}
-		ids, ok := answeredIDs(interaction)
+		ids, ok := answeredIDs(interaction.Resolution)
 		if !ok || len(ids) == 0 {
 			continue
 		}
@@ -1325,10 +1324,10 @@ func (e *Engine) answersPending(ctx context.Context, sessionID, entryID string) 
 	return false, nil
 }
 
-// answeredIDs reads the question ids out of an answered interaction's resolution. It does not map labels onto values:
-// it only needs to know which questions she answered, so it can tell whether the card has them.
-func answeredIDs(interaction domain.Interaction) ([]string, bool) {
-	var resolution struct {
+// answeredIDs reads the question ids out of a resolution. It does not map labels onto values: it only needs to know
+// which questions she answered, so it can tell whether the card has them.
+func answeredIDs(resolution json.RawMessage) ([]string, bool) {
+	var answer struct {
 		Selected map[string][]string `json:"selected"`
 		Answers  []struct {
 			ID     string   `json:"id"`
@@ -1336,18 +1335,18 @@ func answeredIDs(interaction domain.Interaction) ([]string, bool) {
 			Values []string `json:"values"`
 		} `json:"answers"`
 	}
-	if json.Unmarshal(interaction.Resolution, &resolution) != nil {
+	if json.Unmarshal(resolution, &answer) != nil {
 		return nil, false
 	}
 	var ids []string
-	for category := range resolution.Selected {
+	for category := range answer.Selected {
 		ids = append(ids, category)
 	}
-	for _, answer := range resolution.Answers {
-		if answer.Value == "" && len(answer.Values) == 0 {
+	for _, given := range answer.Answers {
+		if given.Value == "" && len(given.Values) == 0 {
 			continue
 		}
-		ids = append(ids, answer.ID)
+		ids = append(ids, given.ID)
 	}
 	return ids, true
 }
