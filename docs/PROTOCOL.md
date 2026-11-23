@@ -110,7 +110,7 @@ something new.
 | `draft_edit` | `base_version`, `set` (field to value map) | Direct edit of the card. Stale `base_version` means `rejected` plus a fresh `draft_snapshot` |
 | `accept_unverified` | `base_version`, `fields[]` or `all` | Accept web-derived or manual fields into the canonical work |
 | `include_left_out` | `base_version`, `segment_id` | Move a left-out segment into the body |
-| `confirm` | `base_version` | The one commit. Rejected if the version is stale or the card does not satisfy section 2 of `ENTRY_CARD.md` |
+| `confirm` | `base_version` | The one commit. Rejected if the version is stale, the card does not satisfy section 2 of `ENTRY_CARD.md`, or a `describe`/`question_form` interaction is still open: saving then would store the card the model built before her answer, and the answer would never reach it (`answer_pending`) |
 | `retry` | none | Runs the failed turn again for her last message. The message is already stored, so it is not appended a second time. Refused while a turn is in flight |
 | `reopen` | `entry_id`, `mode` (`revision` or `new`), `revision` (optional) | Opens a draft of a saved entry, so Edit on a saved card needs no new lookup. `mode: revision` is the ordinary edit and keeps the previous version in the revisions table; `mode: new` is Log again, a fresh card on the same work with nothing filled in. `revision: n` restores that version as the draft, so confirming makes it the newest version and keeps the one it replaced. The session must be active and have no card yet, and the entry must be saved and not deleted |
 | `discard` | none | Throw the draft away; the session closes |

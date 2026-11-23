@@ -447,14 +447,24 @@ type Refusal struct {
 // Error renders the refusal for a log; the code is what the client receives.
 func (r *Refusal) Error() string { return r.Code + ": " + r.Message }
 
+// The two interaction kinds that carry her answers. A card built before they are resolved would be saved without
+// them, so a confirm waits for her answer or her skip (issue #46).
+const (
+	InteractionDescribe  = "describe"
+	InteractionQuestions = "question_form"
+)
+
 // The codes a draft operation can be refused with.
 const (
 	CodeUnknownField = "unknown_field"
 	CodeInvalidValue = "invalid_value"
 	CodeStaleVersion = "stale_version"
 	CodeNotADraft    = "not_a_draft"
-	CodeMessageLong  = "message_too_long"
-	CodeSessionFull  = "session_full"
+	// CodeAnswerPending means a question the card asked her is still waiting, so confirming would save the card
+	// without what she just tapped.
+	CodeAnswerPending = "answer_pending"
+	CodeMessageLong   = "message_too_long"
+	CodeSessionFull   = "session_full"
 	// CodeAlreadyAccepted means the tap was already taken: the database refuses a second accept.
 	CodeAlreadyAccepted = "already_accepted"
 )
@@ -620,6 +630,15 @@ func (e *Engine) Confirm(ctx context.Context, sessionID string, in ConfirmReques
 	draft, err := e.Draft(ctx, sessionID)
 	if err != nil {
 		return domain.Entry{}, 0, nil, err
+	}
+	// A card can be built while a question is still open, and confirming then would save the card the model built
+	// before her answer: the tap is stored in the log and the entry goes without it (issue #46). Answer or skip first.
+	for _, open := range draft.Open {
+		if open.Kind == InteractionDescribe || open.Kind == InteractionQuestions {
+			return domain.Entry{}, 0, nil, &Refusal{
+				Code: CodeAnswerPending, Message: "Answer or skip the question first.",
+			}
+		}
 	}
 	// The hub remembers the target while the process is up. After a restart it is the session's own record that
 	// says what this card revises, so a revision cannot quietly become a second entry.
