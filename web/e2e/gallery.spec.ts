@@ -26,6 +26,7 @@ const states = [
   'ix-describe',
   'ix-form',
   'ix-revisit',
+  'ix-same-work',
   'ix-gap',
   'ix-lookup',
   'screen-split',
