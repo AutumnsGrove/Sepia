@@ -55,6 +55,17 @@
   const canAskPolaris = $derived(payload.can_ask_polaris === true);
   const gapField = $derived((payload.field as string | undefined) ?? '');
 
+  // The work already in the library, named the way she would say it: title, year, creator. A near-match is usually a
+  // provider id she does not care about, so the card says what it found rather than what disagreed.
+  function sameWorkLine(found: Record<string, unknown>): string {
+    const title = typeof found.title === 'string' ? found.title : '';
+    if (!title) return 'This looks like a work already in your library.';
+    const year = typeof found.year === 'number' && found.year > 0 ? ` (${found.year})` : '';
+    const creator =
+      typeof found.creator === 'string' && found.creator ? ` by ${found.creator}` : '';
+    return `You already have ${title}${year}${creator} in your library.`;
+  }
+
   // The tab she picked, or the first category until she picks one. Deriving it keeps the component honest when
   // a new interaction replaces the categories under it.
   // The draft is restored from sessionStorage: a swipe-back remounts this component while the interaction is still
@@ -234,6 +245,21 @@
     <p class="hintline">
       {revisitMeta(previous)}{#if typeof previous.verdict === 'string' && previous.verdict}— “{previous.verdict}”{/if}
     </p>
+    <div class="opts">
+      {#each options as option (option.value)}
+        <button
+          type="button"
+          class="opt"
+          {disabled}
+          onclick={() => onanswer({ value: option.value })}
+        >
+          <span class="l">{option.label}</span>
+        </button>
+      {/each}
+    </div>
+  {:else if kind === 'same_work_choice'}
+    <p class="q">Is this the same work?</p>
+    <p class="hintline">{sameWorkLine(previous)}</p>
     <div class="opts">
       {#each options as option (option.value)}
         <button
