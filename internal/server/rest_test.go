@@ -1030,19 +1030,27 @@ func TestACoverTheProviderDisownsIsPurged(t *testing.T) {
 	if rec := doJSON(t, rig.server.Config.Handler, http.MethodGet, "/covers/"+name, nil); rec.Code != http.StatusOK {
 		t.Fatalf("stale cover = %d, want 200 while the refresh runs", rec.Code)
 	}
+	// Poll the row, not just the file: the purge removes the file and then clears the reference, so a read between the
+	// two sees a missing file that the row still names. On a loaded runner that window is real.
+	var got domain.Work
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if _, statErr := os.Stat(file); errors.Is(statErr, os.ErrNotExist) {
+		current, err := rig.db.Work(ctx, work.ID)
+		if err != nil {
+			t.Fatalf("Work: %v", err)
+		}
+		got = current
+		_, statErr := os.Stat(file)
+		if got.CoverPath == "" && errors.Is(statErr, os.ErrNotExist) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("the disowned cover was never deleted")
+			if !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatal("the disowned cover was never deleted")
+			}
+			t.Fatalf("cover path = %q, want it cleared once the file is gone", got.CoverPath)
 		}
 		time.Sleep(20 * time.Millisecond)
-	}
-	got, err := rig.db.Work(ctx, work.ID)
-	if err != nil {
-		t.Fatalf("Work: %v", err)
 	}
 	if got.CoverPath != "" {
 		t.Errorf("cover path = %q, want it cleared once the file is gone", got.CoverPath)
