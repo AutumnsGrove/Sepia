@@ -71,7 +71,9 @@
   }
   h1 {
     margin: 0 0 0.5rem;
-    font: 500 1.375rem/1.2 'Fraunces', serif;
+    font:
+      500 1.375rem/1.2 'Fraunces',
+      serif;
   }
   p {
     margin: 0;
@@ -95,7 +97,9 @@
     border: 1px solid var(--line);
     background: var(--raised);
     color: var(--text);
-    font: 500 0.9375rem 'Lexend', sans-serif;
+    font:
+      500 0.9375rem 'Lexend',
+      sans-serif;
     text-decoration: none;
     cursor: pointer;
   }
