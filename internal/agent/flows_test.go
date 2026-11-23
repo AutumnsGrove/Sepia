@@ -918,6 +918,35 @@ func TestPipelineAsksWhenALookedUpWorkMightAlreadyBeLogged(t *testing.T) {
 	if err != nil || len(entries) == 0 {
 		t.Fatalf("entries on the existing work = %v, %v", entries, err)
 	}
+	// Nothing was written for the fetched work: no invisible row keeps the provider id for the next lookup to match.
+	same, err := r.store.WorksByTitle(ctx, "book", "The Lantern Keeper")
+	if err != nil || len(same) != 1 {
+		t.Fatalf("works titled that = %d, %v; want only the one she had", len(same), err)
+	}
+
+	// The second lookup of the same provider work asks again rather than reusing a row the first turn left behind.
+	second := newRig(t, rigOptions{script: bookScript()})
+	second.agent.store, second.agent.session = r.store, r.session
+	second.responder.session, second.responder.store = r.session, r.store
+	scriptBook(second.fake)
+	second.responder.script("choose_candidate", "openlibrary|OL1W")
+	second.responder.script("same_work_choice", "same")
+	second.responder.script("revisit_choice", "new_entry")
+	second.responder.script("describe", map[string]any{"selected": map[string][]string{}})
+	second.responder.script("question_form", map[string]any{"skip_all": true})
+	next, _ := r.session.CreateEntry(ctx)
+	again, err := second.agent.HandleMessage(ctx, TurnInput{
+		SessionID: next.ID, Text: bookMessage, ClientMsgID: "m2",
+	})
+	if err != nil {
+		t.Fatalf("second HandleMessage: %v", err)
+	}
+	if again.Draft == nil || again.Draft.Entry.WorkID != "w-manual" {
+		t.Fatalf("the second card = %+v, want her work again", again.Draft)
+	}
+	if same, _ := r.store.WorksByTitle(ctx, "book", "The Lantern Keeper"); len(same) != 1 {
+		t.Fatalf("works titled that = %d after a second lookup, want one", len(same))
+	}
 }
 
 // Bad: a second work that is only close by title and that she says is different stays a work of its own, and its card

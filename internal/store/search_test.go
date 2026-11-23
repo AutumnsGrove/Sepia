@@ -2,8 +2,11 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
 )
@@ -401,6 +404,7 @@ func TestLibraryCountFollowsTheFilters(t *testing.T) {
 		"a date range":  {domain.LibraryQuery{From: "2026-09-01", To: "2026-09-30"}, 1},
 		"a shelf":       {domain.LibraryQuery{Shelf: domain.CompletionWantTo}, 1},
 		"the deleted":   {domain.LibraryQuery{Deleted: true}, 0},
+		"nothing again": {domain.LibraryQuery{Deleted: false, Work: "w-e-book"}, 1},
 		"nothing there": {domain.LibraryQuery{Medium: "album"}, 0},
 	}
 	for name, c := range cases {
@@ -411,5 +415,95 @@ func TestLibraryCountFollowsTheFilters(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%s: count = %d, want %d", name, got, c.want)
 		}
+	}
+}
+
+// Sad: searches run at the same time. The reader pool is four connections and a search that loads each hit while
+// holding its own cursor takes two of them, so four concurrent searches used to deadlock until the context was
+// cancelled. This is the regression test for that: every search must finish well inside the deadline.
+func TestConcurrentSearchesDoNotHoldTheReaderPool(t *testing.T) {
+	s := openTest(t)
+	for i := 0; i < 30; i++ {
+		id := "e" + string(rune('a'+i%26)) + string(rune('a'+i/26))
+		searchable(t, s, id, "Book "+id, "a slow read about lighthouses", "book", 15, "2026-10-01")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			hits, total, err := s.Search(ctx, domain.SearchQuery{Text: "lighthouses", Limit: 50})
+			if err != nil {
+				errs <- err
+				return
+			}
+			if len(hits) == 0 || total == 0 {
+				errs <- fmt.Errorf("empty result: %d hits, total %d", len(hits), total)
+			}
+		}()
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("eight concurrent searches did not finish before the deadline: the reader pool is held")
+	}
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+}
+
+// Bad: the Deleted list's count must be the Deleted list's rows. A soft-deleted wish is still something restore should
+// find, so an unnamed shelf means every deleted entry rather than the library's "not a wish" default; the count and the
+// page have to agree either way.
+func TestDeletedListTotalMatchesItsRows(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	searchable(t, s, "e-review", "Piranesi", "started slow", "book", 17, "2026-09-28")
+	if err := s.SaveWork(ctx, domain.Work{ID: "w-e-wish", Medium: "book", Title: "House of Leaves"}); err != nil {
+		t.Fatalf("wish work: %v", err)
+	}
+	wish := sampleEntry("e-wish", "w-e-wish", 0)
+	wish.Status, wish.Completion, wish.Body = domain.StatusSaved, domain.CompletionWantTo, "meant to read it"
+	if err := s.CreateDraft(ctx, wish); err != nil {
+		t.Fatalf("wish: %v", err)
+	}
+	for _, id := range []string{"e-review", "e-wish"} {
+		if err := s.SoftDeleteEntry(ctx, id); err != nil {
+			t.Fatalf("delete %s: %v", id, err)
+		}
+	}
+
+	query := domain.LibraryQuery{Deleted: true}
+	entries, _, err := s.LibraryPage(ctx, query, domain.Cursor{}, 50)
+	if err != nil {
+		t.Fatalf("deleted page: %v", err)
+	}
+	total, err := s.LibraryCount(ctx, query)
+	if err != nil {
+		t.Fatalf("deleted count: %v", err)
+	}
+	if len(entries) != 2 || total != 2 {
+		t.Fatalf("deleted list = %d rows, total %d, want 2 and 2", len(entries), total)
+	}
+
+	// A named shelf still narrows both halves, and they still agree.
+	finished := domain.LibraryQuery{Deleted: true, Shelf: domain.CompletionFinished}
+	entries, _, err = s.LibraryPage(ctx, finished, domain.Cursor{}, 50)
+	if err != nil {
+		t.Fatalf("finished deleted page: %v", err)
+	}
+	total, err = s.LibraryCount(ctx, finished)
+	if err != nil {
+		t.Fatalf("finished deleted count: %v", err)
+	}
+	if len(entries) != 1 || total != 1 {
+		t.Fatalf("finished deleted = %d rows, total %d, want 1 and 1", len(entries), total)
 	}
 }
