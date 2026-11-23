@@ -102,7 +102,13 @@
     <div class="body">
       {#if rows.length > 0}
         <div class="odds-list">
-          {#each rows as row (row.name + row.option)}
+          <!--
+            Keyed by position, never by the text these rows print. A key over server text throws
+            `each_key_duplicate` when two rows carry the same words, and that takes the whole route down: a session
+            with two pre-reads drew "500 Internal Error" instead of the card (issue #38). The server keeps one row per
+            check now; keying by position is the guard that a repeat can never blank the app again.
+          -->
+          {#each rows as row, index (index)}
             <div class="o">
               <span>{row.name}: {row.option}</span>
               <span class="bar">
@@ -117,13 +123,13 @@
         <div class="tools">
           <p class="lbl">Tools</p>
           <ol>
-            {#each tools as tool (tool.tool + tool.summary)}
+            {#each tools as tool, index (index)}
               <li class:bad={tool.ok === false}>
                 <span class="name">{tool.tool}</span>
                 <span class="sum">{tool.summary}</span>
                 {#if tool.sources && tool.sources.length > 0}
                   <span class="srcs">
-                    {#each tool.sources as source (source.url + source.title)}
+                    {#each tool.sources as source, index (index)}
                       <span>{source.title || source.url}</span>
                     {/each}
                   </span>
