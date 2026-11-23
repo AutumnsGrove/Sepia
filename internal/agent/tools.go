@@ -845,12 +845,7 @@ func askReviewer(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (
 			"She only means to read this, so there is nothing to ask about it. Do not ask what she thought. "+
 				"Tell her it is on her list in one short sentence."), nil
 	}
-	medium := state.Medium
-	if medium == "" && state.Draft != nil {
-		if work, err := state.Agent.store.Work(ctx, state.Draft.Entry.WorkID); err == nil {
-			medium = work.Medium
-		}
-	}
+	medium := state.reviewMedium(ctx)
 	if medium == "" {
 		return tool.Errorf("pick the work first, so I know which questions apply"), nil
 	}
