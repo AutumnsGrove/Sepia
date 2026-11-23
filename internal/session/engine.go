@@ -264,14 +264,22 @@ func (e *Engine) Answer(ctx context.Context, sessionID, interactionID string, va
 	if err != nil {
 		return domain.Interaction{}, err
 	}
-	question, _, err := e.store.ResolveInteraction(ctx, sessionID, interactionID, domain.ResolvedByUser, body, clientMsgID)
+	// The client cannot see the answers land, so the resolution itself says whether her tap still has to reach the card:
+	// a skip carries no answer of hers and nothing is pending (issue #46).
+	pending := false
+	if question, readErr := e.store.Interaction(ctx, interactionID); readErr == nil {
+		if ids, ok := answeredIDs(question); ok && len(ids) > 0 {
+			pending = true
+		}
+	}
+	question, _, err := e.store.ResolveInteraction(ctx, sessionID, interactionID, domain.ResolvedByUser, body, clientMsgID, pending)
 	return question, err
 }
 
 // Withdraw closes a question the service no longer needs answered, such as a lookup question whose work arrived by
 // another route. It is recorded as resolved by the server, so the card can clear it on every device.
 func (e *Engine) Withdraw(ctx context.Context, sessionID, interactionID string) (domain.Interaction, error) {
-	question, _, err := e.store.ResolveInteraction(ctx, sessionID, interactionID, domain.ResolvedByServer, json.RawMessage("null"), "")
+	question, _, err := e.store.ResolveInteraction(ctx, sessionID, interactionID, domain.ResolvedByServer, json.RawMessage("null"), "", false)
 	return question, err
 }
 

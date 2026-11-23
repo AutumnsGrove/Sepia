@@ -149,6 +149,9 @@ export function applyHello(state: SessionState, event: ServerEvent): SessionStat
         order: (data.full_state === true ? 1 : state.nextOrder) + index,
       }),
     ),
+    // The hello's card is the authority on whether an answer of hers is still on its way; a reconnect after the log was
+    // compacted carries no snapshot to clear a stale one (issue #46).
+    answersPending: ((data.draft ?? null) as Draft | null)?.answers_pending === true,
     // A hello is a new connection, not a new turn: an old error or queued count does not survive it.
     error: null,
   };
@@ -388,12 +391,9 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
 
     case 'interaction_resolved': {
       const data = dataOf<'interaction_resolved'>(event);
-      const answered = state.interactions.find((row) => row.id === data.interaction_id);
-      // Her answer is on its way to the card, not on it: Save waits for the card to be written (issue #46).
-      const pending =
-        state.answersPending ||
-        (answered !== undefined &&
-          (answered.kind === 'describe' || answered.kind === 'question_form'));
+      // The server says whether her tap carried an answer that still has to reach the card; a skip carries none, and
+      // the card the agent writes afterwards is what clears it (issue #46).
+      const pending = data.answers_pending === true ? true : state.answersPending;
       return {
         state: {
           ...state,

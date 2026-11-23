@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { checkServerEvent } from '../contract/validate';
 import type { ServerEvent } from '../contract/events';
-import { applyAll, applyEvent, applyHello, emptySession } from './session';
+import { applyAll, applyEvent, applyHello, emptySession, type SessionState } from './session';
 import { isWorking, timeline } from './timeline';
 
 /**
@@ -277,18 +277,22 @@ describe('her answers on their way to the card', () => {
     } as unknown as ServerEvent;
   }
 
-  it('keeps Save waiting from her tap until the card is written again', () => {
-    // The agent applies an answer when it writes the card, so the gap between the tap and the write is exactly when a
-    // save would store the card built before she answered (issue #46).
-    let state = applyEvent(
+  function request(kind: string): SessionState {
+    return applyEvent(
       emptySession('s_8f2'),
-      at(1, 'interaction_request', { interaction_id: 'i1', kind: 'describe', payload: {} }),
+      at(1, 'interaction_request', { interaction_id: 'i1', kind, payload: {} }),
     ).state;
+  }
+
+  it('keeps Save waiting from her tap until a card written after it', () => {
+    // The agent stores her answers when it writes the card, so the gap between the tap and that write is exactly when a
+    // save would store the card built before she answered (issue #46).
+    let state = request('describe');
     expect(state.answersPending).toBe(false);
 
     state = applyEvent(
       state,
-      at(2, 'interaction_resolved', { by: 'user', interaction_id: 'i1' }),
+      at(2, 'interaction_resolved', { by: 'user', interaction_id: 'i1', answers_pending: true }),
     ).state;
     expect(state.interactions).toHaveLength(0);
     expect(state.answersPending).toBe(true);
@@ -307,15 +311,40 @@ describe('her answers on their way to the card', () => {
     expect(state.answersPending).toBe(false);
   });
 
-  it('does not wait for a choice that carries no answer of hers', () => {
-    let state = applyEvent(
-      emptySession('s_8f2'),
-      at(1, 'interaction_request', { interaction_id: 'i1', kind: 'choose_candidate', payload: {} }),
-    ).state;
-    state = applyEvent(
-      state,
-      at(2, 'interaction_resolved', { by: 'user', interaction_id: 'i1' }),
-    ).state;
-    expect(state.answersPending).toBe(false);
+  it('does not wait when the resolution carried no answer of hers', () => {
+    // A skip, or a lookup choice, carries nothing for the card: nothing is pending and Save is not held up.
+    for (const kind of ['describe', 'choose_candidate']) {
+      let state = request(kind);
+      state = applyEvent(
+        state,
+        at(2, 'interaction_resolved', { by: 'user', interaction_id: 'i1' }),
+      ).state;
+      expect(state.answersPending, kind).toBe(false);
+    }
+  });
+
+  it('takes the wait from the card a hello carries', () => {
+    const hello = {
+      seq: null,
+      type: 'hello',
+      session_id: 's_8f2',
+      ts: '2026-11-23T12:00:00Z',
+      data: {
+        session: { id: 's_8f2', kind: 'entry', state: 'active' },
+        state: 'active',
+        draft: { version: 3, answers_pending: true },
+        open_interactions: [],
+        head_seq: 9,
+        full_state: true,
+        server_version: 'dev',
+      },
+    } as unknown as ServerEvent;
+    expect(applyHello(emptySession('s_8f2'), hello).answersPending).toBe(true);
+    expect(
+      applyHello(emptySession('s_8f2'), {
+        ...hello,
+        data: { ...hello.data, draft: null },
+      } as unknown as ServerEvent).answersPending,
+    ).toBe(false);
   });
 });

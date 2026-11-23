@@ -1242,6 +1242,10 @@ const eventsSchema = `{
                         "user",
                         "server"
                       ]
+                    },
+                    "answers_pending": {
+                      "type": "boolean",
+                      "description": "True when the resolution carried an answer of hers that is not on the card yet. A skip carries none."
                     }
                   },
                   "additionalProperties": false
