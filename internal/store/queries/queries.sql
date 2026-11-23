@@ -83,7 +83,9 @@ INSERT INTO answers (id, entry_id, question_id, category, prompt, answer_type, a
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ListAnswers :many
-SELECT * FROM answers WHERE entry_id = ? ORDER BY created_at, id;
+-- Every answer for an entry is written in one transaction, so created_at is identical for all of them; rowid is
+-- insertion order, while id is random, so ordering the tie by id would shuffle the card's ANSWERS block on every read.
+SELECT * FROM answers WHERE entry_id = ? ORDER BY created_at, rowid;
 
 -- name: CreateRevision :exec
 -- Written in the same transaction as the confirm that creates it.

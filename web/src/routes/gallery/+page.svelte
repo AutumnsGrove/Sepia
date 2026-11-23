@@ -54,6 +54,9 @@
     'ix-gap',
     'ix-lookup',
     'socket',
+    // Not a design frame: the probe for the layout's screen boundary (issue #40). The state below throws while it
+    // draws, and the fallback has to appear instead of SvelteKit's bare 500 page.
+    'boundary',
     ...screenNames,
     ...updateNames,
   ] as const;
@@ -66,6 +69,11 @@
   let rating = $state(18);
   let favourite = $state(false);
   let connected = $state(true);
+  /** Throws while drawing, for the screen-boundary probe. Rendering is where the failures we have are thrown. */
+  function explode(): never {
+    throw new Error('the boundary probe threw');
+  }
+
   let tab = $state('characters');
   let answer = $state('');
 
@@ -291,6 +299,10 @@
       <p class="lede"><a href={resolve('/gallery')}>All states</a> · {shown}</p>
     {/if}
   </header>
+
+  {#if shown === 'boundary'}
+    <p>{explode()}</p>
+  {/if}
 
   {#if only('buttons')}
     <section>

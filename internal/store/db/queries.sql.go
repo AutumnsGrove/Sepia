@@ -909,9 +909,11 @@ func (q *Queries) ListActiveSessions(ctx context.Context, limit int64) ([]Sessio
 }
 
 const listAnswers = `-- name: ListAnswers :many
-SELECT id, entry_id, question_id, category, prompt, answer_type, answer_json, skipped, created_at FROM answers WHERE entry_id = ? ORDER BY created_at, id
+SELECT id, entry_id, question_id, category, prompt, answer_type, answer_json, skipped, created_at FROM answers WHERE entry_id = ? ORDER BY created_at, rowid
 `
 
+// Every answer for an entry is written in one transaction, so created_at is identical for all of them; rowid is
+// insertion order, while id is random, so ordering the tie by id would shuffle the card's ANSWERS block on every read.
 func (q *Queries) ListAnswers(ctx context.Context, entryID string) ([]Answer, error) {
 	rows, err := q.db.QueryContext(ctx, listAnswers, entryID)
 	if err != nil {

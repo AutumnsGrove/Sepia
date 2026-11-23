@@ -690,6 +690,37 @@ func TestCreateDraftDefaultsToDraft(t *testing.T) {
 	}
 }
 
+// Every answer for an entry is written in one transaction, so they all carry the same created_at. Ordering the tie by
+// id, which is random in production, would let the card's ANSWERS block come back in a different order each read.
+func TestAnswersKeepInsertionOrderWithinASecond(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	if err := s.SaveWork(ctx, sampleWork("w1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateDraft(ctx, sampleEntry("e1", "w1", 18)); err != nil {
+		t.Fatal(err)
+	}
+	// The ids sort against the order they are written in, which is what a random id does for half the pairs.
+	answers := []domain.Answer{
+		{ID: "id-zzzz-setting", QuestionID: "setting", Category: "setting", Type: domain.AnswerTags, Values: []string{"lived-in"}},
+		{ID: "id-aaaa-ending", QuestionID: "ending", Category: "ending", Type: domain.AnswerChoice, Values: []string{"it landed"}},
+	}
+	if err := s.AddAnswers(ctx, "e1", answers); err != nil {
+		t.Fatalf("AddAnswers: %v", err)
+	}
+	got, err := s.Answers(ctx, "e1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("answers = %+v", got)
+	}
+	if got[0].QuestionID != "setting" || got[1].QuestionID != "ending" {
+		t.Fatalf("answers came back as %q then %q, want the order they were written", got[0].QuestionID, got[1].QuestionID)
+	}
+}
+
 // An answer is never deleted, so a second write for the same question cannot replace the first. It must not add a
 // second row either: a retried turn remembers the answers it already has and says them again, and a duplicate would
 // put the same question on the card twice.
