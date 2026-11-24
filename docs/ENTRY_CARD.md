@@ -13,6 +13,8 @@ off it. Decisions are from the 2026-10-31 planning session; the rules they serve
 | Rating | Quarter-star rating, with the favourite heart in the label row | `set`, or `empty` (shown as needed) |
 | My words | Verdict (one line) and body | `extracted`, `typed`, `mixed`, `imported`; see section 3 |
 | Facts | Format, and the date: **Finished** for a finished entry, **Stopped** for an abandoned one | `parsed`, `suggested` (from the decisions layer), `empty` |
+
+By shelf, as drawn in mockup 04 frames 1b to 1e: **Finished** shows Format and Finished. **Didn't finish** shows Format, Stopped and a full-width How far fact. **Wanted** draws no Rating, Your words or Facts at all; the saved page says `Added` with the date and offers one action, Log a review. The shelf switch reads Finished, Didn't finish, Wanted, the same words as the Library's tabs, and sits on its own row under the work.
 | How far | One optional line in my own words, for an abandoned entry only | `extracted`, `typed`, `empty` |
 | Left out | The parts of my messages not kept | collapsed; each segment has a tap to include it |
 | Answers | The descriptor chips I picked, grouped by category, then the single questions I answered | `answered`, `skipped` (greyed) |
