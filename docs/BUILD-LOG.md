@@ -1664,3 +1664,21 @@ one file. Eviction is still not implemented, and this entry says so rather than 
 
 Checked by eye at 390×844 against the dev stack's split scenario: the first candidate draws its poster and the second,
 which the world gives no cover, draws its initials stand-in.
+
+## 2026-11-24, issue #31, the Library's shelves designed
+
+**Designed, not built.** The mockups had fallen behind S21: they showed only the finished shelf. Page 03 frames 4 to
+9 now draw the Library as three tabs (Finished, Didn't finish, Wanted) with a count on each, a row for each shelf
+that has no empty slot, a stated order per shelf, the empty states and search across the shelves. Page 04 frames 1b
+to 1e draw a wanted page, a stopped page, a wanted work becoming a review, and the card when she stops partway.
+Rendered headless at 390 px and looked at; the first render caught the shelf switch wrapping and then overlapping
+the cover, which is why it sits on its own row.
+
+**The calls, and why.** Tabs rather than chips, because the shelves differ in order and row shape. Splitting them
+removes the rating-sort problem for free: every finished entry has a rating, so that order is total on its own tab,
+and the other two shelves have nothing to rank. The wanted shelf is its own query, so it can order by `created_at`
+with a two-key cursor and settles the undated-tail note S21 left. All of it, and the one contract addition
+(per-shelf counts), is in [S22](slices/S22-library-shelves.md). No `PLAN.md` invariant changed.
+
+**Found on the way.** The card's shelf switch said "Want to" where the tab says "Wanted", and its How far field
+printed the label twice. Both are fixed in the design and listed in S22.4.
