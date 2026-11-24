@@ -20,6 +20,8 @@ off it. Decisions are from the 2026-10-31 planning session; the rules they serve
 | Source | The screenshot(s) an import came from, beside the transcription | present only for imports; see section 10 |
 | Why | How the message was read | collapsed; see section 6 |
 
+By shelf, as drawn in mockup 04 frames 1b to 1e: **Finished** shows Format and Finished. **Didn't finish** shows Format, Stopped and a full-width How far fact. **Wanted** draws no Rating, Your words or Facts at all; the saved page says `Added` with the date and offers one action, Log a review. The shelf switch reads Finished, Didn't finish, Wanted, the same words as the Library's tabs, and sits on its own row under the work.
+
 The draft card and the saved entry are the same component. A saved entry is the card with editing
 turned off and an Edit button on.
 

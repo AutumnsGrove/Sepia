@@ -35,7 +35,7 @@ The Library screen lists and filters by medium; search and the Ask button have r
    exists" path; ambiguous matches ask, never guess.
 4. **S16.4 Chat tools.** `search_library` with filters, an `edit_entry` tool that can only open a draft revision
    (no direct write, no delete tool exists), and the routing from home.
-5. **S16.5 UI.** The search field and results (page 03 frames 4 and 5), the Ask button, the chat start screen, the
+5. **S16.5 UI.** The search field and results (page 03 frame 9), the Ask button, the chat start screen, the
    answer list inline, and the confirm card for an edit (page 04).
 6. **S16.6 Performance.** A seeded library of thousands of entries and a budget for search latency.
 
