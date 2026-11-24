@@ -115,10 +115,10 @@
       </div>
     </div>
 
-    <!-- 4: library -->
+    <!-- 4: library, finished shelf -->
     <div class="step">
-      <h2>4. Library</h2>
-      <p>One list across every medium, grouped by month. Filter by medium, or search your own words.</p>
+      <h2>4. Library: Finished</h2>
+      <p>Three shelves, side by side as tabs, each with its own count. Finished opens first and is the library as it was: grouped by the month she finished, newest first or highest rated.</p>
       <div class="phone">
         <div class="topbar">
           <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
@@ -127,6 +127,11 @@
         </div>
         <div class="scroll">
           <label class="search"><svg><use href="#i-search"/></svg><input placeholder="Search titles and your words" aria-label="Search"></label>
+          <div class="tabs shelves" role="tablist" aria-label="Shelf" data-tabsrow>
+            <button class="tab" role="tab" aria-selected="true">Finished<span class="tc">42</span></button>
+            <button class="tab" role="tab" aria-selected="false">Didn't finish<span class="tc">4</span></button>
+            <button class="tab" role="tab" aria-selected="false">Wanted<span class="tc">9</span></button>
+          </div>
           <div class="chipsrow" data-pillsrow>
             <button class="chip" aria-pressed="true">All</button>
             <button class="chip" aria-pressed="false">Film</button>
@@ -134,9 +139,10 @@
             <button class="chip" aria-pressed="false">Book</button>
             <button class="chip" aria-pressed="false">Game</button>
             <button class="chip" aria-pressed="false">Album</button>
+            <button class="chip" aria-pressed="false">Podcast</button>
             <button class="chip" aria-pressed="false">Theatre</button>
           </div>
-          <div class="toolrow"><span>42 entries</span><button class="linkbtn"><svg><use href="#i-sort"/></svg>Newest first</button></div>
+          <div class="toolrow"><button class="linkbtn"><svg><use href="#i-sort"/></svg>Newest first</button></div>
 
           <p class="grp">October 2026</p>
           <ul class="list">
@@ -159,10 +165,148 @@
       </div>
     </div>
 
-    <!-- 5: searching your own words -->
+    <!-- 5: library, didn't finish shelf -->
     <div class="step">
-      <h2>5. Searching your words</h2>
-      <p>Search reads what you wrote, not just titles, and shows the sentence it found.</p>
+      <h2>5. Library: Didn't finish</h2>
+      <p>Same month groups, by the month she stopped. No stars and no sort link: there is nothing to rank, so the order is stated instead. Her own "how far" line is the second line, and a row without one has no second line.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Library</div>
+          <button class="iconbtn" aria-label="Ask your library"><svg><use href="#i-chat"/></svg></button>
+        </div>
+        <div class="scroll">
+          <label class="search"><svg><use href="#i-search"/></svg><input placeholder="Search titles and your words" aria-label="Search"></label>
+          <div class="tabs shelves" role="tablist" aria-label="Shelf" data-tabsrow>
+            <button class="tab" role="tab" aria-selected="false">Finished<span class="tc">42</span></button>
+            <button class="tab" role="tab" aria-selected="true">Didn't finish<span class="tc">4</span></button>
+            <button class="tab" role="tab" aria-selected="false">Wanted<span class="tc">9</span></button>
+          </div>
+          <div class="chipsrow" data-pillsrow>
+            <button class="chip" aria-pressed="true">All</button>
+            <button class="chip" aria-pressed="false">Film</button>
+            <button class="chip" aria-pressed="false">TV</button>
+            <button class="chip" aria-pressed="false">Book</button>
+            <button class="chip" aria-pressed="false">Game</button>
+            <button class="chip" aria-pressed="false">Album</button>
+            <button class="chip" aria-pressed="false">Podcast</button>
+            <button class="chip" aria-pressed="false">Theatre</button>
+          </div>
+          <div class="toolrow"><span class="fixed"><svg><use href="#i-clock"/></svg>Newest first</span></div>
+
+          <p class="grp">November 2026</p>
+          <ul class="list">
+            <li><button class="ent nr"><span class="cover green">THE OVERSTORY</span><span><p class="tt">The Overstory</p><p class="mm">Book · stopped 3 Nov</p><p class="hw">&ldquo;about 100 pages in&rdquo;</p></span></button></li>
+          </ul>
+          <p class="grp">September 2026</p>
+          <ul class="list">
+            <li><button class="ent nr"><span class="cover plum">DISCO ELYSIUM</span><span><p class="tt">Disco Elysium</p><p class="mm">Game · stopped 19 Sep</p><p class="hw">&ldquo;got stuck in the first town&rdquo;</p></span></button></li>
+            <li><button class="ent nr"><span class="cover ink">DARK MATTER</span><span><p class="tt">Dark Matter</p><p class="mm">TV · stopped 2 Sep</p></span></button></li>
+          </ul>
+          <p class="grp">June 2025</p>
+          <ul class="list">
+            <li><button class="ent nr"><span class="cover rust">MIDDLEMARCH</span><span><p class="tt">Middlemarch</p><p class="mm">Book · stopped 8 Jun 2025</p><p class="hw">&ldquo;two chapters, the prose lost me&rdquo;</p></span></button></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6: library, wanted shelf -->
+    <div class="step">
+      <h2>6. Library: Wanted</h2>
+      <p>No review, so a plain list: no month headings, no stars, no date to invent. The creator stands where the date would, because it helps you pick. Newest addition first, stated.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Library</div>
+          <button class="iconbtn" aria-label="Ask your library"><svg><use href="#i-chat"/></svg></button>
+        </div>
+        <div class="scroll">
+          <label class="search"><svg><use href="#i-search"/></svg><input placeholder="Search titles and your words" aria-label="Search"></label>
+          <div class="tabs shelves" role="tablist" aria-label="Shelf" data-tabsrow>
+            <button class="tab" role="tab" aria-selected="false">Finished<span class="tc">42</span></button>
+            <button class="tab" role="tab" aria-selected="false">Didn't finish<span class="tc">4</span></button>
+            <button class="tab" role="tab" aria-selected="true">Wanted<span class="tc">9</span></button>
+          </div>
+          <div class="chipsrow" data-pillsrow>
+            <button class="chip" aria-pressed="true">All</button>
+            <button class="chip" aria-pressed="false">Film</button>
+            <button class="chip" aria-pressed="false">TV</button>
+            <button class="chip" aria-pressed="false">Book</button>
+            <button class="chip" aria-pressed="false">Game</button>
+            <button class="chip" aria-pressed="false">Album</button>
+            <button class="chip" aria-pressed="false">Podcast</button>
+            <button class="chip" aria-pressed="false">Theatre</button>
+          </div>
+          <div class="toolrow"><span class="fixed"><svg><use href="#i-clock"/></svg>Recently added</span></div>
+
+          <ul class="list" style="margin-top:.4rem">
+            <li><button class="ent nr"><span class="cover slate">GIDEON THE NINTH</span><span><p class="tt">Gideon the Ninth</p><p class="mm">Book · Tamsyn Muir</p></span></button></li>
+            <li><button class="ent nr"><span class="cover teal">OUTER WILDS</span><span><p class="tt">Outer Wilds</p><p class="mm">Game · Mobius Digital</p></span></button></li>
+            <li><button class="ent nr"><span class="cover sand">ANDOR</span><span><p class="tt">Andor</p><p class="mm">TV · Tony Gilroy</p></span></button></li>
+            <li><button class="ent nr"><span class="cover rust">STOP MAKING SENSE</span><span><p class="tt">Stop Making Sense</p><p class="mm">Film · Jonathan Demme</p></span></button></li>
+            <li><button class="ent nr"><span class="cover ink">THE DISPOSSESSED</span><span><p class="tt">The Dispossessed</p><p class="mm">Book · Ursula K. Le Guin</p></span></button></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7: empty shelves -->
+    <div class="step">
+      <h2>7. Empty shelves</h2>
+      <p>Each shelf says what it is for in one sentence and offers the one thing that fills it. The tab still shows 0, so the count never disappears and shifts the tabs about.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Library</div>
+          <button class="iconbtn" aria-label="Ask your library"><svg><use href="#i-chat"/></svg></button>
+        </div>
+        <div class="scroll">
+          <label class="search"><svg><use href="#i-search"/></svg><input placeholder="Search titles and your words" aria-label="Search"></label>
+          <div class="tabs shelves" role="tablist" aria-label="Shelf" data-tabsrow>
+            <button class="tab" role="tab" aria-selected="false">Finished<span class="tc">42</span></button>
+            <button class="tab" role="tab" aria-selected="true">Didn't finish<span class="tc">0</span></button>
+            <button class="tab" role="tab" aria-selected="false">Wanted<span class="tc">0</span></button>
+          </div>
+          <div class="zero">
+            <h2>Nothing left unfinished.</h2>
+            <p>When you stop partway through something, say so and it lands here, with how far you got.</p>
+            <button class="btn primary">Log something</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8: empty wanted -->
+    <div class="step">
+      <h2>8. Empty wanted shelf</h2>
+      <p>The same shape, in the wanted list's own words. The button is the way in: say what you mean to read, watch or play.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Library</div>
+          <button class="iconbtn" aria-label="Ask your library"><svg><use href="#i-chat"/></svg></button>
+        </div>
+        <div class="scroll">
+          <label class="search"><svg><use href="#i-search"/></svg><input placeholder="Search titles and your words" aria-label="Search"></label>
+          <div class="tabs shelves" role="tablist" aria-label="Shelf" data-tabsrow>
+            <button class="tab" role="tab" aria-selected="false">Finished<span class="tc">42</span></button>
+            <button class="tab" role="tab" aria-selected="false">Didn't finish<span class="tc">0</span></button>
+            <button class="tab" role="tab" aria-selected="true">Wanted<span class="tc">0</span></button>
+          </div>
+          <div class="zero">
+            <h2>Nothing on your wanted list yet.</h2>
+            <p>Say what you mean to read, watch or play and it lands here, with no rating and nothing to write yet.</p>
+            <button class="btn primary">Add something</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 9: searching your own words -->
+    <div class="step">
+      <h2>9. Searching your words</h2>
+      <p>Search spans the finished and stopped shelves, because both hold words. A stopped row names its shelf where the stars would be. A wanted work has no words, so it is found by title only and is not part of a "mentions" count.</p>
       <div class="phone">
         <div class="topbar">
           <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
@@ -171,11 +315,12 @@
         </div>
         <div class="scroll">
           <label class="search"><svg><use href="#i-search"/></svg><input value="slow" aria-label="Search"><button class="iconbtn" style="width:36px;height:36px;margin-right:-.5rem" aria-label="Clear"><svg><use href="#i-x"/></svg></button></label>
-          <div class="toolrow" style="margin-top:.9rem"><span>3 entries mention &ldquo;slow&rdquo;</span><button class="linkbtn"><svg><use href="#i-sort"/></svg>Best match</button></div>
+          <div class="toolrow" style="margin-top:.9rem"><span>4 entries mention &ldquo;slow&rdquo;</span><span class="fixed"><svg><use href="#i-sort"/></svg>Best match</span></div>
           <ul class="list" style="margin-top:.4rem">
             <li><button class="ent"><span class="cover green">NIGHT CIRCUS</span><span><p class="tt">The Night Circus</p><p class="mm">Book · 12 Mar 2024</p><p class="sn">&hellip;a bit too <mark class="m">slow</mark> in places but the atmosphere is unmatched</p></span><span class="rt"><svg><use href="#i-star"/></svg>4</span></button></li>
             <li><button class="ent"><span class="cover teal">PIRANESI</span><span><p class="tt">Piranesi</p><p class="mm">Book · 28 Sep</p><p class="sn">&hellip;started <mark class="m">slow</mark> but then it grabbed me and would not let go</p></span><span class="rt"><svg><use href="#i-star"/></svg>4.75</span></button></li>
             <li><button class="ent"><span class="cover ink">SEVERANCE</span><span><p class="tt">Severance</p><p class="mm">TV · 14 Sep</p><p class="sn">&hellip;season two felt <mark class="m">slow</mark> to me, though the finale paid it off</p></span><span class="rt"><svg><use href="#i-star"/></svg>4.5</span></button></li>
+            <li><button class="ent"><span class="cover rust">MIDDLEMARCH</span><span><p class="tt">Middlemarch</p><p class="mm">Book · stopped 8 Jun 2025</p><p class="sn">&hellip;so <mark class="m">slow</mark> I put it down after two chapters</p></span><span class="bdg">Didn't finish</span></button></li>
           </ul>
         </div>
       </div>

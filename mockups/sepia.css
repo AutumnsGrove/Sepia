@@ -439,3 +439,36 @@ mark.m { background: var(--accent-soft); color: var(--text); border-radius: 3px;
 .cw b { font-weight: 500; color: var(--text-2); }
 
 .ent .tt.plain { font: 400 1rem/1.4 "Lexend", system-ui, sans-serif; }
+
+/* ---------- Library shelves (issue #31) ---------- */
+/* The shelf tabs sit straight under the search box, so they take the .tabs look with a little room above. */
+.tabs.shelves { margin-top: .6rem; gap: 1.25rem; }
+.tabs.shelves .tab { gap: .45rem; }
+/* A shelf count is a fact, not a notification: quiet, and never accent-filled on the shelf she is not in. */
+.tabs.shelves .tab .tc { background: var(--raised); color: var(--text-2); }
+.tabs.shelves .tab[aria-selected="true"] .tc { background: var(--accent-soft); color: var(--text); }
+/* The tool row keeps its sort link to the right even when the left is empty. */
+.toolrow .linkbtn, .toolrow .fixed { margin-left: auto; }
+.toolrow .fixed { display: inline-flex; align-items: center; gap: .45rem; color: var(--text-3); }
+.toolrow .fixed svg { width: 16px; height: 16px; }
+/* A row with nothing on its right: a stopped or wanted work has no stars, and no empty slot is left for them. */
+.ent.nr { grid-template-columns: 44px 1fr; }
+/* How far she got: her own words, in quotes, as the second line of a stopped row. */
+.ent .hw { margin: .3rem 0 0; font-size: .875rem; font-style: italic; color: var(--text-2); line-height: 1.4; }
+/* The shelf named on a row, only where the list mixes shelves (search): the quiet place the stars would be. */
+.ent .bdg { font-size: .75rem; color: var(--text-3); white-space: nowrap; }
+/* The one action on a wanted entry page. */
+.sec .nowdo { margin-top: 1.1rem; }
+.sec .nowdo .btn { width: 100%; }
+.sec .nowdo p { margin: .6rem 0 0; font-size: .8125rem; color: var(--text-3); line-height: 1.5; }
+/* A fact she has not given yet reads as a quiet dash, not as a blank. */
+.fact .val.none { color: var(--text-3); }
+.progress-line { display: grid; gap: .2rem; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-md); padding: .6rem .8rem; margin-top: .6rem; }
+.progress-line .k { font-size: .6875rem; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.progress-line .v { font-size: .9375rem; font-style: italic; color: var(--text); }
+/* The shelf switch on a draft card and its read-only badge on a saved one. Same word as the library tab. */
+.shelf { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .55rem; }
+.shelf button { min-height: 32px; padding: 0 .65rem; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--text-2); font-size: .75rem; }
+.shelf button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.shelfbadge { display: inline-block; margin-top: .5rem; padding: .05rem .5rem; border: 1px solid var(--line); border-radius: 999px; font-size: .6875rem; color: var(--text-2); }
+.fact.wide { grid-column: 1 / -1; }

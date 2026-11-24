@@ -68,6 +68,170 @@
       </div>
     </div>
 
+    <!-- 1b: a wanted work -->
+    <div class="step">
+      <h2>1b. A wanted work</h2>
+      <p>No stars, no words, no Facts: nothing she has not said is drawn empty. The one date is when it was added, and the one action is to log it.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Entry</div>
+          <button class="iconbtn" aria-label="More"><svg><use href="#i-more"/></svg></button>
+        </div>
+        <div class="scroll page">
+          <section class="work">
+            <div class="cover slate lg">GIDEON THE NINTH</div>
+            <div>
+              <h3>Gideon the Ninth</h3>
+              <p class="meta">2019 &middot; Tamsyn Muir &middot; Book</p>
+              <span class="tag v"><svg class="mk"><use href="#i-check"/></svg><span>Open Library</span></span><br>
+              <span class="shelfbadge">Wanted</span>
+            </div>
+          </section>
+          <section class="sec">
+            <p class="stamp">Added Tue 17 Nov</p>
+            <div class="nowdo">
+              <button class="btn primary">Log a review</button>
+              <p>Finished it, or stopped partway? Say so and this becomes an entry. It stays one row.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1c: a stopped work -->
+    <div class="step">
+      <h2>1c. A work she stopped</h2>
+      <p>The date reads "Stopped", never "Finished". Her how-far line sits where the stars would, in her words and in quotes. A rating shows only if she gave one.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Entry</div>
+          <button class="iconbtn" aria-label="More"><svg><use href="#i-more"/></svg></button>
+        </div>
+        <div class="scroll page">
+          <section class="work">
+            <div class="cover green lg">THE OVERSTORY</div>
+            <div>
+              <h3>The Overstory</h3>
+              <p class="meta">2018 &middot; Richard Powers &middot; Book</p>
+              <span class="tag v"><svg class="mk"><use href="#i-check"/></svg><span>Open Library</span></span><br>
+              <span class="shelfbadge">Didn't finish</span>
+            </div>
+          </section>
+          <section class="sec">
+            <p class="stamp">Stopped Tue 3 Nov &middot; Print</p>
+            <div class="progress-line"><span class="k">How far</span><span class="v">&ldquo;about 100 pages in&rdquo;</span></div>
+            <p class="words" style="margin-top:1.1rem">couldn't get into it, the characters never felt like people to me, maybe another time</p>
+            <div class="btnrow"><button class="btn grow">Edit</button><button class="btn grow">Log again</button></div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1d: a wanted work becomes a review -->
+    <div class="step">
+      <h2>1d. Wanted becomes a review</h2>
+      <p>Logging a wanted work opens its own row, not a second one. The switch moves to Finished, the Rating block appears, and the date is the finish date.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Draft</div>
+          <button class="iconbtn" aria-label="More"><svg><use href="#i-more"/></svg></button>
+        </div>
+        <div class="scroll">
+          <div class="banner"><svg><use href="#i-info"/></svg><span>On your wanted list since 17 Nov. Saving turns it into this review.</span></div>
+          <div class="card" style="margin-top:.75rem">
+            <section class="work">
+              <div class="cover slate lg">GIDEON THE NINTH</div>
+              <div>
+                <h3>Gideon the Ninth</h3>
+                <p class="meta">2019 &middot; Tamsyn Muir &middot; Book</p>
+                <span class="tag v"><svg class="mk"><use href="#i-check"/></svg><span>Matched</span></span>
+              </div>
+            </section>
+            <div class="shelf" role="group" aria-label="Shelf" data-choice>
+                  <button aria-pressed="true">Finished</button>
+                  <button aria-pressed="false">Didn't finish</button>
+                  <button aria-pressed="false">Wanted</button>
+                </div>
+            <section>
+              <p class="lbl">Rating<button class="fav iconfav" data-toggle aria-pressed="false" aria-label="Favourite"><svg><use href="#i-heart"/></svg></button></p>
+              <div class="rate" data-rating data-value="0">
+                <button class="step-btn" data-step="-0.25" aria-label="Lower by a quarter">&minus;</button>
+                <span class="stars" role="slider" aria-valuemin="0.25" aria-valuemax="5"></span>
+                <button class="step-btn" data-step="0.25" aria-label="Raise by a quarter">+</button>
+                <span class="num"></span>
+              </div>
+            </section>
+            <section>
+              <p class="lbl">Your words</p>
+              <p class="words">funny and strange and way smarter than the cover made me think, 4 stars</p>
+            </section>
+            <section>
+              <p class="lbl">Facts</p>
+              <div class="facts">
+                <button class="fact"><span class="k">Format</span><span class="val">Print</span></button>
+                <button class="fact"><span class="k">Finished</span><span class="val">Tue 24 Nov</span></button>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div class="confirm">
+          <button class="btn ghost">Discard</button>
+          <span class="need">Needs a rating</span>
+          <button class="btn primary" disabled>Save entry</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1e: stopping partway -->
+    <div class="step">
+      <h2>1e. Stopping partway</h2>
+      <p>On Didn't finish the Facts date becomes "Stopped", and a full-width "How far" fact appears under it. The rating stays optional and does not nag.</p>
+      <div class="phone">
+        <div class="topbar">
+          <button class="iconbtn" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+          <div class="t">Draft</div>
+          <button class="iconbtn" aria-label="More"><svg><use href="#i-more"/></svg></button>
+        </div>
+        <div class="scroll">
+          <div class="card">
+            <section class="work">
+              <div class="cover green lg">THE OVERSTORY</div>
+              <div>
+                <h3>The Overstory</h3>
+                <p class="meta">2018 &middot; Richard Powers &middot; Book</p>
+                <span class="tag v"><svg class="mk"><use href="#i-check"/></svg><span>Matched</span></span>
+              </div>
+            </section>
+            <div class="shelf" role="group" aria-label="Shelf" data-choice>
+                  <button aria-pressed="false">Finished</button>
+                  <button aria-pressed="true">Didn't finish</button>
+                  <button aria-pressed="false">Wanted</button>
+                </div>
+            <section>
+              <p class="lbl">Your words</p>
+              <p class="words">couldn't get into it, the characters never felt like people to me, maybe another time</p>
+            </section>
+            <section>
+              <p class="lbl">Facts</p>
+              <div class="facts">
+                <button class="fact"><span class="k">Format</span><span class="val">Print</span></button>
+                <button class="fact"><span class="k">Stopped</span><span class="val">Tue 3 Nov</span></button>
+                <button class="fact wide"><span class="k">How far</span><span class="val">about 100 pages in</span></button>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div class="confirm">
+          <button class="btn ghost">Discard</button>
+          <span class="need"></span>
+          <button class="btn primary">Save entry</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 2: earlier versions -->
     <div class="step">
       <h2>2. Earlier versions</h2>
