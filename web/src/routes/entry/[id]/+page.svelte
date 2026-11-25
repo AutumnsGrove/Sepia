@@ -228,9 +228,12 @@
         {/if}
         {#if entry.completion !== 'want_to' && (entry.rating_q > 0 || entry.favourite)}
           <div class="ratingrow">
-            <Rating quarters={entry.rating_q} readonly />
+            {#if entry.rating_q > 0}<Rating quarters={entry.rating_q} readonly />{/if}
+            <!-- The favourite sits in the rating row, the way the card's heart does, instead of a pill of its own. -->
             {#if entry.favourite}
-              <span class="favtag"><Heart size={14} aria-hidden="true" /> Favourite</span>
+              <span class="favourite" aria-label="A favourite">
+                <Heart size={16} aria-hidden="true" /><span>Favourite</span>
+              </span>
             {/if}
           </div>
         {/if}
@@ -240,11 +243,11 @@
             <span class="v">{entry.progress}</span>
           </div>
         {/if}
-        {#if entry.body}
-          <p class="words">{entry.body}</p>
-        {/if}
         {#if verdict}
           <p class="verdict">“{verdict}”</p>
+        {/if}
+        {#if entry.body}
+          <p class="words">{entry.body}</p>
         {/if}
 
         {#if groupChips.length > 0}
@@ -459,19 +462,19 @@
     flex-wrap: wrap;
     gap: 0.5rem 0.75rem;
   }
-  .favtag {
+  .favourite {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.2rem 0.6rem;
-    border-radius: 999px;
-    border: 1px solid var(--accent);
+    gap: 0.4rem;
     color: var(--accent);
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     white-space: nowrap;
   }
-  .favtag :global(svg) {
+  .favourite :global(svg) {
     fill: var(--accent);
+  }
+  .favourite span {
+    color: var(--text-2);
   }
   .words {
     margin: 1rem 0 0;

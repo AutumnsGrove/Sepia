@@ -71,7 +71,8 @@ words to keep.
    what I typed. Text I type counts as my own input for the `save_entry` guard. The entry records which
    case it is: `body_origin` is `extracted`, `typed`, `mixed` or `imported`.
 7. **The verdict is a pull quote and never a second copy.** The body is the same words at their positions, so
-   a verdict the body already contains is not printed above it. My words appear once.
+   a verdict the body already contains is not printed above it. My words appear once. On the card and on a saved
+   entry the quote leads the body, so her words read in the order the mockups draw them.
 
 What is stored with the entry: the body text, the verdict, `body_origin`, and `body_spans_json` (where
 each kept span sits in which session message), so containment can be re-checked later.
@@ -88,7 +89,9 @@ each kept span sits in which session message), so containment can be re-checked 
   stored. A vague phrase ("a four and a bit") leaves the control empty and the agent asks.
 - **A wanted or abandoned entry may have no rating at all.** The control stays empty and the card does not
   nag; the badge is what says why. If I do rate one, the value is stored exactly like any other.
-- The favourite flag is a separate toggle (a heart), never implied by the rating.
+- The favourite flag is a separate toggle (a heart), never implied by the rating. On a saved entry it is a
+  filled heart and the word **Favourite** in the rating row, not a pill of its own: the same signal as the card's
+  heart, read-only.
 
 ## 5. Unverified fields
 
