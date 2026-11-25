@@ -1730,5 +1730,6 @@ and the darwin screenshot baselines were regenerated and looked at.
 library button and chat are S16.5; both are planned, not drift. The paperclip is absent on purpose until
 S18 gives it something to do. Three need a contract change: the draft row's quoted line (`Session` has no
 snippet), the medium card's "Something else" and per-option hints (the server builds the options from the
-pre-read), and the reason on a Deleted row (not stored). Two need Autumn's call: a saved entry's Favourite
-pill is in no mockup, and the entry page's verdict sits after the body while the card's sits before it.
+pre-read), and the reason on a Deleted row (not stored). Two calls Autumn made on 2026-11-25: a saved entry's favourite
+is a filled heart and the word in the rating row, not a pill of its own (no mockup showed one), and the verdict
+leads the body on a saved entry as it does on the card. `ENTRY_CARD.md` 3 and 4 record both.
