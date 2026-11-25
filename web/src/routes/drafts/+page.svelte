@@ -62,6 +62,7 @@
             title={draft.title || 'Not identified yet'}
             waiting={waitingText(draft.waiting_reason)}
             age={ageText(draft.updated_at, now)}
+            noCover
             onclick={() => void goto(resolve('/s/[id]', { id: draft.id }))}
           />
         {/each}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Send } from '@lucide/svelte';
+  import { ArrowUp } from '@lucide/svelte';
   import { messageProblem, MAX_MESSAGE } from '../session/composer';
 
   /**
@@ -63,7 +63,7 @@
       oninput={grow}
       onkeydown={keydown}></textarea>
     <button type="submit" class="send" aria-label="Send" disabled={!sendable}>
-      <Send size={20} aria-hidden="true" />
+      <ArrowUp size={20} aria-hidden="true" />
     </button>
   </div>
 </form>
