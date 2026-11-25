@@ -25,6 +25,10 @@ By shelf, as drawn in mockup 04 frames 1b to 1e: **Finished** shows Format and F
 The draft card and the saved entry are the same component. A saved entry is the card with editing
 turned off and an Edit button on.
 
+**A provider is named, never shown by its id.** The database stores a provider id (`openlibrary`, `tmdb`);
+the card, the page and the Details list show the name ("Open Library", "TMDB"), because an id on a card
+reads like a bug.
+
 ## 2. Required to confirm
 
 The requirements depend on the entry's **completion**, and every one of them is enforced in `save_entry` as well
@@ -66,6 +70,9 @@ words to keep.
 6. **Typing it myself is always allowed.** Editing the body on the card replaces the extracted text with
    what I typed. Text I type counts as my own input for the `save_entry` guard. The entry records which
    case it is: `body_origin` is `extracted`, `typed`, `mixed` or `imported`.
+7. **The verdict is a pull quote and never a second copy.** The body is the same words at their positions, so
+   a verdict the body already contains is not printed above it. My words appear once. On the card and on a saved
+   entry the quote leads the body, so her words read in the order the mockups draw them.
 
 What is stored with the entry: the body text, the verdict, `body_origin`, and `body_spans_json` (where
 each kept span sits in which session message), so containment can be re-checked later.
@@ -75,11 +82,16 @@ each kept span sits in which session message), so containment can be re-checked 
 - **Drag across the five stars.** The value snaps to quarters (0.25 steps) as the finger moves.
 - **A minus and a plus button** nudge by 0.25 for precision.
 - **The exact number always shows** beside the stars, so the stored value is never hidden.
+- **A saved entry's rating is read, not adjusted.** The read-only card and the entry page draw the stars and the
+  number and no minus or plus buttons: the stepper is a control, and an Edit button is where a change starts
+  (mockup 04 frame 1).
 - A parsed value that is not on a quarter snaps to the nearest quarter, and the card shows what was
   stored. A vague phrase ("a four and a bit") leaves the control empty and the agent asks.
 - **A wanted or abandoned entry may have no rating at all.** The control stays empty and the card does not
   nag; the badge is what says why. If I do rate one, the value is stored exactly like any other.
-- The favourite flag is a separate toggle (a heart), never implied by the rating.
+- The favourite flag is a separate toggle (a heart), never implied by the rating. On a saved entry it is a
+  filled heart and the word **Favourite** in the rating row, not a pill of its own: the same signal as the card's
+  heart, read-only.
 
 ## 5. Unverified fields
 

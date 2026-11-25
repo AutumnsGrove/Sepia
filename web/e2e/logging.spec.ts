@@ -291,7 +291,7 @@ test.describe('logging a review', () => {
 
     // pickBook waits for the Describe form, which a wish must not get. The revisit card can still come up, because
     // every flow on this stack logs the same invented work.
-    const shelfControl = page.getByRole('button', { name: 'Want to' });
+    const shelfControl = page.getByRole('button', { name: 'Wanted' });
     const revisit = page.getByRole('button', { name: 'A new entry' });
     await expect(shelfControl.or(revisit)).toBeVisible({ timeout: 20_000 });
     if (await revisit.isVisible()) await revisit.click();

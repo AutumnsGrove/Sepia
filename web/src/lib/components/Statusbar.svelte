@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Check, CloudOff, Loader } from '@lucide/svelte';
+  import { uiCopy } from '../session/copy';
 
   /**
    * The strip above the transcript that says what the connection is doing. The icon differs per state and the
@@ -14,10 +15,10 @@
   let { state, text }: Props = $props();
 
   const copy: Record<State, string> = {
-    ok: "You're back and caught up.",
-    offline: 'You are offline. What you type will be sent when you reconnect.',
+    ok: uiCopy.backOnline,
+    offline: uiCopy.offline,
     working: 'Working',
-    saved: 'Saved to your library.',
+    saved: `${uiCopy.savedNote}.`,
   };
 </script>
 

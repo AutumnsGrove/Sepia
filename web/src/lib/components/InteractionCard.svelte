@@ -33,6 +33,16 @@
   type Category = { id: string; label: string; covered?: boolean; tags: Tag[]; hints?: string[] };
   type Question = { id: string; prompt: string; type: string; options?: string[]; hint?: string };
 
+  /** The tab labels the mockups draw. The full category name stays on the panel and every chip keeps its own word. */
+  const TAB_LABELS: Record<string, string> = {
+    characters: 'Characters',
+    plot: 'Plot',
+    setting: 'Setting',
+    writing: 'Writing',
+    feel: 'Feel',
+    content_warnings: 'Warnings',
+  };
+
   interface Props {
     kind: string;
     payload: Record<string, unknown>;
@@ -90,18 +100,39 @@
   const activeCategory = $derived(
     categories.find((category) => category.id === tab) ?? categories[0],
   );
+  // The hintline above the tabs already says "Pick any that fit, or none", so the panel adds a note only when it has
+  // something the hintline does not: that she mentioned the category, or that some chips are dashed guesses.
+  const activeNote = $derived(activeCategory ? describeNote(activeCategory) : '');
   const activeSet = $derived(chosen[tab] ?? []);
 
   const tabs = $derived(
     categories.map((category) => ({
       id: category.id,
-      label: category.label,
+      // A tab is a shelf-width word: the bank's "Setting and world" is the panel's name, not a tab's, and seven of
+      // them at full length overflow the row. An unknown category keeps whatever the bank called it.
+      label: TAB_LABELS[category.id] ?? category.label,
       count: chosen[category.id]?.length ?? 0,
     })),
   );
 
   function isHint(category: Category, tag: Tag): boolean {
     return (category.hints ?? []).includes(tag.value);
+  }
+
+  /**
+   * What the panel says above the chips. The mockup promises "You mentioned this" only where her words were read, and
+   * explains the dashed guesses only where there are some: a category she did not mention must not claim she did.
+   */
+  function describeNote(category: Category): string {
+    const mentioned = category.covered === true;
+    const guessed = (category.hints ?? []).length > 0;
+    if (mentioned && guessed) {
+      return 'You mentioned this. Dashed ones are guesses from your words, and nothing is chosen until you tap.';
+    }
+    if (guessed)
+      return 'Dashed ones are guesses from your words, and nothing is chosen until you tap.';
+    if (mentioned) return 'You mentioned this.';
+    return '';
   }
 
   function toggleTag(categoryID: string, value: string) {
@@ -174,10 +205,7 @@
     <Tabs {tabs} selected={tab} label="Categories" onselect={(id) => (picked = id)} />
     <div class="cloudwrap" role="tabpanel" id="panel-{tab}" aria-labelledby="tab-{tab}">
       {#if activeCategory}
-        <p class="cloudnote">
-          You mentioned this. Dashed ones are guesses from your words, and nothing is chosen until
-          you tap.
-        </p>
+        {#if activeNote}<p class="cloudnote">{activeNote}</p>{/if}
         <Cloud label={activeCategory.label}>
           {#each activeCategory.tags as tag (tag.value)}
             <Chip
