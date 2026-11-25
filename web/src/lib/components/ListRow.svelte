@@ -31,11 +31,6 @@
     waiting?: string;
     /** The shelf, when it is not an ordinary finished review: "didn't finish" or "wanted". */
     badge?: string;
-    /**
-     * A draft row has no cover. The mockup's draft is a title, what it is waiting for, and her own line, so a
-     * stand-in cover would be a picture of something nobody has picked yet.
-     */
-    noCover?: boolean;
     onclick?: () => void;
   }
   let {
@@ -51,17 +46,19 @@
     age,
     waiting,
     badge,
-    noCover = false,
     onclick,
   }: Props = $props();
 
   // The mockup shows 4.5 and 5, not 4.50: the number is read, not measured.
   const stars = $derived(quarters === null || quarters === undefined ? '' : String(quarters / 4));
+  // A draft row has no cover. The mockup's draft is a title, what it is waiting for, and her own line, so a stand-in
+  // cover would be a picture of something nobody has picked yet. Derived from `waiting` so every caller is right.
+  const bare = $derived(waiting !== undefined);
 </script>
 
 <li class="row">
-  <button type="button" class="ent" class:nocover={noCover} {onclick}>
-    {#if !noCover}<Cover {title} url={coverUrl} variant={coverVariant} {medium} />{/if}
+  <button type="button" class="ent" class:nocover={bare} {onclick}>
+    {#if !bare}<Cover {title} url={coverUrl} variant={coverVariant} {medium} />{/if}
     <span class="body">
       <span class="tt">{title}</span>
       {#if meta}<span class="mm">{meta}</span>{/if}

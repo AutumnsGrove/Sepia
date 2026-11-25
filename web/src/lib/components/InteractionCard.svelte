@@ -100,6 +100,9 @@
   const activeCategory = $derived(
     categories.find((category) => category.id === tab) ?? categories[0],
   );
+  // The hintline above the tabs already says "Pick any that fit, or none", so the panel adds a note only when it has
+  // something the hintline does not: that she mentioned the category, or that some chips are dashed guesses.
+  const activeNote = $derived(activeCategory ? describeNote(activeCategory) : '');
   const activeSet = $derived(chosen[tab] ?? []);
 
   const tabs = $derived(
@@ -128,8 +131,8 @@
     }
     if (guessed)
       return 'Dashed ones are guesses from your words, and nothing is chosen until you tap.';
-    if (mentioned) return 'You mentioned this. Pick any that fit, or none.';
-    return 'Pick any that fit, or none.';
+    if (mentioned) return 'You mentioned this.';
+    return '';
   }
 
   function toggleTag(categoryID: string, value: string) {
@@ -202,7 +205,7 @@
     <Tabs {tabs} selected={tab} label="Categories" onselect={(id) => (picked = id)} />
     <div class="cloudwrap" role="tabpanel" id="panel-{tab}" aria-labelledby="tab-{tab}">
       {#if activeCategory}
-        <p class="cloudnote">{describeNote(activeCategory)}</p>
+        {#if activeNote}<p class="cloudnote">{activeNote}</p>{/if}
         <Cloud label={activeCategory.label}>
           {#each activeCategory.tags as tag (tag.value)}
             <Chip

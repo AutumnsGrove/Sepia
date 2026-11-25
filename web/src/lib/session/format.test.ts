@@ -48,6 +48,8 @@ describe('the card format', () => {
   it('names the provider, and never shows its id', () => {
     expect(providerText('openlibrary')).toBe('Open Library');
     expect(providerText('tmdb')).toBe('TMDB');
+    expect(providerText('polaris')).toBe('Polaris');
+    expect(providerText('manual')).toBe('Your own details');
     expect(providerText('a-new-provider')).toBe('');
   });
 
@@ -56,5 +58,13 @@ describe('the card format', () => {
     expect(verdictText('the ending landed', 'the ending was too long')).toBe('the ending landed');
     expect(verdictText('', 'anything')).toBe('');
     expect(verdictText(undefined, undefined)).toBe('');
+  });
+
+  it('matches a verdict as words, so a short one is not hidden inside a longer word', () => {
+    // "fine" is inside "defined" and "ok" inside "broken" as substrings, but neither is the same word.
+    expect(verdictText('fine', 'the characters were well defined')).toBe('fine');
+    expect(verdictText('ok', 'the middle was broken')).toBe('ok');
+    // The same words still count through case and punctuation.
+    expect(verdictText('The ending landed', 'the ending landed, but it was too long')).toBe('');
   });
 });
