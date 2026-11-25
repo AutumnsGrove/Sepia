@@ -78,7 +78,8 @@ export function formatText(format: string | undefined): string {
 
 /**
  * A provider id as a name. The id is what the database stores, so "openlibrary" on a card or a page reads like a
- * bug; the metadata sources have had plain names since the mockups.
+ * bug; the metadata sources have had plain names since the mockups. The names mirror the ones the Go activity copy uses
+ * (internal/agent/words.go), so one provider is called the same thing in a transcript and on an entry.
  */
 export function providerText(provider: string | undefined): string {
   switch (provider) {
@@ -86,6 +87,12 @@ export function providerText(provider: string | undefined): string {
       return 'Open Library';
     case 'tmdb':
       return 'TMDB';
+    case 'polaris':
+      return 'Polaris';
+    // A work she wrote in herself, kept as a provider so the record can say where its facts came from.
+    case 'manual':
+      return 'Your own details';
+    // An id this build has no name for says nothing rather than printing itself on the page.
     default:
       return '';
   }
@@ -94,10 +101,23 @@ export function providerText(provider: string | undefined): string {
 /**
  * The verdict is a one-line pull quote, and the body is the same words at their positions in her message. When the body
  * already holds the verdict there is nothing to pull out, so it is not printed a second time above the body.
+ *
+ * It is matched as a sequence of words, not a substring: "fine" is not contained in "defined", and a real verdict
+ * must not disappear because a longer word happens to hold its letters. Case and punctuation are ignored on both sides.
  */
 export function verdictText(verdict: string | undefined, body: string | undefined): string {
   const line = (verdict ?? '').trim();
   if (line === '') return '';
-  if ((body ?? '').toLowerCase().includes(line.toLowerCase())) return '';
+  const wanted = wordsOf(line);
+  if (wanted.length === 0) return line;
+  const written = wordsOf(body ?? '');
+  for (let start = 0; start + wanted.length <= written.length; start++) {
+    if (wanted.every((word, offset) => written[start + offset] === word)) return '';
+  }
   return line;
+}
+
+/** The letters and digits of a text, folded to lower case, which is the only comparison the verdict needs. */
+function wordsOf(text: string): string[] {
+  return text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 }

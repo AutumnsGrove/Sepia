@@ -64,10 +64,8 @@
   const questions = $derived(questionAnswers(entry?.answers ?? []));
   const warnings = $derived(warningsOf(entry?.answers ?? []));
   const others = $derived(entry ? otherEntries(onWork, entry.id) : []);
-  const provider = $derived(
-    providerText(work?.primary_provider ?? entry?.work.primary_provider) ||
-      (work?.primary_provider ?? ''),
-  );
+  // An id this build has no name for renders no tag at all, rather than printing the id on the page.
+  const provider = $derived(providerText(work?.primary_provider ?? entry?.work.primary_provider));
   // The verdict is a pull quote, and the body is the same words: print the line only when the body does not hold it.
   const verdict = $derived(verdictText(entry?.verdict, entry?.body));
 
@@ -327,7 +325,7 @@
               <span class="top">
                 <span
                   >{shortDate(other.finished_on, thisYear)}{other.format
-                    ? ` · ${other.format}`
+                    ? ` · ${formatText(other.format) || other.format}`
                     : ''}</span
                 >
                 <span class="rt">{ratingText(other.rating_q)} ★</span>
