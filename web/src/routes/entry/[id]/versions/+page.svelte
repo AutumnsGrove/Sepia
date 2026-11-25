@@ -126,11 +126,14 @@
     color: var(--text-2);
   }
   .ver {
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    background: var(--panel);
-    padding: 0.85rem 0.95rem;
-    margin-bottom: 0.7rem;
+    display: grid;
+    gap: 0.5rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  /* The mockup keeps the versions on one timeline: rows divided by a rule, with no card around each one. */
+  .ver:last-child {
+    border-bottom: 0;
   }
   .vh {
     display: flex;
@@ -163,12 +166,12 @@
   }
   .words {
     margin: 0.55rem 0 0;
-    font-size: 0.9375rem;
+    font-size: 1rem;
     line-height: 1.6;
-    color: var(--text);
+    color: var(--text-2);
     overflow-wrap: anywhere;
   }
   .btnrow {
-    margin-top: 0.7rem;
+    margin-top: 0;
   }
 </style>

@@ -1682,3 +1682,54 @@ with a two-key cursor and settles the undated-tail note S21 left. All of it, and
 
 **Found on the way.** The card's shelf switch said "Want to" where the tab says "Wanted", and its How far field
 printed the label twice. Both are fixed in the design and listed in S22.4.
+
+## 2026-11-25, design audit, the screens drift back to the mockups
+
+Every mockup page and every real screen was rendered at 390×844 and compared side by side. Most of what
+looked different was work already named by a slice; the rest was drift that no slice owned yet and that has
+no dependency, so it is fixed here. Nothing in `PLAN.md` changed, and no contract changed.
+
+**Fixed, each because the mockup says so.**
+
+- A favourite's heart sat above its stars in every list row; the mockup has them inline in one right-hand
+  group. Home, the Library, search and Deleted are one component, so the one fix reaches all four.
+- A draft row drew a cover, and its reason had no marker. The mockup's draft is a title, a dashed circle and
+  what it is waiting for, with no cover: nobody has picked a work yet, so the stand-in was a picture of
+  nothing. The quoted line the mockup also shows needs a session preview the contract does not carry; it is
+  listed below, not invented here.
+- The composer's send was a paper plane; the mockup's `i-send` is an arrow up. The large cover and the home
+  wordmark also measured smaller than the mockup's tokens.
+- The Describe tabs printed the bank's full category names ("Setting and world") and the panel always
+  claimed "You mentioned this", even for a category the agent had not read. The tab is the short word, the
+  panel's name stays full, and the sentence is chosen from `covered` and whether there are dashed guesses.
+- A long activity line pushed its "why" onto a second line of its own. The label now wraps inside itself and
+  the link stays on the line.
+- The card printed the verdict above a body that already began with the same words ("the ending landed").
+  The pull quote is skipped when the body contains it, so her words appear once.
+- A provider's id leaked onto the card and page ("openlibrary"). Both show its name now, from one helper.
+- A saved entry's rating drew a dead minus and plus; the mockup's read-only rating is the stars and the
+  number, with Edit as the way to change it.
+- The entry page's date stamp was upper-cased and printed raw format ids ("AUDIOBOOK"); the mockup sets a
+  sentence, "Fri 30 Oct · Print". Its provider was a filled green pill; the mockup has a quiet check and a
+  label in the metadata.
+- Earlier versions were a stack of bordered cards; the mockup is one timeline divided by rules.
+- The cover stand-in drew initials. The mockup prints the title at the foot of the block, so it does that.
+  Sentence case rather than the mockup's capitals, because at 6px the capitals pushed a real title like
+  "A Cold Inheritance" past the cover and broke the word mid-letter.
+- The card's shelf switch said "Want to" where the library tab, ENTRY_CARD and S22 say "Wanted".
+
+**Changed as a result of looking, not reading.** The mockup's card is one pull quote per block; the real
+agent's verdict quote is usually also inside the body, which is why the duplicate was visible only in a
+rendered flow. The cover's sentence case was chosen after the capitalised version was rendered and read.
+
+**Tests.** `formatText`, `providerText` and `verdictText` are pure and unit-tested, each watched failing
+first; the shelf-switch e2e looks for "Wanted". `make web-check` and the end-to-end suite (178 tests) pass,
+and the darwin screenshot baselines were regenerated and looked at.
+
+**Still off the mockups, and where each belongs.** The Library's three shelves are S22, and the Ask your
+library button and chat are S16.5; both are planned, not drift. The paperclip is absent on purpose until
+S18 gives it something to do. Three need a contract change: the draft row's quoted line (`Session` has no
+snippet), the medium card's "Something else" and per-option hints (the server builds the options from the
+pre-read), and the reason on a Deleted row (not stored). Two calls Autumn made on 2026-11-25: a saved entry's favourite
+is a filled heart and the word in the rating row, not a pill of its own (no mockup showed one), and the verdict
+leads the body on a saved entry as it does on the card. `ENTRY_CARD.md` 3 and 4 record both.

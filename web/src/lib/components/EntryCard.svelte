@@ -14,7 +14,14 @@
   import type { Preread } from '../state/session';
   import { uiCopy } from '../session/copy';
   import { whatWillChange } from '../session/diff';
-  import { dateText, mediumText } from '../session/format';
+  import {
+    FORMATS,
+    dateText,
+    formatText,
+    mediumText,
+    providerText,
+    verdictText,
+  } from '../session/format';
   import { completionBadge, dateLabel } from '../state/reading';
   import Button from './Button.svelte';
   import Cover from './Cover.svelte';
@@ -93,7 +100,7 @@
   const shelfOptions = [
     { value: 'finished', label: 'Finished' },
     { value: 'abandoned', label: "Didn't finish" },
-    { value: 'want_to', label: 'Want to' },
+    { value: 'want_to', label: 'Wanted' },
   ] as const;
   const tagAnswers = $derived(
     (draft.answers ?? []).filter(
@@ -103,22 +110,8 @@
   const plainAnswers = $derived(
     (draft.answers ?? []).filter((answer) => answer.answer_type !== 'tags'),
   );
-
-  const formats = [
-    ['cinema', 'Cinema'],
-    ['streaming', 'Streaming'],
-    ['broadcast', 'TV broadcast'],
-    ['audiobook', 'Audiobook'],
-    ['hardback', 'Hardback'],
-    ['paperback', 'Paperback'],
-    ['ebook', 'Ebook'],
-    ['physical', 'Physical'],
-    ['live', 'Live'],
-  ] as const;
-
-  function formatLabel(value: string | undefined): string {
-    return formats.find(([key]) => key === value)?.[1] ?? '';
-  }
+  // Her words appear once: a verdict the body already holds is not printed again above it.
+  const verdict = $derived(verdictText(draft.verdict, draft.body));
 
   function startBodyEdit() {
     if (!editable) return;
@@ -163,7 +156,7 @@
       {:else if draft.blocks.work === 'verified' || draft.blocks.work === 'accepted' || draft.blocks.work === 'image_read'}
         <span class="tag v">
           <Check size={16} aria-hidden="true" />
-          <span>{draft.work.primary_provider || 'Matched'}</span>
+          <span>{providerText(draft.work.primary_provider) || 'Matched'}</span>
         </span>
       {/if}
       {#if editable}
@@ -249,8 +242,8 @@
 
   <section>
     <p class="lbl">Your words</p>
-    {#if draft.verdict}
-      <p class="verdict">{draft.verdict}</p>
+    {#if verdict}
+      <p class="verdict">{verdict}</p>
     {/if}
     {#if editingBody}
       <textarea
@@ -317,7 +310,7 @@
             }}
           >
             <option value="">Not set</option>
-            {#each formats as [value, label] (value)}
+            {#each FORMATS as [value, label] (value)}
               <option {value}>{label}</option>
             {/each}
           </select>
@@ -331,7 +324,7 @@
         >
           <span class="k">Format</span>
           <span class="val" class:empty={!draft.format}>
-            {formatLabel(draft.format) || 'Add format'}
+            {formatText(draft.format) || 'Add format'}
           </span>
         </button>
       {/if}

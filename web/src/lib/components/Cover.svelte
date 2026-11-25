@@ -34,21 +34,16 @@
   let failedUrl = $state<string | null>(null);
   const showImage = $derived(Boolean(url) && failedUrl !== url);
 
-  const initials = $derived(
-    title
-      .split(/\s+/)
-      .filter((word) => /[\p{L}\p{N}]/u.test(word))
-      .slice(0, 3)
-      .map((word) => word[0]?.toUpperCase() ?? '')
-      .join(''),
-  );
+  // The stand-in is a tiny printed spine, the way the mockups draw one: the title at the foot of the block. Initials
+  // read as a missing image; the title reads as a cover that has not arrived yet.
+  const label = $derived(title.trim());
 </script>
 
 <span class="cover {tone}" class:lg={size === 'lg'} aria-hidden="true">
   {#if showImage}
     <img src={url} alt="" loading="lazy" decoding="async" onerror={() => (failedUrl = url)} />
   {:else}
-    <span class="tt">{initials || title.slice(0, 2)}</span>
+    <span class="tt">{label}</span>
   {/if}
 </span>
 
@@ -62,13 +57,26 @@
     align-items: end;
     padding: 3px;
     font:
-      600 0.40625rem/1.1 'Lexend',
+      600 0.375rem/1.1 'Lexend',
       system-ui,
       sans-serif;
     letter-spacing: 0;
     color: color-mix(in oklch, var(--text) 85%, var(--accent));
     overflow: hidden;
     flex: none;
+  }
+  /* At most three lines, cut at a word boundary, like the title printed up a spine. */
+  .cover .tt {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    /* Sentence case, not the mockup's capitals: a real title is longer than the invented ones, and at this size the
+       capitals push a word like "Inheritance" past the cover's width, which broke it mid-word. */
+    text-transform: none;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
   .cover img {
     width: 100%;

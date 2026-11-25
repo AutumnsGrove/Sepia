@@ -6,7 +6,7 @@
     Clock,
     Ellipsis,
     Info,
-    Send,
+    ArrowUp,
     Square,
   } from '@lucide/svelte';
   import type { Entry } from '../api/client';
@@ -188,7 +188,7 @@
           {:else}
             <Check size={14} aria-hidden="true" />
           {/if}
-          <span>{row.row.label}</span>
+          <span class="label">{row.row.label}</span>
           {#if session.draft && row.row.tool}
             <button type="button" class="why" onclick={() => (whyOpen = true)}>why</button>
           {/if}
@@ -311,7 +311,7 @@
             aria-label="Send"
             disabled={!composerView.sendable || composerView.disabled}
           >
-            <Send size={20} aria-hidden="true" />
+            <ArrowUp size={20} aria-hidden="true" />
           </button>
         {/if}
       </div>
@@ -419,11 +419,20 @@
   .act.live {
     color: var(--text-2);
   }
+  /* The label takes the room and wraps inside itself, so a long step keeps its "why" on the same line instead of
+     leaving the link alone on a second one. */
+  .act .label {
+    /* A small basis keeps the label on the same flex line as its "why": with `auto`, the long label's max-content
+       width forced the wrap and the link dropped to a line of its own. */
+    flex: 1 1 6rem;
+    min-width: 0;
+  }
   /* The old link was 26x18px with no hover: on a phone it was a miss more often than a tap, and there was no sign
    * that it did anything. It is a 44px row now, with a hover and focus state of its own. */
   .act .why {
     display: inline-flex;
     align-items: center;
+    flex: none;
     min-height: 44px;
     margin: -0.55rem -0.55rem -0.55rem 0.1rem;
     padding: 0 0.55rem;
