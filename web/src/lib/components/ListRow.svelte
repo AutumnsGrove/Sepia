@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Heart, Star } from '@lucide/svelte';
+  import { CircleDashed, Heart, Star } from '@lucide/svelte';
   import Cover from './Cover.svelte';
   import type { SnippetSegment } from '../state/search';
 
@@ -31,6 +31,11 @@
     waiting?: string;
     /** The shelf, when it is not an ordinary finished review: "didn't finish" or "wanted". */
     badge?: string;
+    /**
+     * A draft row has no cover. The mockup's draft is a title, what it is waiting for, and her own line, so a
+     * stand-in cover would be a picture of something nobody has picked yet.
+     */
+    noCover?: boolean;
     onclick?: () => void;
   }
   let {
@@ -46,6 +51,7 @@
     age,
     waiting,
     badge,
+    noCover = false,
     onclick,
   }: Props = $props();
 
@@ -54,8 +60,8 @@
 </script>
 
 <li class="row">
-  <button type="button" class="ent" class:draft={waiting !== undefined} {onclick}>
-    <Cover {title} url={coverUrl} variant={coverVariant} {medium} />
+  <button type="button" class="ent" class:nocover={noCover} {onclick}>
+    {#if !noCover}<Cover {title} url={coverUrl} variant={coverVariant} {medium} />{/if}
     <span class="body">
       <span class="tt">{title}</span>
       {#if meta}<span class="mm">{meta}</span>{/if}
@@ -69,16 +75,22 @@
       {:else if note}
         <span class="sn">{note}</span>
       {/if}
-      {#if waiting}<span class="st">{waiting}</span>{/if}
+      {#if waiting}
+        <span class="st"><CircleDashed size={14} aria-hidden="true" />{waiting}</span>
+      {/if}
     </span>
     <span class="right">
-      {#if favourite}
-        <span class="hrt" aria-label="A favourite"><Heart size={13} aria-hidden="true" /></span>
-      {/if}
-      {#if quarters !== null && quarters !== undefined}
-        <span class="rt" aria-label="{stars} out of 5 stars">
-          <Star size={14} aria-hidden="true" />
-          <span aria-hidden="true">{stars}</span>
+      {#if favourite || (quarters !== null && quarters !== undefined)}
+        <span class="rt">
+          {#if favourite}
+            <span class="hrt" aria-label="A favourite"><Heart size={13} aria-hidden="true" /></span>
+          {/if}
+          {#if quarters !== null && quarters !== undefined}
+            <span class="stars" aria-label="{stars} out of 5 stars">
+              <Star size={14} aria-hidden="true" />
+              <span aria-hidden="true">{stars}</span>
+            </span>
+          {/if}
         </span>
       {/if}
       {#if age}<span class="age">{age}</span>{/if}
@@ -107,8 +119,8 @@
     min-height: 72px;
     color: inherit;
   }
-  .ent.draft {
-    grid-template-columns: 44px 1fr auto;
+  .ent.nocover {
+    grid-template-columns: 1fr auto;
   }
   .body {
     display: grid;
@@ -160,19 +172,29 @@
     box-shadow: inset 0 -1.5px 0 var(--accent);
   }
   .st {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
     font-size: 0.8125rem;
     color: var(--text-2);
     margin-top: 0.2rem;
   }
+  /* The dashed circle is the mockup's marker for "not done yet", and the words beside it say what is missing, so
+     the shape and the label carry the state together and never the hue alone. */
+  .st :global(svg) {
+    flex: none;
+    color: var(--unverified);
+  }
   .right {
-    display: grid;
-    justify-items: end;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     gap: 0.2rem;
   }
   .rt {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: 0.35rem;
     font:
       500 0.9375rem 'Lexend',
       system-ui,
@@ -180,12 +202,18 @@
     font-variant-numeric: tabular-nums;
     color: var(--accent);
   }
+  .stars {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
   .rt :global(svg) {
     fill: var(--accent);
     stroke: var(--accent);
   }
   .hrt {
     display: inline-flex;
+    margin-right: 0.1rem;
     color: var(--accent);
   }
   .hrt :global(svg) {

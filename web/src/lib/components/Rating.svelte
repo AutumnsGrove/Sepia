@@ -120,21 +120,27 @@
     {/each}
   </div>
 
-  <button
-    type="button"
-    class="step-btn"
-    aria-label="A quarter star less"
-    disabled={readonly || quarters === 0}
-    onclick={() => set(quarters - 1)}><Minus size={20} aria-hidden="true" /></button
-  >
+  <!-- A saved entry's rating is a fact, not a control: the mockups show the stars and the number, and the Edit
+       button is where a change starts, so the stepper is not drawn at all rather than drawn dead. -->
+  {#if !readonly}
+    <button
+      type="button"
+      class="step-btn"
+      aria-label="A quarter star less"
+      disabled={quarters === 0}
+      onclick={() => set(quarters - 1)}><Minus size={20} aria-hidden="true" /></button
+    >
+  {/if}
   <span class="num" aria-hidden="true">{quarters / 4}</span>
-  <button
-    type="button"
-    class="step-btn"
-    aria-label="A quarter star more"
-    disabled={readonly || quarters === 20}
-    onclick={() => set(quarters + 1)}><Plus size={20} aria-hidden="true" /></button
-  >
+  {#if !readonly}
+    <button
+      type="button"
+      class="step-btn"
+      aria-label="A quarter star more"
+      disabled={quarters === 20}
+      onclick={() => set(quarters + 1)}><Plus size={20} aria-hidden="true" /></button
+    >
+  {/if}
 
   {#if showFavourite}
     <button

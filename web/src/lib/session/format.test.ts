@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { dateText, mediumText, ratingText, usdText } from './format';
+import {
+  FORMATS,
+  dateText,
+  formatText,
+  mediumText,
+  providerText,
+  ratingText,
+  usdText,
+  verdictText,
+} from './format';
 
 describe('the card format', () => {
   it('shows a quarter-star rating without a trailing zero', () => {
@@ -26,5 +35,26 @@ describe('the card format', () => {
     expect(mediumText('book')).toBe('Book');
     expect(mediumText('tv')).toBe('TV');
     expect(mediumText('something-new')).toBe('');
+  });
+
+  it('names the format in plain words, from the same list the picker offers', () => {
+    expect(formatText('audiobook')).toBe('Audiobook');
+    expect(formatText('cinema')).toBe('Cinema');
+    expect(formatText('')).toBe('');
+    // The picker and the label read the one list, so a format cannot be offered but unnameable.
+    for (const [value, label] of FORMATS) expect(formatText(value)).toBe(label);
+  });
+
+  it('names the provider, and never shows its id', () => {
+    expect(providerText('openlibrary')).toBe('Open Library');
+    expect(providerText('tmdb')).toBe('TMDB');
+    expect(providerText('a-new-provider')).toBe('');
+  });
+
+  it('drops a verdict the body already contains, so her words are printed once', () => {
+    expect(verdictText('the ending landed', 'the ending landed but it was too long')).toBe('');
+    expect(verdictText('the ending landed', 'the ending was too long')).toBe('the ending landed');
+    expect(verdictText('', 'anything')).toBe('');
+    expect(verdictText(undefined, undefined)).toBe('');
   });
 });

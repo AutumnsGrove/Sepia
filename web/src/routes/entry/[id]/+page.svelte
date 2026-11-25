@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
-  import { Check, ChevronDown, Heart, History, RotateCcw } from '@lucide/svelte';
+  import { Check, ChevronDown, CircleDashed, Heart, History, RotateCcw } from '@lucide/svelte';
   import {
     ApiError,
     createClient,
@@ -18,7 +18,14 @@
   import Rating from '../../../lib/components/Rating.svelte';
   import SkeletonRows from '../../../lib/components/SkeletonRows.svelte';
   import TopBar from '../../../lib/components/TopBar.svelte';
-  import { dateText, mediumText, ratingText } from '../../../lib/session/format';
+  import {
+    dateText,
+    formatText,
+    mediumText,
+    providerText,
+    ratingText,
+    verdictText,
+  } from '../../../lib/session/format';
   import { completionBadge } from '../../../lib/state/reading';
   import {
     describeGroups,
@@ -58,12 +65,11 @@
   const warnings = $derived(warningsOf(entry?.answers ?? []));
   const others = $derived(entry ? otherEntries(onWork, entry.id) : []);
   const provider = $derived(
-    (work?.primary_provider ?? entry?.work.primary_provider ?? '') === 'tmdb'
-      ? 'TMDB'
-      : (work?.primary_provider ?? entry?.work.primary_provider ?? '') === 'openlibrary'
-        ? 'Open Library'
-        : (work?.primary_provider ?? ''),
+    providerText(work?.primary_provider ?? entry?.work.primary_provider) ||
+      (work?.primary_provider ?? ''),
   );
+  // The verdict is a pull quote, and the body is the same words: print the line only when the body does not hold it.
+  const verdict = $derived(verdictText(entry?.verdict, entry?.body));
 
   async function load() {
     loading = true;
@@ -201,9 +207,12 @@
               .join(' · ')}
           </p>
           {#if entry.work.verified && provider}
-            <span class="tag"><Check size={13} aria-hidden="true" />{provider}</span>
+            <span class="tag"><Check size={13} aria-hidden="true" /><span>{provider}</span></span>
           {:else if provider}
-            <span class="tag unverified">{provider} · unverified</span>
+            <span class="tag unverified"
+              ><CircleDashed size={13} aria-hidden="true" /><span>{provider} · unverified</span
+              ></span
+            >
           {/if}
         </div>
       </section>
@@ -212,7 +221,7 @@
         {#if entry.finished_on || entry.format}
           <p class="stamp">
             {entry.finished_on ? dateText(entry.finished_on) : 'No date'}{entry.format
-              ? ` · ${entry.format}`
+              ? ` · ${formatText(entry.format) || entry.format}`
               : ''}
           </p>
         {/if}
@@ -236,8 +245,8 @@
         {#if entry.body}
           <p class="words">{entry.body}</p>
         {/if}
-        {#if entry.verdict}
-          <p class="verdict">“{entry.verdict}”</p>
+        {#if verdict}
+          <p class="verdict">“{verdict}”</p>
         {/if}
 
         {#if groupChips.length > 0}
@@ -420,15 +429,18 @@
   .tag {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
-    background: var(--accent-soft);
-    color: var(--text);
+    gap: 0.35rem;
     font-size: 0.75rem;
+    color: var(--accent);
+  }
+  /* The label is the quiet half: the check carries the state, and the name is read without shouting. */
+  .tag span {
+    color: var(--text-2);
   }
   .tag.unverified {
-    background: var(--unverified-soft);
+    color: var(--unverified);
+  }
+  .tag.unverified span {
     color: var(--unverified);
   }
   .sec {
@@ -436,15 +448,12 @@
     border-top: 1px solid var(--line);
     margin-top: 0.85rem;
   }
+  /* The stamp reads as a sentence, not a label: the mockups set it in Lexend at 13px, sentence case, in the
+     second text tone. */
   .stamp {
     margin: 0 0 0.6rem;
-    font:
-      500 0.6875rem 'Lexend',
-      system-ui,
-      sans-serif;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: var(--text-3);
+    font-size: 0.8125rem;
+    color: var(--text-2);
   }
   .ratingrow {
     display: flex;

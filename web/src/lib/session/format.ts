@@ -54,3 +54,50 @@ export function mediumText(medium: string | undefined): string {
       return '';
   }
 }
+
+/**
+ * The formats the card offers, in the order it offers them. The picker and the label read this one list, so a format
+ * cannot be offered but unnameable, which is how "audiobook" once showed up raw in the date stamp.
+ */
+export const FORMATS = [
+  ['cinema', 'Cinema'],
+  ['streaming', 'Streaming'],
+  ['broadcast', 'TV broadcast'],
+  ['audiobook', 'Audiobook'],
+  ['hardback', 'Hardback'],
+  ['paperback', 'Paperback'],
+  ['ebook', 'Ebook'],
+  ['physical', 'Physical'],
+  ['live', 'Live'],
+] as const;
+
+/** A format's plain name, or nothing for the empty and unknown values. */
+export function formatText(format: string | undefined): string {
+  return FORMATS.find(([value]) => value === format)?.[1] ?? '';
+}
+
+/**
+ * A provider id as a name. The id is what the database stores, so "openlibrary" on a card or a page reads like a
+ * bug; the metadata sources have had plain names since the mockups.
+ */
+export function providerText(provider: string | undefined): string {
+  switch (provider) {
+    case 'openlibrary':
+      return 'Open Library';
+    case 'tmdb':
+      return 'TMDB';
+    default:
+      return '';
+  }
+}
+
+/**
+ * The verdict is a one-line pull quote, and the body is the same words at their positions in her message. When the body
+ * already holds the verdict there is nothing to pull out, so it is not printed a second time above the body.
+ */
+export function verdictText(verdict: string | undefined, body: string | undefined): string {
+  const line = (verdict ?? '').trim();
+  if (line === '') return '';
+  if ((body ?? '').toLowerCase().includes(line.toLowerCase())) return '';
+  return line;
+}

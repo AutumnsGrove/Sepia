@@ -130,7 +130,7 @@ select,
 .topbar .wordmark {
   flex: 1;
   font:
-    500 1.125rem 'Fraunces',
+    500 1.375rem 'Fraunces',
     Georgia,
     serif;
   color: var(--text);
