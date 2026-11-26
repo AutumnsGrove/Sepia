@@ -29,10 +29,10 @@ While `pi-review` is disabled, `claude-review` is the only reader, so it does th
 this one. Nothing else is looking at the paperwork, the specs or the workflow YAML, and skipping them
 is a silent gap rather than a saved turn.
 
-One thing neither reader can do: this reader cannot review a pull request that edits its own workflow
-file. GitHub validates `.github/workflows/claude-code-review.yml` against the default branch and the
-action skips, leaving a **green** check that reviewed nothing. Read that YAML by hand and say that the
-run skipped.
+One thing to know about this reader: passing `github_token` skips the action's default-branch validation,
+so a pull request that edits `.github/workflows/claude-code-review.yml` **does** run its own version of it
+(the stock app-token workflow skipped instead). A workflow change is a change to the reviewer, and a person
+or `pi-review` has to read it; the green check proves nothing about the reviewer's own steps.
 
 ## What this job can run
 
