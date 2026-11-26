@@ -176,6 +176,9 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("/api/sessions/{id}", getOnly(s.serveSession))
 	mux.Handle("/api/sessions/{id}/media", postOnly(s.uploadMedia))
 	mux.Handle("/api/entries", getOnly(s.listEntries))
+	// Before the {id} pattern, which would otherwise read "counts" as an entry's id. A literal pattern wins over a
+	// wildcard in Go's mux, and this line says so to the reader as well as to the router.
+	mux.Handle("/api/entries/counts", getOnly(s.shelfCounts))
 	mux.Handle("/api/entries/{id}", getOnly(s.serveEntry))
 	mux.Handle("/api/entries/{id}/revisions", getOnly(s.listRevisions))
 	mux.Handle("/api/entries/{id}/delete", postOnly(s.deleteEntry))

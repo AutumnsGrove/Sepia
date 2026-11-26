@@ -25,6 +25,7 @@ export type Medium = components['schemas']['Medium'];
 export type Entry = components['schemas']['Entry'];
 export type SessionPage = Ok<Operation<'/api/sessions', 'get'>>;
 export type LibraryPage = Ok<Operation<'/api/entries', 'get'>>;
+export type ShelfCounts = Ok<Operation<'/api/entries/counts', 'get'>>;
 export type RevisionPage = Ok<Operation<'/api/entries/{id}/revisions', 'get'>>;
 export type Revision = components['schemas']['Revision'];
 export type WorkDetail = Ok<Operation<'/api/works/{id}', 'get'>>;
@@ -102,6 +103,8 @@ export interface Client {
   getSession(id: string): Promise<Session>;
   listSessions(query?: SessionQuery): Promise<SessionPage>;
   listEntries(query?: LibraryQuery): Promise<LibraryPage>;
+  /** The three shelf totals the Library's tabs carry, which ignore every filter. */
+  shelfCounts(): Promise<ShelfCounts>;
   getEntry(id: string): Promise<Entry>;
   listRevisions(id: string, cursor?: string): Promise<RevisionPage>;
   deleteEntry(id: string): Promise<void>;
@@ -185,6 +188,7 @@ export function createClient(options: ClientOptions = {}): Client {
     getSession: (id) => request('GET', `/api/sessions/${encodeURIComponent(id)}`),
     listSessions: (query = {}) => request('GET', `/api/sessions${queryString({ ...query })}`),
     listEntries: (query = {}) => request('GET', `/api/entries${queryString({ ...query })}`),
+    shelfCounts: () => request('GET', '/api/entries/counts'),
     getEntry: (id) => request('GET', `/api/entries/${encodeURIComponent(id)}`),
     listRevisions: (id, cursor) =>
       request('GET', `/api/entries/${encodeURIComponent(id)}/revisions${queryString({ cursor })}`),

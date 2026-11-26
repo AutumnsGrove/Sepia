@@ -87,6 +87,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/entries/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How many entries each shelf holds
+         * @description The number on each of the Library's three tabs, in one read rather than three. It takes no filters on purpose: the three totals are the shelves' own, so a medium chip cannot make a tab disagree with the list under it. A draft is not a row of the library, and a deleted entry belongs to the Deleted list's own count, so neither is on a shelf.
+         */
+        get: operations["countShelfEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/entries/{id}": {
         parameters: {
             query?: never;
@@ -406,11 +426,17 @@ export interface components {
          */
         Completion: "want_to" | "finished" | "abandoned";
         /**
-         * @description newest is finished_on then id, both descending. rating is finished before unfinished, then rating_q descending, then created_at and id, so the order is total and a page never repeats or skips a row. An unfinished entry has no rating to rank by, so it follows the rated ones rather than sitting among them.
+         * @description newest is finished_on then id, both descending, and on the wanted shelf it is created_at then id, because a wish has no finish date: added most recently, first. rating is finished before unfinished, then rating_q descending, then created_at and id, so the order is total and a page never repeats or skips a row. An unfinished entry has no rating to rank by, so it follows the rated ones rather than sitting among them. The wanted shelf offers no rating order on the screen: it has nothing to rank, and states its order instead.
          * @default newest
          * @enum {unknown}
          */
         LibrarySort: "newest" | "rating";
+        /** @description The three shelf totals the Library's tabs carry, ignoring every filter. want_to is the wanted list, which is a work without a review; finished and abandoned split the reviews by whether she got to the end. */
+        ShelfCounts: {
+            finished: number;
+            abandoned: number;
+            want_to: number;
+        };
         /** @description Every switch on the Settings screen that is not decided in config. Off means the step does not run, not that it failed. */
         Settings: {
             /**
@@ -822,7 +848,7 @@ export interface operations {
                 medium?: components["schemas"]["Medium"];
                 favourite?: boolean;
                 work?: string;
-                /** @description The shelf. Omitted is the library proper, which is everything she has reviewed: finished and abandoned, but not a work she only means to read, because a wish is not a review and has no finish date to group by. want_to is that list, one chip away. */
+                /** @description The shelf. Omitted is the library proper, which is everything she has reviewed: finished and abandoned, but not a work she only means to read, because a wish is not a review and has no finish date to group by. The Library screen always names a shelf, because its three tabs are three lists; the omitted default stays as it is so nothing else has to change. Each named shelf lists exactly its own rows: finished, or abandoned, or want_to. A wanted row has no finish date and no rating, so the wanted shelf is ordered by when it was added, and its cursor is that order's two keys rather than the library's (finished_on, id). */
                 completion?: components["schemas"]["Completion"];
                 /** @description The lowest quarter-star rating the list includes, 1 to 20. */
                 rating_min?: number;
@@ -857,6 +883,26 @@ export interface operations {
                         /** @description How many entries the filters hold in all, not how many are on this page. It does not change with the cursor: a total that grew as the reader scrolled would not be one. */
                         total: number;
                     };
+                };
+            };
+        };
+    };
+    countShelfEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One number per shelf */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShelfCounts"];
                 };
             };
         };
