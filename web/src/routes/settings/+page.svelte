@@ -168,10 +168,10 @@
         </a>
       </div>
 
-      <Banner
-        >Export is not built yet. Backups run on the potato once they are set up. Everything else
-        here is set in config.</Banner
-      >
+      <Banner>
+        Export is not built yet. Backups run on the potato once they are set up. Everything else
+        here is set in config.
+      </Banner>
     {/if}
   </div>
 </main>
