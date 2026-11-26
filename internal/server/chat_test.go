@@ -182,10 +182,10 @@ func TestARetriedMessageIsNotATurnFailure(t *testing.T) {
 }
 
 // The case the socket cannot catch: two copies of one client message reach the hub before either turn has recorded it,
-// so the second turn runs and finds the ledger already holding the id. That must be silent — a duplicate is the retry
-// working, not a failed review. The refusal is a live event rather than a stored one, so it is read off the socket, and
-// this test is the guard: remove the hub's duplicate case and an `error` frame arrives here.
-func TestADuplicateThatReachesTheHubSaysNothing(t *testing.T) {
+// so the second turn runs and finds the ledger already holding the id. That is answered with a notice, not an error: a
+// duplicate is the retry working. It is a live event rather than a stored one, so it is read off a socket, and this
+// test is the guard — with the hub's duplicate case disabled the same window carries an `error` frame instead.
+func TestADuplicateThatReachesTheHubIsANoticeNotAnError(t *testing.T) {
 	rig := newFlowRigDecided(t, nil, world.ScriptSampleDecisions)
 	defer rig.close()
 	ctx := context.Background()
@@ -211,8 +211,9 @@ func TestADuplicateThatReachesTheHubSaysNothing(t *testing.T) {
 		t.Fatalf("startTurn: %v", startErr)
 	}
 
-	// Read until the hub is quiet, and refuse anything error-shaped on the way.
+	// Read until the hub is quiet. An error is the failure this guards against; the notice is what she should see.
 	deadline := time.Now().Add(3 * time.Second)
+	noticed := false
 	for time.Now().Before(deadline) && rig.inner.hub.busy() {
 		ev, ok := c.nextWithin(300 * time.Millisecond)
 		if !ok {
@@ -221,6 +222,12 @@ func TestADuplicateThatReachesTheHubSaysNothing(t *testing.T) {
 		if ev.Type == "error" {
 			t.Fatalf("the duplicate produced an error event: %s", ev.Data)
 		}
+		if ev.Type == "notice" && ev.field(t, "code") == "duplicate_message" {
+			noticed = true
+		}
+	}
+	if !noticed {
+		t.Fatal("the duplicate said nothing: a notice is what tells her the message already went through")
 	}
 	messages, err := rig.engine.UserMessages(ctx, sess.ID)
 	if err != nil {
