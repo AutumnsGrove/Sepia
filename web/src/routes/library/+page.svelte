@@ -295,13 +295,13 @@
                 : 'Nothing in your library yet, with this filter on.'}
           </p>
           {#if shelf === 'want_to'}
-            <Button variant="primary" onclick={() => void goto(resolve('/new'))}
-              >Add something</Button
-            >
+            <Button variant="primary" onclick={() => void goto(resolve('/new'))}>
+              Add something
+            </Button>
           {:else if medium === ''}
-            <Button variant="primary" onclick={() => void goto(resolve('/new'))}
-              >Log something</Button
-            >
+            <Button variant="primary" onclick={() => void goto(resolve('/new'))}>
+              Log something
+            </Button>
           {:else}
             <Button onclick={() => chooseMedium('')}>Show everything</Button>
           {/if}

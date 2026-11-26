@@ -65,9 +65,9 @@
       {#if badge}<span class="shelf">{badge}</span>{/if}
       {#if noteSegments && noteSegments.length > 0}
         <span class="sn">
-          {#each noteSegments as segment, index (index)}{#if segment.marked}<mark class="m"
-                >{segment.text}</mark
-              >{:else}{segment.text}{/if}{/each}
+          {#each noteSegments as segment, index (index)}{#if segment.marked}<mark class="m">
+                {segment.text}
+              </mark>{:else}{segment.text}{/if}{/each}
         </span>
       {:else if note}
         <span class="sn">{note}</span>
