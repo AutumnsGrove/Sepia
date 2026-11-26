@@ -89,9 +89,9 @@ func TestAChatEditIsWrittenOnlyOnConfirm(t *testing.T) {
 	if after.Body != "the boss fights are the best kind of unfair" {
 		t.Fatalf("body = %q, want her words exactly", after.Body)
 	}
-	revisions, err := r.store.Revisions(context.Background(), "e1")
-	if err != nil {
-		t.Fatalf("Revisions: %v", err)
+	revisions, revErr := r.store.Revisions(context.Background(), "e1")
+	if revErr != nil {
+		t.Fatalf("Revisions: %v", revErr)
 	}
 	if len(revisions) == 0 {
 		t.Fatal("no revision was kept for the change")
