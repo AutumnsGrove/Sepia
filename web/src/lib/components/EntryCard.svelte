@@ -197,9 +197,9 @@
 
   {#if editable && webFields.length > 0}
     <div class="acceptrow">
-      <span class="t"
-        ><CircleDashed size={16} aria-hidden="true" />{uiCopy.acceptAll(webFields.length)}</span
-      >
+      <span class="t">
+        <CircleDashed size={16} aria-hidden="true" />{uiCopy.acceptAll(webFields.length)}
+      </span>
       <Button size="sm" onclick={() => onacceptall?.()}>Accept all</Button>
     </div>
   {/if}
@@ -215,9 +215,9 @@
       <p class="lbl">
         <span>
           Rating
-          {#if needsRating}<span class="tag u needed"
-              ><CircleDashed size={14} aria-hidden="true" />{uiCopy.needed}</span
-            >{/if}
+          {#if needsRating}<span class="tag u needed">
+              <CircleDashed size={14} aria-hidden="true" />{uiCopy.needed}
+            </span>{/if}
         </span>
         {#if editable}
           <button

@@ -175,8 +175,9 @@
           </div>
         {:else}
           <p class="agent" class:streaming={row.block.streaming}>
-            {row.block.text}{#if row.block.streaming}<span class="cursor" aria-hidden="true">▍</span
-              >{/if}
+            {row.block.text}{#if row.block.streaming}<span class="cursor" aria-hidden="true">
+                ▍
+              </span>{/if}
           </p>
         {/if}
       {:else if row.kind === 'activity'}

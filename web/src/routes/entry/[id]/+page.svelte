@@ -207,10 +207,9 @@
           {#if entry.work.verified && provider}
             <span class="tag"><Check size={13} aria-hidden="true" /><span>{provider}</span></span>
           {:else if provider}
-            <span class="tag unverified"
-              ><CircleDashed size={13} aria-hidden="true" /><span>{provider} · unverified</span
-              ></span
-            >
+            <span class="tag unverified">
+              <CircleDashed size={13} aria-hidden="true" /><span>{provider} · unverified</span>
+            </span>
           {/if}
         </div>
       </section>
@@ -269,9 +268,9 @@
           <ul class="qa">
             {#each questions as answer (answer.prompt)}
               <li>
-                <span class="qq">{answer.prompt}</span><span class="aa"
-                  >{answer.values.join(', ')}</span
-                >
+                <span class="qq">{answer.prompt}</span><span class="aa">
+                  {answer.values.join(', ')}
+                </span>
               </li>
             {/each}
           </ul>
@@ -326,11 +325,11 @@
               onclick={() => void goto(resolve('/entry/[id]', { id: other.id }))}
             >
               <span class="top">
-                <span
-                  >{shortDate(other.finished_on, thisYear)}{other.format
+                <span>
+                  {shortDate(other.finished_on, thisYear)}{other.format
                     ? ` · ${formatText(other.format) || other.format}`
-                    : ''}</span
-                >
+                    : ''}
+                </span>
                 <span class="rt">{ratingText(other.rating_q)} ★</span>
               </span>
               {#if other.body}<span class="sn">{other.body}</span>{/if}
