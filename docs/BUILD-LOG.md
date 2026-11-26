@@ -1862,3 +1862,36 @@ before the functions existed.
 were regenerated and **looked at**, and each of the reachable frames was compared with its mockup by eye at phone
 width: 03/4 to 03/9, and 04/1b, 04/1c and 04/1e. Frames 03/7 and 03/8 (the empty shelves) are covered by
 `shelfEmpty`'s tests and by the filtered empty state's screenshot rather than by a real empty shelf.
+
+## 2026-11-26, S16.4, a chat that can read and propose but not write
+
+The general chat's backend: a general session answers from the library and can propose one change to one entry,
+which happens only when she confirms it. The Ask screen that drives it is S16.5 and comes next; nothing already on
+screen changed here.
+
+**The shape.** A general session takes its own path through the agent, with its own system prompt and its own two
+tools, built as a separate registry rather than filtered out of the entry tools. That is the point: a tool added for
+logging a review cannot become reachable from a chat by accident, so "the chat can never delete" is a property of the
+code. A test asserts the registry is exactly `search_library` and `edit_entry`.
+
+**`edit_entry`** proposes from a closed set: rating, shelf, favourite, format, date. Her words are not in it, so the
+chat can point at a review and cannot write one. `domain.ApplyEdits` is pure and refuses anything that could not have
+been saved. The service asks with an `edit_entry` interaction carrying the diff, and writes — through the same store
+call a typed edit uses, so the version it replaced is kept — only when that interaction comes back as confirm.
+
+**What the review found, and why it was right.** Three findings on the first head, all fixed here.
+
+1. **The version check was not atomic with the write.** The tool compared `updated_at` and then called
+   `SaveEntry`, which takes no expected version: another screen's save could land between the two and be overwritten
+   unseen. `Store.SaveEntryAt` now compares inside the write's own transaction and returns `ErrStaleVersion`, which is
+   the sentinel the engine already maps. The typed-edit path never had this hole, because `ConfirmDraft` checks its
+   version in the store; the chat was the one that added a second, weaker check. The store test moves the clock so a
+   version really changes, and the agent test makes another screen save between the proposal and her tap.
+2. **A move to the wanted shelf dropped a line the card did not show.** `ApplyEdits` clears the rating, the date, the
+   progress line and favourite on a wish, and `ChangesOf` did not list progress: she was confirming a change she could
+   not see. The how-far line is in the diff now, with its own test.
+3. **The paperwork was missing.** This entry and the slice row, which still said the chat was "the next pull request".
+
+**Coverage.** The domain's floor is 95% and `ApplyEdits` took it to 94.6%, which failed the coverage job. The floor was
+not lowered (docs/CI.md 1: that is a last resort): the uncovered branches were the empty edit, the wish's dropped
+how-far line and an unrated entry moved onto the finished shelf, and each now has a test. Domain is at 96.0%.

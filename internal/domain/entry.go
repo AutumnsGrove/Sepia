@@ -107,6 +107,9 @@ const (
 	CodeVerdictNotYourWord   = "verdict_not_your_words"
 	CodeDateInvalid          = "date_invalid"
 	CodeCompletionInvalid    = "completion_invalid"
+	CodeRatingInvalid        = "rating_invalid"
+	CodeFormatInvalid        = "format_invalid"
+	CodeNoChange             = "no_change"
 	CodeProgressTooLong      = "progress_too_long"
 	CodeProgressNotYourWords = "progress_not_your_words"
 )

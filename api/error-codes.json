@@ -72,6 +72,11 @@
       "copy": "An export is already being written."
     },
     {
+      "code": "format_invalid",
+      "status": 422,
+      "copy": "That is not a format Sepia knows."
+    },
+    {
       "code": "images_too_many",
       "status": 413,
       "copy": "That is more images than one message can carry."
@@ -100,6 +105,11 @@
       "code": "method_not_allowed",
       "status": 405,
       "copy": "That is not something this page can do."
+    },
+    {
+      "code": "no_change",
+      "status": 422,
+      "copy": "That change asks for nothing."
     },
     {
       "code": "not_a_draft",
@@ -145,6 +155,11 @@
       "code": "rate_limited",
       "status": 429,
       "copy": "Slow down a moment."
+    },
+    {
+      "code": "rating_invalid",
+      "status": 422,
+      "copy": "That is not a rating Sepia can store."
     },
     {
       "code": "rating_required",

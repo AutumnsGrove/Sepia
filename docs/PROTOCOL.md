@@ -93,8 +93,26 @@ One mechanism for every question the service asks me. `interaction_request.kind`
 | `same_work_choice` | A looked-up work is probably one already in the library, but not certainly (a near title, a missing year) | `previous` (the work already there: title, year, creator, medium) and `options[]` | `same` or `different`. An unanswered question is not a yes |
 | `fill_gap` | A required piece is missing and cannot be parsed (a rating, a few words of review) | `field`, `prompt` | the value |
 | `lookup_failed` | A metadata service errored, timed out or found nothing | `service`, `reason`, `can_ask_polaris` | `retry`, `ask_polaris` or `log_without_details` |
+| `edit_entry` | The library chat understood a change to an entry, and nothing is written until I confirm it | `entry_id`, `title`, `base_version`, `summary`, and `changes[]` of `{field, label, before, after}` | `confirm` or `cancel`. See section 4a |
 
 The `hint` on a question is the suggested answer: shown as a tappable hint, **never pre-selected**.
+
+### 4a. The library chat
+
+A general session is a chat about the library rather than a card. It has two tools and no third one:
+`search_library` reads, and `edit_entry` proposes. **There is no delete tool and no write tool**: a chat cannot remove
+an entry, and it cannot write my words.
+
+`edit_entry` names an entry and the fields it proposes to change, drawn from the closed set in
+`internal/domain/edits.go`: the rating, the shelf, the favourite, the format and the date. The body, the verdict and
+their spans are not in that set, because my words are mine (rule 1). The service applies the change to a copy of the
+entry, refuses it if the result could not have been saved (a finished entry with no rating, an abandoned one with
+nothing said), and then asks with an `edit_entry` interaction that carries the diff the card will show. The entry is
+written only when I confirm: the revision it replaces is kept, exactly as a typed edit's is.
+
+`base_version` is the entry's `updated_at` when the change was proposed. A confirm that names an older one is refused
+with `stale_version` and nothing is written, because the entry changed under the proposal. The confirm's value is
+`confirm` or `cancel`; either closes the interaction, and the turn's activity line says what happened.
 
 An interaction stays open until resolved. Drafts never expire, so neither do interactions. If I type a
 normal message while one is open, the session bias rule in
