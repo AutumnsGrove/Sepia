@@ -210,8 +210,11 @@ func (h *hub) runTurn(ctx context.Context, sessionID string, msg queuedMessage) 
 		switch {
 		case session.IsDuplicate(err):
 			// The same client message arrived twice: the first turn stored it, and the second found it already in the
-			// ledger. That is the retry working, not a failure, so it says nothing and changes nothing
+			// ledger. That is the retry working, not a failure, so it is answered with a notice rather than an error.
+			// The notice matters when the first turn stored her words and then died (a restart): nothing is running
+			// for that message, and silence would leave it sitting there with no word about it
 			// (docs/PROTOCOL.md 6).
+			h.publishNotice(sessionID, "duplicate_message", "That message already went through.")
 		case err != nil:
 			h.server.log.Warn("turn failed", "session", sessionID, "err", err.Error())
 			h.publishError(sessionID, "internal", "Something went wrong. Your words are kept.", false)
@@ -323,6 +326,17 @@ func (h *hub) getRevises(sessionID string) string {
 
 func (h *hub) publishQueueState(sessionID string, queued int) {
 	data, err := encodeEnvelope(nil, "queue_update", sessionID, h.server.now(), map[string]any{"queued": queued})
+	if err != nil {
+		return
+	}
+	h.publishSession(sessionID, data)
+}
+
+// publishNotice is a quiet line the screen shows and the log keeps: it is not a failure and it is not a question.
+func (h *hub) publishNotice(sessionID, code, message string) {
+	data, err := encodeEnvelope(nil, "notice", sessionID, h.server.now(), map[string]any{
+		"level": "info", "code": code, "text": message,
+	})
 	if err != nil {
 		return
 	}
