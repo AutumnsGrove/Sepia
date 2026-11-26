@@ -60,6 +60,16 @@ the one `go test -cover` prints for that package, so a log line always means wha
 lift it is either done or written down as a slice. No floor was lowered when the metric was corrected on 2026-11-07:
 `server` and `store` were lifted by tests, which is what issue #5 asked for.
 
+### 1b. The reviewer with a shell
+
+`claude-review` (`.github/workflows/claude-code-review.yml`) also runs on every pull request. Since
+2026-11-26 it has a shell, and while `pi-review` is disabled it is the only reader: it reads the diff and
+runs the commands a review needs, with the guidance in `.github/REVIEW.md`. It cannot push or merge. Passing
+`github_token` skips the action's app-token exchange and, with it, the default-branch validation, so a pull
+request that edits its own workflow file **does** run its own version of it (the stock app-token workflow
+skipped instead). A workflow change is therefore a change to the reviewer, and a person or `pi-review` has
+to read it rather than the check.
+
 ## 2. On merge to main (`docker-publish.yml`)
 
 Builds the multi-arch image (amd64 and arm64) from the multi-stage `Dockerfile`, with the frontend and Go
@@ -95,7 +105,15 @@ pulls the image and compiles nothing. This is what the update flow ([`UPDATE.md`
    nobody can.
 4. **No self-hosted runners,** because a public repo plus a self-hosted runner lets any PR run code on that
    machine. GitHub-hosted runners only.
-5. **Secrets:** none in the repo or at repository level. Eval credentials live in protected Environments.
+5. **Secrets:** the reviewer is the one exception, and it is a narrow one. Four credentials sit at repository
+   level: `CLAUDE_CODE_OAUTH_TOKEN` (both Claude jobs) and `PI_REVIEW_APP_ID`,
+   `PI_REVIEW_APP_PRIVATE_KEY` and `PI_REVIEW_API_KEY` (`pi-review`). A reviewer that runs on `pull_request`
+   cannot wait on an Environment's required reviewer, and the two review jobs are the only readers of them.
+   Every other credential lives in a protected Environment, never in the repo, and a new repository-level
+   secret needs a line here saying why it cannot live in one. The two Claude workflows and `pi-review` are
+   their only readers, and revoking one is deleting the secret and disabling its workflow. (Corrected
+   2026-11-26: this rule used to say there were none, which had not been true since `pi-review` was
+   installed.)
 6. **Repository settings:** secret scanning and push protection on, a `CODEOWNERS` file, and a `SECURITY.md`
    with a private reporting route. The branch ruleset on `main` has two phases, because a single-user repo
    pushing straight to `main` cannot also require a pull request:

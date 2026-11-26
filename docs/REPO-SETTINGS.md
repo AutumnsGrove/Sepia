@@ -24,9 +24,11 @@ move onto the push. Apply these once:
 - **Actions**: allow only the actions in `.github/workflows/` (GitHub-owned, plus `golangci`, `gitleaks`,
   `pnpm/action-setup`). Default workflow permissions: read. Turn on **require actions to be pinned by SHA** if
   the setting is offered: every action here is pinned, and this makes the check enforcement rather than habit.
-- **Environments**: create `evals` and `live-checks`, each with **Autumn** as a required reviewer. They hold
-  the only secrets that will ever exist, and they are never triggered by a pull request
+- **Environments**: create `evals` and `live-checks`, each with **Autumn** as a required reviewer. Every
+  secret that is not a reviewer credential lives here, and neither environment is triggered by a pull request
   ([`CI.md`](CI.md) 3).
+- **Reviewer credentials** are the one repository-level exception, named in [`CI.md`](CI.md) 4.5, because a
+  `pull_request` review job cannot wait on an Environment's required reviewer.
 
 ## From S13: no change
 
@@ -39,6 +41,6 @@ above stay exactly as they are, including `deps` as advisory. Nothing here chang
 
 - No self-hosted runner. A public repository plus a self-hosted runner lets any fork run code on that machine.
 - No `pull_request_target`, and no workflow that checks out or runs fork code with secrets.
-- No repository-level secrets. The two environments above are the only place a key may live, and neither is
-  reachable from a pull request.
+- No repository-level secrets, except the reviewer credentials [`CI.md`](CI.md) 4.5 names. Every other key
+  lives in `evals` or `live-checks`, and neither of those is reachable from a pull request.
 - No Tailscale Funnel, no `0.0.0.0` bind, and nothing that puts the journal on a public interface.

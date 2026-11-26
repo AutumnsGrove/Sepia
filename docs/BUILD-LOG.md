@@ -1733,3 +1733,46 @@ snippet), the medium card's "Something else" and per-option hints (the server bu
 pre-read), and the reason on a Deleted row (not stored). Two calls Autumn made on 2026-11-25: a saved entry's favourite
 is a filled heart and the word in the rating row, not a pill of its own (no mockup showed one), and the verdict
 leads the body on a saved entry as it does on the card. `ENTRY_CARD.md` 3 and 4 record both.
+
+## 2026-11-26, CI, claude-review becomes the day's reader
+
+**Built.** `claude-review` (`.github/workflows/claude-code-review.yml`) is now the reviewer with a shell:
+`Bash` allowed whole, `--max-turns 70`, a 30-minute job timeout, a concurrency group that cancels the
+superseded run, and the same draft, fork and bot guards `pi-review` has. It reads `.github/REVIEW.md` and
+`CLAUDE.md` from the **base** commit, takes its prompt from this repository's rules rather than a general
+one, and posts one comment with `gh pr comment`. Both Claude workflows pin their actions by full commit SHA
+with the version beside them, and neither checkout persists credentials. `claude.yml` also rides along from
+the installer as the on-demand `@claude` job; it is deliberately kept, and its app-token write path is stated
+in its own header and bounded by the repository rules, not by its workflow permissions.
+
+**What is true now.** `pi-review` is disabled at the repository level (`gh workflow disable pi-review`)
+once this lands, so `claude-review` is the only reader on a pull request. The review job cannot push or
+merge: its token is the workflow's `GITHUB_TOKEN` with contents read. The `@claude` job authenticates as the
+app and can write a branch when asked, which is what makes it useful and what the repository's own rules
+bound. The secret arrangement is now written down rather than contradicted: `CLAUDE_CODE_OAUTH_TOKEN` and
+the three `PI_REVIEW_*` credentials are the four repository-level secrets `docs/CI.md` 4.5 names, because a
+`pull_request` reviewer cannot wait on an Environment's required reviewer. `scripts/guard.sh reviewer`
+fails the build if the base-commit read is replaced with the checkout's copy, which was watched failing.
+
+**Learned, for the next agent.**
+
+- **The reviewer can review its own workflow change, and that is a trade.** Passing `github_token` skips the
+  action's app-token exchange and the default-branch validation with it: the stock workflow skipped on #57,
+  this one reviewed the pull request that added it. The cost is that a branch in this repository runs its own
+  version of the workflow with the OAuth secret in the environment, so a diff to that file is a change to the
+  reviewer and needs a person or `pi-review` to read it. Forks are skipped and only an author with write
+  access can push such a branch.
+- **A shell in a public-repo job is a credential risk, not just a convenience.** The checkout is
+  pull-request-controlled and the job holds a token with `issues: write` and `pull-requests: write`, so the
+  prompt's "one comment" is a request, not a bound; `gh api` reaches what the scopes allow and a shell can
+  print the OAuth token where log masking does not reach. The header says so. If this outlives the day, the
+  durable fix is Anthropic workload identity federation instead of a static token, or a narrow `Bash(...)`
+  allow-list.
+- **`make lint` does not work in the review job.** CI installs `staticcheck` and `golangci-lint` in their
+  own step; the reviewer has Go, pnpm and Node, so it can run `make test`, `coverage`, `nocgo`, `guard`,
+  `fuzz-smoke`, `fmt-check`, `web-check` and `web`, and must say a lint check was not run rather than claim
+  it passed.
+
+**Live check left for the operator.** After the merge, `gh workflow enable pi-review` restores the split
+and `git revert` of the arrangement restores the two-reader prompts; the next pull request that does not
+touch the workflow is the first one `claude-review` reads as the sole reader.
