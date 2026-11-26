@@ -161,6 +161,59 @@ test('searching her own words finds the sentence, marks the match, and clears ba
   await expect(page.getByText('October 2026')).toBeVisible();
 });
 
+test('the library chat answers from her own words, and does not move an entry', async ({
+  page,
+}) => {
+  await openReading(page, '/library');
+
+  // The Ask button is the only door to the chat, so it is checked from the screen that owns it.
+  await page.getByRole('link', { name: 'Ask your library' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Ask your library' })).toBeVisible();
+  await expect(
+    page.getByText('Ask about anything you have logged, or change an entry.'),
+  ).toBeVisible();
+  // The three ways in the mockup offers (04, frame 3).
+  for (const example of [
+    'which films did i give 4.5 or more?',
+    'what did i read in march 2024?',
+    'make hades 2 a 4.5',
+  ]) {
+    await expect(page.getByRole('button', { name: example })).toBeVisible();
+  }
+  await noViolations(page);
+  await shot(page, 'reading-chat-start.png');
+
+  // Asking is what creates the chat, so asking from the composer is the whole flow: a session, its first question, and
+  // an answer built from the library the app already has.
+  await page.getByLabel('Ask about your library').fill('slow');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page).toHaveURL(/\/chat\/[^/]+$/);
+  await expect(page.getByText('Here is what I found.')).toBeVisible({ timeout: 20_000 });
+
+  // The answer's row is a tap to the entry it names, and it is drawn from the entry rather than typed by the model.
+  const row = page.getByRole('button', { name: /Grey Harbour/ });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('TV');
+  await noViolations(page);
+  await shot(page, 'reading-chat-answer.png');
+
+  // Sad: nothing matching says so plainly, and the chat stays open for the next question.
+  await page.getByLabel('Ask about your library').fill('zzzznothing');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.getByText('Nothing in her library matches that.')).toHaveCount(0);
+
+  await row.click();
+  await expect(page.getByRole('heading', { level: 2, name: 'Grey Harbour' })).toBeVisible();
+
+  // Back on the start screen, the chat she just had is listed under its own question: that list is what makes a past
+  // answer findable again, and it is read from the sessions route rather than remembered in the page.
+  await openReading(page, '/chat');
+  await expect(page.getByText('Recent chats')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^slow/ }).first()).toBeVisible();
+  await noViolations(page);
+  await shot(page, 'reading-chat-recent.png');
+});
+
 test('three shelves, each a list of its own, with its own order and row', async ({ page }) => {
   await openReading(page, '/library');
 

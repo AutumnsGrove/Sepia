@@ -10,6 +10,8 @@ import (
 	"github.com/AutumnsGrove/nova/tool"
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
+	"github.com/AutumnsGrove/sepia/internal/store"
+	"github.com/AutumnsGrove/sepia/internal/world"
 )
 
 // The library chat: one read tool, one proposal, and nothing that writes an entry or deletes one. These tests drive
@@ -225,5 +227,59 @@ func TestAChatEditRefusesAVersionSheHasNotSeen(t *testing.T) {
 	}
 	if after.Rating != 12 {
 		t.Fatalf("rating = %d, want 12: the other screen's save was overwritten", after.Rating)
+	}
+}
+
+// A chat answer carries the entries it is about, as rows, and they come after the sentence: the mockup puts the answer
+// first and the entries under it. A reload finds the rows in the log rather than asking again.
+func TestAChatAnswerCarriesTheEntriesItFound(t *testing.T) {
+	r := newRig(t, rigOptions{})
+	saveSearchable(t, r, "e1", "Piranesi", "book", "started slow but then it grabbed me", 19, "2026-09-28")
+	sess := aChatSession(t, r, "what did i read that was slow")
+	r.chat.ScriptChat(
+		world.ChatTurn{ToolCalls: []world.ChatToolCall{{
+			ID: "c1", Name: "search_library", Arguments: `{"query":"slow"}`,
+		}}},
+		world.ChatTurn{Text: "One book. Piranesi."},
+	)
+
+	if _, err := r.agent.HandleMessage(context.Background(), TurnInput{
+		SessionID: sess.ID, Text: "what did i read that was slow",
+	}); err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+
+	events, err := r.store.EventsSince(context.Background(), sess.ID, 0)
+	if err != nil {
+		t.Fatalf("EventsSince: %v", err)
+	}
+	resultsAt, answerAt := -1, -1
+	for i, event := range events {
+		switch event.Kind {
+		case store.EventChatResults:
+			resultsAt = i
+		case store.EventAssistantEnd:
+			answerAt = i
+		}
+	}
+	if resultsAt < 0 {
+		t.Fatal("no chat_results event: the answer has no rows under it")
+	}
+	if answerAt < 0 || resultsAt < answerAt {
+		t.Fatalf("rows at %d, answer ended at %d: the rows must come after the answer", resultsAt, answerAt)
+	}
+	var payload struct {
+		Results []chatResult `json:"results"`
+	}
+	if err := json.Unmarshal(events[resultsAt].Payload, &payload); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	if len(payload.Results) != 1 {
+		t.Fatalf("results = %+v, want one row", payload.Results)
+	}
+	row := payload.Results[0]
+	if row.EntryID != "e1" || row.Title != "Piranesi" || row.Medium != "book" ||
+		row.Completion != "finished" || row.RatingQ != 19 || row.FinishedOn != "2026-09-28" {
+		t.Fatalf("row = %+v", row)
 	}
 }

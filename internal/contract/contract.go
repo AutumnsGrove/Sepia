@@ -114,7 +114,7 @@ var serverEventTypes = map[string]bool{
 	"tool_start": true, "tool_end": true, "interaction_request": true,
 	"interaction_resolved": true, "draft_snapshot": true, "saved": true,
 	"discarded": true, "ack": true, "cost_update": true, "notice": true,
-	"error": true, "queue_update": true,
+	"error": true, "queue_update": true, "chat_results": true,
 }
 
 var clientMessageTypes = map[string]bool{

@@ -1514,6 +1514,37 @@
               }
             }
           ]
+        },
+        {
+          "description": "The entries a chat answer is about, drawn as rows under it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/serverEnvelope"
+            },
+            {
+              "properties": {
+                "type": {
+                  "const": "chat_results"
+                },
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "results"
+                  ],
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "maxItems": 5,
+                      "items": {
+                        "$ref": "#/$defs/chatResult"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
         }
       ]
     },
@@ -1862,6 +1893,48 @@
           ]
         }
       ]
+    },
+    "chatResult": {
+      "description": "One entry a library chat found, drawn as a row under its answer.",
+      "type": "object",
+      "required": [
+        "entry_id",
+        "title",
+        "medium",
+        "completion"
+      ],
+      "properties": {
+        "entry_id": {
+          "$ref": "#/$defs/id"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "medium": {
+          "$ref": "#/$defs/medium"
+        },
+        "completion": {
+          "$ref": "#/$defs/completion"
+        },
+        "rating_q": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "finished_on": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "cover_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "additionalProperties": false
     }
   },
   "oneOf": [

@@ -297,6 +297,21 @@ export type ServerEvent =
       data?: {
         queued: number;
       };
+    })
+  | (ServerEnvelope & {
+      type?: 'chat_results';
+      data?: {
+        /**
+         * @maxItems 5
+         */
+        results:
+          | []
+          | [ChatResult]
+          | [ChatResult, ChatResult]
+          | [ChatResult, ChatResult, ChatResult]
+          | [ChatResult, ChatResult, ChatResult, ChatResult]
+          | [ChatResult, ChatResult, ChatResult, ChatResult, ChatResult];
+      };
     });
 /**
  * Sequence number within the session, or null for a live-only event.
@@ -709,6 +724,18 @@ export interface Interaction {
   interaction_id: Id;
   kind: InteractionKind;
   payload: {};
+}
+/**
+ * One entry a library chat found, drawn as a row under its answer.
+ */
+export interface ChatResult {
+  entry_id: Id;
+  title: string;
+  medium: Medium;
+  completion: Completion;
+  rating_q?: number;
+  finished_on?: string;
+  cover_url?: string | null;
 }
 export interface ClientEnvelope {
   type: string;

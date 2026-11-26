@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AutumnsGrove/sepia/internal/agent"
+	"github.com/AutumnsGrove/sepia/internal/session"
 )
 
 // The hub owns everything that outlives one connection: the per-session turn, the one-deep queue, the idempotency
@@ -207,6 +208,10 @@ func (h *hub) runTurn(ctx context.Context, sessionID string, msg queuedMessage) 
 			ClientDate: msg.clientDate, Timezone: msg.tz, Retry: msg.retry,
 		})
 		switch {
+		case session.IsDuplicate(err):
+			// The same client message arrived twice: the first turn stored it, and the second found it already in the
+			// ledger. That is the retry working, not a failure, so it says nothing and changes nothing
+			// (docs/PROTOCOL.md 6).
 		case err != nil:
 			h.server.log.Warn("turn failed", "session", sessionID, "err", err.Error())
 			h.publishError(sessionID, "internal", "Something went wrong. Your words are kept.", false)

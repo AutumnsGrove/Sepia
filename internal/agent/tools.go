@@ -1302,6 +1302,10 @@ func searchLibrary(ctx context.Context, raw json.RawMessage, tctx *tool.Context)
 		}
 		lines = append(lines, line)
 	}
+	// A chat draws what it found under its answer; a card turn has nowhere to put rows and ignores this.
+	if state.Chat {
+		state.ChatResults = resultsOf(hits)
+	}
 	summary := plural(len(hits), "match", "matches")
 	if total > len(hits) {
 		summary = fmt.Sprintf("%d of %s", len(hits), plural(total, "match", "matches"))
