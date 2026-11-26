@@ -14,6 +14,9 @@ import {
   questionAnswers,
   revisitMeta,
   sectionsFor,
+  shelfEmpty,
+  shelfOrder,
+  SHELF_TABS,
   versionRows,
   waitingText,
   warningsOf,
@@ -99,6 +102,80 @@ describe('a row meta line', () => {
 
   it('keeps a date it cannot parse rather than showing nothing', () => {
     expect(entryMeta(entry({ finished_on: 'yesterday' }), 2026)).toContain('yesterday');
+  });
+});
+
+describe('a row on one of the three shelves', () => {
+  it('says a stopped row was stopped, and on what day', () => {
+    expect(entryMeta(entry({ completion: 'abandoned' }), 2026)).toBe('Book · stopped 30 Oct');
+    expect(entryMeta(entry({ completion: 'abandoned', finished_on: '2024-03-12' }), 2026)).toBe(
+      'Book · stopped 12 Mar 2024',
+    );
+  });
+
+  it('puts the creator where the date would be on a wanted row, because it helps you pick', () => {
+    const wish = entry({
+      completion: 'want_to',
+      finished_on: null,
+      work: {
+        id: 'w1',
+        medium: 'book',
+        title: 'Gideon the Ninth',
+        verified: true,
+        creators: [{ role: 'author', name: 'Tamsyn Muir' }],
+      },
+    });
+    expect(entryMeta(wish, 2026)).toBe('Book · Tamsyn Muir');
+  });
+
+  it('is the medium alone for a wanted row with no creator, rather than a stray dot', () => {
+    expect(entryMeta(entry({ completion: 'want_to', finished_on: null }), 2026)).toBe('Book');
+  });
+
+  it('states the order on the two shelves that have nothing to rank', () => {
+    // Finished ranks, so its order is a toggle she can flip.
+    expect(shelfOrder('finished', 'newest')).toEqual({ label: 'Newest first', toggle: true });
+    expect(shelfOrder('finished', 'rating')).toEqual({ label: 'Highest rated', toggle: true });
+    // Bad: a rating order is never offered where the rows are unrated, because there is nothing to rank.
+    expect(shelfOrder('abandoned', 'newest')).toEqual({ label: 'Newest first', toggle: false });
+    expect(shelfOrder('abandoned', 'rating')).toEqual({ label: 'Newest first', toggle: false });
+    expect(shelfOrder('want_to', 'newest')).toEqual({ label: 'Recently added', toggle: false });
+    expect(shelfOrder('want_to', 'rating')).toEqual({ label: 'Recently added', toggle: false });
+  });
+
+  it('is one word per shelf, everywhere', () => {
+    expect(SHELF_TABS.map((tab) => tab.label)).toEqual(['Finished', "Didn't finish", 'Wanted']);
+    expect(SHELF_TABS.map((tab) => tab.shelf)).toEqual(['finished', 'abandoned', 'want_to']);
+    // The same three words the badge and the card's switch use, so a tab and a badge cannot disagree.
+    const labels = SHELF_TABS.map((tab) => tab.label as string);
+    expect(labels).toContain(completionBadge(entry({ completion: 'want_to' })));
+    expect(labels).toContain(completionBadge(entry({ completion: 'abandoned' })));
+  });
+});
+
+describe('an empty shelf', () => {
+  it('says what each shelf is for, and offers the one thing that fills it', () => {
+    expect(shelfEmpty('abandoned', null)).toEqual({
+      heading: 'Nothing left unfinished.',
+      body: 'When you stop partway through something, say so and it lands here, with how far you got.',
+      action: 'Log something',
+    });
+    expect(shelfEmpty('want_to', null)).toEqual({
+      heading: 'Nothing on your wanted list yet.',
+      body: 'Say what you mean to read, watch or play and it lands here, with no rating and nothing to write yet.',
+      action: 'Add something',
+    });
+    // Finished keeps the library's own words, because it is the shelf that was always there.
+    expect(shelfEmpty('finished', null).heading).toBe('Nothing here yet.');
+  });
+
+  it('names the shelf and the chip when a filter is on, and offers the way back', () => {
+    const filtered = shelfEmpty('abandoned', { chosen: 'Podcast' });
+    expect(filtered.heading).toBe('No podcast entries you stopped yet.');
+    expect(filtered.action).toBe('Show everything');
+    expect(shelfEmpty('want_to', { chosen: 'Book' }).heading).toBe(
+      'No book entries on your wanted list yet.',
+    );
   });
 });
 
@@ -253,8 +330,8 @@ describe('the versions screen', () => {
 describe('the shelves', () => {
   it('badges only the rows that are not an ordinary finished review', () => {
     expect(completionBadge(entry({ completion: 'finished' }))).toBe('');
-    expect(completionBadge(entry({ completion: 'abandoned' }))).toBe("didn't finish");
-    expect(completionBadge(entry({ completion: 'want_to' }))).toBe('wanted');
+    expect(completionBadge(entry({ completion: 'abandoned' }))).toBe("Didn't finish");
+    expect(completionBadge(entry({ completion: 'want_to' }))).toBe('Wanted');
   });
 
   it('calls the date what it is: finished for a review, stopped for a work she put down', () => {

@@ -315,3 +315,11 @@ func ParseLibrarySort(raw string) (LibrarySort, bool) {
 		return "", false
 	}
 }
+
+// ShelfCounts is how many entries each shelf holds. The Library's three tabs show one number each, and they are the
+// shelf totals whatever the medium chip says: three counts that move as she filters would not be counts.
+type ShelfCounts struct {
+	Finished  int `json:"finished"`
+	Abandoned int `json:"abandoned"`
+	WantTo    int `json:"want_to"`
+}

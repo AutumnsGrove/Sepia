@@ -312,3 +312,103 @@ func TestTheRatingCursorSurvivesAPageThatEndsOnAnUnratedRow(t *testing.T) {
 		unique[id] = true
 	}
 }
+
+// S22.1: the three totals the tabs carry. One read, not three, and each shelf's number is the shelf's own: a wish is
+// not a review, and a stopped work is not a finish. A draft is on no shelf, because it is not a row of the library at
+// all, and a deleted row is on none either, because the library hides it and the Deleted list has its own count.
+func TestShelfCounts(t *testing.T) {
+	s := openTest(t)
+	seed(t, s)
+	shelves(t, s)
+
+	counts, err := s.ShelfCounts(context.Background())
+	if err != nil {
+		t.Fatalf("ShelfCounts: %v", err)
+	}
+	want := domain.ShelfCounts{Finished: 2, Abandoned: 1, WantTo: 1}
+	if counts != want {
+		t.Fatalf("counts = %+v, want %+v", counts, want)
+	}
+
+	// A draft and a deleted row are outside every shelf.
+	if rowErr := raw(t, s, `INSERT INTO entries
+		(id, work_id, rating_q, rating_scale, body, body_origin, completion, status, created_at, updated_at)
+		VALUES ('e-draft', 'w1', 0, 'quarter_stars_20', 'nothing yet', 'typed', 'want_to', 'draft',
+			'2026-11-21T00:00:00Z', '2026-11-21T00:00:00Z')`); rowErr != nil {
+		t.Fatalf("insert draft: %v", rowErr)
+	}
+	if rowErr := raw(t, s, `UPDATE entries SET deleted_at = '2026-11-22T00:00:00Z' WHERE id = 'e-finished'`); rowErr != nil {
+		t.Fatalf("soft-delete: %v", rowErr)
+	}
+	counts, err = s.ShelfCounts(context.Background())
+	if err != nil {
+		t.Fatalf("ShelfCounts after draft and delete: %v", err)
+	}
+	want = domain.ShelfCounts{Finished: 1, Abandoned: 1, WantTo: 1}
+	if counts != want {
+		t.Fatalf("counts = %+v, want %+v: a draft and a deleted row are on no shelf", counts, want)
+	}
+}
+
+// S22.2: the wanted shelf is ordered by when it was added, not by a finish date it does not have. S21 left it ordered
+// by id, which is a random string: the list looked arbitrary and a page could not be resumed from it in any order she
+// would recognise. The cursor is (created_at, id), which is total.
+func TestTheWantedShelfIsNewestAddedFirst(t *testing.T) {
+	s := openTest(t)
+	seed(t, s)
+	const at = "2026-11-30T00:00:00Z"
+	wishes := []struct{ id, created string }{
+		{"w-oldest", "2026-11-01T00:00:00Z"},
+		{"w-middle", "2026-11-17T00:00:00Z"},
+		{"w-newest", "2026-11-25T00:00:00Z"},
+		// The tie breaks on id, descending, so the order stays total.
+		{"w-tie-b", "2026-11-20T00:00:00Z"},
+		{"w-tie-a", "2026-11-20T00:00:00Z"},
+	}
+	for _, wish := range wishes {
+		if err := raw(t, s, `INSERT INTO entries
+			(id, work_id, rating_q, rating_scale, body, body_origin, completion, status, created_at, updated_at)
+			VALUES (?, 'w1', 0, 'quarter_stars_20', '', 'typed', 'want_to', 'saved', ?, ?)`,
+			wish.id, wish.created, at); err != nil {
+			t.Fatalf("insert %s: %v", wish.id, err)
+		}
+	}
+
+	want := []string{"w-newest", "w-tie-b", "w-tie-a", "w-middle", "w-oldest"}
+	got := listIDs(t, s, domain.LibraryQuery{Shelf: domain.CompletionWantTo})
+	if len(got) != len(want) {
+		t.Fatalf("wanted shelf = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("wanted shelf = %v, want %v", got, want)
+		}
+	}
+
+	// Paged two at a time it is the same list, with no row seen twice and none skipped: a page boundary that fell on
+	// the tie is the case the second key exists for.
+	var seen []string
+	var cursor domain.Cursor
+	for page := 0; page < 5; page++ {
+		entries, next, err := s.LibraryPage(context.Background(),
+			domain.LibraryQuery{Shelf: domain.CompletionWantTo}, cursor, 2)
+		if err != nil {
+			t.Fatalf("LibraryPage: %v", err)
+		}
+		for _, entry := range entries {
+			seen = append(seen, entry.ID)
+		}
+		if next.Empty() {
+			break
+		}
+		cursor = next
+	}
+	if len(seen) != len(want) {
+		t.Fatalf("paging the wanted shelf saw %v, want %v", seen, want)
+	}
+	for i := range want {
+		if seen[i] != want[i] {
+			t.Fatalf("paging the wanted shelf saw %v, want %v", seen, want)
+		}
+	}
+}

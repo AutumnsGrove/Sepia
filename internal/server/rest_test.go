@@ -1372,3 +1372,176 @@ func TestAThumbCannotBeAnotherLocalService(t *testing.T) {
 		t.Errorf("the other local service was asked %d time(s), want none", n)
 	}
 }
+
+// shelfCounts is the counts response as the client reads it.
+type shelfCounts struct {
+	Finished  int `json:"finished"`
+	Abandoned int `json:"abandoned"`
+	WantTo    int `json:"want_to"`
+}
+
+// S22.1: the Library's three tabs each carry a number, and they come from one read. The numbers are the shelves' own,
+// so a medium chip cannot make a tab disagree with the list under it, and a draft or a deleted row is on no shelf.
+func TestShelfCounts(t *testing.T) {
+	h, engine, db := newREST(t)
+	ctx := context.Background()
+	aReviewedEntry(t, engine, db, "Piranesi", "book", "started slow", 17, "2026-09-28")
+	aReviewedEntry(t, engine, db, "Blade Runner 2049", "film", "slow and deliberate", 19, "2026-10-27")
+	// A dropped book, which has a stop date and a how-far line, and a wish, which has neither.
+	for _, row := range []domain.Entry{
+		{
+			ID: "e-dropped", WorkID: "w-dropped", RatingScale: domain.RatingScale, Body: "could not get into it",
+			BodyOrigin: domain.BodyTyped, Status: domain.StatusSaved, Completion: domain.CompletionAbandoned,
+			Progress: "about a hundred pages in", FinishedOn: "2026-11-03",
+		},
+		{
+			ID: "e-wish", WorkID: "w-wish", RatingScale: domain.RatingScale, Body: "meant to read it",
+			BodyOrigin: domain.BodyTyped, Status: domain.StatusSaved, Completion: domain.CompletionWantTo,
+		},
+	} {
+		title := "The Overstory"
+		medium := "book"
+		if row.Completion == domain.CompletionWantTo {
+			title, medium = "Gideon the Ninth", "book"
+		}
+		if err := db.SaveWork(ctx, domain.Work{ID: row.WorkID, Medium: medium, Title: title}); err != nil {
+			t.Fatalf("work for %s: %v", row.ID, err)
+		}
+		if err := db.CreateDraft(ctx, row); err != nil {
+			t.Fatalf("entry %s: %v", row.ID, err)
+		}
+	}
+	read := func(target string) shelfCounts {
+		t.Helper()
+		rec := doJSON(t, h, http.MethodGet, target, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d: %s", target, rec.Code, rec.Body)
+		}
+		var got shelfCounts
+		decode(t, rec, &got)
+		return got
+	}
+
+	want := shelfCounts{Finished: 2, Abandoned: 1, WantTo: 1}
+	if got := read("/api/entries/counts"); got != want {
+		t.Fatalf("counts = %+v, want %+v", got, want)
+	}
+	// A filter the endpoint does not take is ignored rather than half-applied: the numbers never move as she picks a
+	// medium, so the tab and the list under it cannot disagree.
+	if got := read("/api/entries/counts?medium=film"); got != want {
+		t.Fatalf("counts with a medium = %+v, want %+v", got, want)
+	}
+
+	// Bad: it is a read. A POST is refused rather than quietly counting.
+	if rec := doJSON(t, h, http.MethodPost, "/api/entries/counts", nil); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST counts = %d, want 405", rec.Code)
+	}
+}
+
+// Sad: a store that has gone away answers the contract's stable internal code, not three zeros. A tab that reads 0
+// because the database was busy is worse than one with no number on it.
+func TestShelfCountsDatabaseFailure(t *testing.T) {
+	rig := newSocketRig(t)
+	defer rig.close()
+	if err := rig.db.Close(); err != nil {
+		t.Fatalf("closing the store: %v", err)
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, rig.server.URL+"/api/entries/counts", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Host = rig.host
+	// The rig's own listener, not the network: the guard refuses a test that could reach a live provider.
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatalf("counts: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("counts = %d, want 500", resp.StatusCode)
+	}
+	var got envelope
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Code != "internal" {
+		t.Fatalf("error code = %q, want the stable internal code", got.Code)
+	}
+}
+
+// S22.2: the wanted shelf's cursor is (created_at, id) rather than the library's (finished_on, id), because a wish has
+// no finish date at all. A cursor made for one shelf is refused by another rather than read as that shelf's: the value
+// it carries means a different column on each. The order itself is proven in the store, with distinct added dates; this
+// rig's clock is fixed, so these three wishes tie on created_at and the id settles it, descending.
+func TestTheWantedShelfPagesByWhenItWasAdded(t *testing.T) {
+	h, engine, db := newREST(t)
+	ctx := context.Background()
+	aReviewedEntry(t, engine, db, "Piranesi", "book", "started slow", 17, "2026-09-28")
+	aReviewedEntry(t, engine, db, "Blade Runner 2049", "film", "slow and deliberate", 19, "2026-10-27")
+	for i, id := range []string{"wish-1", "wish-2", "wish-3"} {
+		workID := "w-work-" + id
+		if err := db.SaveWork(ctx, domain.Work{ID: workID, Medium: "book", Title: "Wish " + id}); err != nil {
+			t.Fatalf("work %d: %v", i, err)
+		}
+		if err := db.CreateDraft(ctx, domain.Entry{
+			ID: id, WorkID: workID, RatingScale: domain.RatingScale, Body: "", BodyOrigin: domain.BodyTyped,
+			Status: domain.StatusSaved, Completion: domain.CompletionWantTo,
+		}); err != nil {
+			t.Fatalf("wish %s: %v", id, err)
+		}
+	}
+
+	type page struct {
+		Items      []wireEntry `json:"items"`
+		NextCursor *string     `json:"next_cursor"`
+		Total      int         `json:"total"`
+	}
+	read := func(target string) page {
+		t.Helper()
+		rec := doJSON(t, h, http.MethodGet, target, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d: %s", target, rec.Code, rec.Body)
+		}
+		var got page
+		decode(t, rec, &got)
+		return got
+	}
+
+	first := read("/api/entries?completion=want_to&limit=2")
+	if len(first.Items) != 2 || first.Items[0].ID != "wish-3" || first.Items[1].ID != "wish-2" {
+		t.Fatalf("first wanted page = %q, want the two most recently added first", entryIDsOf(first.Items))
+	}
+	if first.Total != 3 {
+		t.Fatalf("wanted total = %d, want 3", first.Total)
+	}
+	if first.NextCursor == nil {
+		t.Fatal("the wanted page has no cursor, so the third wish cannot be reached")
+	}
+	second := read("/api/entries?completion=want_to&limit=2&cursor=" + *first.NextCursor)
+	if len(second.Items) != 1 || second.Items[0].ID != "wish-1" {
+		t.Fatalf("second wanted page = %q, want the last wish alone", entryIDsOf(second.Items))
+	}
+
+	// Bad: each shelf refuses the other's cursor instead of answering a page from somewhere else.
+	finished := read("/api/entries?completion=finished&limit=1")
+	if finished.NextCursor == nil {
+		t.Fatal("two finished rows should page")
+	}
+	if crossed := doJSON(t, h, http.MethodGet,
+		"/api/entries?completion=want_to&cursor="+*finished.NextCursor, nil); crossed.Code != http.StatusBadRequest {
+		t.Fatalf("a finished cursor on the wanted shelf = %d, want 400", crossed.Code)
+	}
+	if crossed := doJSON(t, h, http.MethodGet,
+		"/api/entries?completion=finished&cursor="+*first.NextCursor, nil); crossed.Code != http.StatusBadRequest {
+		t.Fatalf("a wanted cursor on the finished shelf = %d, want 400", crossed.Code)
+	}
+}
+
+// entryIDsOf names the rows of a page in the order it sent them, for a failure message worth reading.
+func entryIDsOf(entries []wireEntry) []string {
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		ids = append(ids, entry.ID)
+	}
+	return ids
+}

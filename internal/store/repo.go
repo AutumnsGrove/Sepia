@@ -352,6 +352,20 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 			return nil, domain.Cursor{}, fmt.Errorf("store: list library by rating: %w", err)
 		}
 		rows = page
+	} else if query.Shelf == domain.CompletionWantTo {
+		// A wish has no finish date, so the library's newest order would put every row in the same undated tie and
+		// leave it to the id, which is a random string. It is ordered by when it was added (S22.2).
+		page, err := s.ReadQueries().ListWantedPage(ctx, db.ListWantedPageParams{
+			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg,
+			RatingMin: ratingMinArg, RatingMax: ratingMaxArg,
+			FinishedFrom: fromArg, FinishedTo: toArg,
+			BeforeID:        beforeID,
+			BeforeCreatedAt: stringNull(cursor.CreatedAt), RowLimit: int64(limit + 1),
+		})
+		if err != nil {
+			return nil, domain.Cursor{}, fmt.Errorf("store: list wanted: %w", err)
+		}
+		rows = page
 	} else {
 		page, err := s.ReadQueries().ListLibraryPage(ctx, db.ListLibraryPageParams{
 			Medium: mediumArg, Favourite: favouriteArg, WorkID: workArg, Shelf: stringNull(string(query.Shelf)),
@@ -381,6 +395,9 @@ func (s *Store) LibraryPage(ctx context.Context, query domain.LibraryQuery, curs
 			next = domain.Cursor{
 				ID: last.ID, Rating: int(last.RatingQ), CreatedAt: last.CreatedAt, CompletionRank: rank,
 			}
+		}
+		if query.Shelf == domain.CompletionWantTo && query.Sort != domain.SortRating && !query.Deleted {
+			next = domain.Cursor{ID: last.ID, CreatedAt: last.CreatedAt}
 		}
 	}
 	out := make([]domain.Entry, 0, len(rows))
@@ -925,4 +942,16 @@ func clampLimit(limit int) int {
 		return 100
 	}
 	return limit
+}
+
+// ShelfCounts is how many entries each shelf holds, in one read. It is not a LibraryCount with three shelves: the
+// tabs' numbers ignore every filter, so a medium chip cannot make the Finished tab disagree with the list under it.
+func (s *Store) ShelfCounts(ctx context.Context) (domain.ShelfCounts, error) {
+	row, err := s.ReadQueries().CountShelves(ctx)
+	if err != nil {
+		return domain.ShelfCounts{}, fmt.Errorf("store: count shelves: %w", err)
+	}
+	return domain.ShelfCounts{
+		Finished: int(row.Finished), Abandoned: int(row.Abandoned), WantTo: int(row.WantTo),
+	}, nil
 }

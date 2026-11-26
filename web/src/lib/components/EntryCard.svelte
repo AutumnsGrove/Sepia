@@ -159,23 +159,28 @@
           <span>{providerText(draft.work.primary_provider) || 'Matched'}</span>
         </span>
       {/if}
-      {#if editable}
-        <div class="shelf" role="group" aria-label="How far you got">
-          {#each shelfOptions as option (option.value)}
-            <button
-              type="button"
-              aria-pressed={draft.completion === option.value}
-              onclick={() => onedit?.({ completion: option.value })}
-            >
-              {option.label}
-            </button>
-          {/each}
-        </div>
-      {:else if badge}
-        <span class="shelfbadge">{badge}</span>
-      {/if}
     </div>
   </section>
+
+  <!-- The shelf switch, on its own row under the work header: three pills inside the header's text column wrap to two
+       lines and leave "Wanted" alone. A saved card carries the badge instead, in the same row's place. -->
+  {#if editable}
+    <div class="shelfrow">
+      <div class="shelf" role="group" aria-label="Shelf">
+        {#each shelfOptions as option (option.value)}
+          <button
+            type="button"
+            aria-pressed={draft.completion === option.value}
+            onclick={() => onedit?.({ completion: option.value })}
+          >
+            {option.label}
+          </button>
+        {/each}
+      </div>
+    </div>
+  {:else if badge}
+    <div class="shelfrow"><span class="shelfbadge">{badge}</span></div>
+  {/if}
 
   {#each webFields as field (fieldID(field))}
     {#if openSource === fieldID(field)}
@@ -210,7 +215,7 @@
     </div>
   {/if}
 
-  {#if showRating}
+  {#if showRating && draft.completion !== 'want_to'}
     <section>
       <p class="lbl">
         <span>
@@ -240,141 +245,144 @@
     </section>
   {/if}
 
-  <section>
-    <p class="lbl">Your words</p>
-    {#if verdict}
-      <p class="verdict">{verdict}</p>
-    {/if}
-    {#if editingBody}
-      <textarea
-        class="edit"
-        rows="5"
-        aria-label="Your words"
-        bind:value={bodyText}
-        onkeydown={(event) => {
-          if (event.key === 'Escape') editingBody = false;
-        }}></textarea>
-      <div class="row">
-        <Button size="sm" variant="primary" onclick={commitBody}>Done</Button>
-        <Button size="sm" variant="ghost" onclick={() => (editingBody = false)}>Cancel</Button>
-      </div>
-    {:else if editable}
-      <button type="button" class="wordsbtn" onclick={startBodyEdit}>
-        <span class="words">{draft.body || 'Nothing yet. Tap to write your own.'}</span>
-        <span class="sr">Edit your words</span>
-      </button>
-    {:else}
-      <p class="words">{draft.body}</p>
-    {/if}
-
-    {#if draft.fidelity && draft.fidelity.status !== 'faithful'}
-      <div class="warn">
-        <AlertTriangle size={18} aria-hidden="true" />
-        <span>
-          {draft.fidelity.warning || 'Something you said may be missing. Check what was left out.'}
-        </span>
-      </div>
-    {/if}
-
-    {#if editable && draft.left_out && draft.left_out.length > 0}
-      <details class="left" open={draft.fidelity?.status === 'drops_opinion'}>
-        <summary>
-          <ChevronRight size={14} aria-hidden="true" />
-          {uiCopy.leftOut(draft.left_out.length)}
-        </summary>
-        <div class="segs">
-          {#each draft.left_out as segment (segment.id)}
-            <div class="seg">
-              <span>{segment.text}</span>
-              <Button size="sm" onclick={() => oninclude?.(segment.id)}>{uiCopy.include}</Button>
-            </div>
-          {/each}
+  {#if draft.completion !== 'want_to'}
+    <section>
+      <p class="lbl">Your words</p>
+      {#if verdict}
+        <p class="verdict">{verdict}</p>
+      {/if}
+      {#if editingBody}
+        <textarea
+          class="edit"
+          rows="5"
+          aria-label="Your words"
+          bind:value={bodyText}
+          onkeydown={(event) => {
+            if (event.key === 'Escape') editingBody = false;
+          }}></textarea>
+        <div class="row">
+          <Button size="sm" variant="primary" onclick={commitBody}>Done</Button>
+          <Button size="sm" variant="ghost" onclick={() => (editingBody = false)}>Cancel</Button>
         </div>
-      </details>
-    {/if}
-  </section>
+      {:else if editable}
+        <button type="button" class="wordsbtn" onclick={startBodyEdit}>
+          <span class="words">{draft.body || 'Nothing yet. Tap to write your own.'}</span>
+          <span class="sr">Edit your words</span>
+        </button>
+      {:else}
+        <p class="words">{draft.body}</p>
+      {/if}
 
-  <section>
-    <p class="lbl">Facts</p>
-    <div class="facts">
-      {#if editingFormat}
-        <label class="fact">
-          <span class="k">Format</span>
-          <select
-            aria-label="Format"
-            value={draft.format ?? ''}
-            onchange={(event) => {
-              editingFormat = false;
-              const value = event.currentTarget.value;
-              if (value !== (draft.format ?? '')) onedit?.({ format: value });
-            }}
-          >
-            <option value="">Not set</option>
-            {#each FORMATS as [value, label] (value)}
-              <option {value}>{label}</option>
-            {/each}
-          </select>
-        </label>
-      {:else}
-        <button
-          type="button"
-          class="fact"
-          disabled={!editable}
-          onclick={() => (editingFormat = true)}
-        >
-          <span class="k">Format</span>
-          <span class="val" class:empty={!draft.format}>
-            {formatText(draft.format) || 'Add format'}
+      {#if draft.fidelity && draft.fidelity.status !== 'faithful'}
+        <div class="warn">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <span>
+            {draft.fidelity.warning ||
+              'Something you said may be missing. Check what was left out.'}
           </span>
-        </button>
+        </div>
       {/if}
-      {#if editingDate}
-        <label class="fact">
-          <span class="k">{dateLabel(draft)}</span>
-          <input
-            type="date"
-            aria-label="{dateLabel(draft)} on"
-            value={draft.finished_on ?? ''}
-            onchange={(event) => {
-              editingDate = false;
-              const value = event.currentTarget.value;
-              if (value !== (draft.finished_on ?? '')) onedit?.({ finished_on: value });
-            }}
-          />
-        </label>
-      {:else}
-        <button
-          type="button"
-          class="fact"
-          disabled={!editable}
-          onclick={() => (editingDate = true)}
-        >
-          <span class="k">{dateLabel(draft)}</span>
-          <span class="val" class:empty={!draft.finished_on}>{dateText(draft.finished_on)}</span>
-        </button>
+
+      {#if editable && draft.left_out && draft.left_out.length > 0}
+        <details class="left" open={draft.fidelity?.status === 'drops_opinion'}>
+          <summary>
+            <ChevronRight size={14} aria-hidden="true" />
+            {uiCopy.leftOut(draft.left_out.length)}
+          </summary>
+          <div class="segs">
+            {#each draft.left_out as segment (segment.id)}
+              <div class="seg">
+                <span>{segment.text}</span>
+                <Button size="sm" onclick={() => oninclude?.(segment.id)}>{uiCopy.include}</Button>
+              </div>
+            {/each}
+          </div>
+        </details>
       {/if}
-    </div>
-    {#if draft.completion === 'abandoned'}
-      <p class="lbl">How far</p>
+    </section>
+  {/if}
+
+  {#if draft.completion !== 'want_to'}
+    <section>
+      <p class="lbl">Facts</p>
       <div class="facts">
-        <label class="fact">
-          <span class="k">How far</span>
-          <input
-            type="text"
-            maxlength="200"
-            aria-label="How far you got"
-            placeholder="about 100 pages in"
-            value={draft.progress ?? ''}
+        {#if editingFormat}
+          <label class="fact">
+            <span class="k">Format</span>
+            <select
+              aria-label="Format"
+              value={draft.format ?? ''}
+              onchange={(event) => {
+                editingFormat = false;
+                const value = event.currentTarget.value;
+                if (value !== (draft.format ?? '')) onedit?.({ format: value });
+              }}
+            >
+              <option value="">Not set</option>
+              {#each FORMATS as [value, label] (value)}
+                <option {value}>{label}</option>
+              {/each}
+            </select>
+          </label>
+        {:else}
+          <button
+            type="button"
+            class="fact"
             disabled={!editable}
-            onchange={(event) => {
-              const value = event.currentTarget.value;
-              if (value !== (draft.progress ?? '')) onedit?.({ progress: value });
-            }}
-          />
-        </label>
+            onclick={() => (editingFormat = true)}
+          >
+            <span class="k">Format</span>
+            <span class="val" class:empty={!draft.format}>
+              {formatText(draft.format) || 'Add format'}
+            </span>
+          </button>
+        {/if}
+        {#if editingDate}
+          <label class="fact">
+            <span class="k">{dateLabel(draft)}</span>
+            <input
+              type="date"
+              aria-label="{dateLabel(draft)} on"
+              value={draft.finished_on ?? ''}
+              onchange={(event) => {
+                editingDate = false;
+                const value = event.currentTarget.value;
+                if (value !== (draft.finished_on ?? '')) onedit?.({ finished_on: value });
+              }}
+            />
+          </label>
+        {:else}
+          <button
+            type="button"
+            class="fact"
+            disabled={!editable}
+            onclick={() => (editingDate = true)}
+          >
+            <span class="k">{dateLabel(draft)}</span>
+            <span class="val" class:empty={!draft.finished_on}>{dateText(draft.finished_on)}</span>
+          </button>
+        {/if}
+        {#if draft.completion === 'abandoned'}
+          <!-- A full-width fact in the same grid: the label above it said "How far" and the fact said it again. -->
+          <label class="fact wide">
+            <span class="k">How far</span>
+            <input
+              type="text"
+              maxlength="200"
+              aria-label="How far you got"
+              placeholder="about 100 pages in"
+              value={draft.progress ?? ''}
+              disabled={!editable}
+              onchange={(event) => {
+                const value = event.currentTarget.value;
+                if (value !== (draft.progress ?? '')) onedit?.({ progress: value });
+              }}
+            />
+          </label>
+        {/if}
       </div>
-    {/if}
-  </section>
+    </section>
+  {/if}
 
   {#if tagAnswers.length > 0 || plainAnswers.length > 0}
     <section>
@@ -738,6 +746,12 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.6rem;
+  }
+  .fact.wide {
+    grid-column: 1 / -1;
+  }
+  .shelfrow {
+    margin-top: 0.75rem;
   }
   .fact {
     display: block;

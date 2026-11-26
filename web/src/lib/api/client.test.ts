@@ -117,6 +117,14 @@ describe('the API client', () => {
     expect(calls[0].url).toBe('/api/entries?sort=rating&work=w1&deleted=true&limit=50');
   });
 
+  it('reads the three shelf counts from one request, with no filters on it', async () => {
+    const { calls, fetch } = fakeFetch(200, { finished: 42, abandoned: 4, want_to: 9 });
+    const client = createClient({ fetch });
+
+    await expect(client.shelfCounts()).resolves.toEqual({ finished: 42, abandoned: 4, want_to: 9 });
+    expect(calls[0].url).toBe('/api/entries/counts');
+  });
+
   it('reads and writes the settings object whole', async () => {
     const { calls, fetch } = fakeFetch(200, { preread: false });
     const client = createClient({ fetch });
