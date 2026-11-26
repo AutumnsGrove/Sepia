@@ -55,6 +55,62 @@ func (a *Agent) newChatTools() *tool.Registry {
 	return reg
 }
 
+// chatResult is one row under an answer: what a person needs to recognise the entry, and nothing more. It is the
+// contract's shape, so the server can persist the payload as it is (api/events.schema.json, $defs/chatResult).
+type chatResult struct {
+	EntryID    string  `json:"entry_id"`
+	Title      string  `json:"title"`
+	Medium     string  `json:"medium"`
+	Completion string  `json:"completion"`
+	RatingQ    int     `json:"rating_q,omitempty"`
+	FinishedOn string  `json:"finished_on,omitempty"`
+	CoverURL   *string `json:"cover_url,omitempty"`
+}
+
+// maxChatResults bounds the rows one answer can draw. Two searches of five would ask for ten rows under one sentence,
+// and a reader wants the entries the answer is about, not everything it looked at.
+const maxChatResults = 10
+
+// mergeResults adds what a search found to the rows the turn already has, keeping the first sighting of an entry and
+// the order the searches ran in. A later search that finds nothing adds nothing: the rows from before are still what
+// the answer is about, and dropping them would leave an answer with a list missing from under it.
+func mergeResults(have, found []chatResult, limit int) []chatResult {
+	out := have
+	seen := make(map[string]bool, len(have)+len(found))
+	for _, row := range have {
+		seen[row.EntryID] = true
+	}
+	for _, row := range found {
+		if seen[row.EntryID] {
+			continue
+		}
+		if len(out) >= limit {
+			break
+		}
+		seen[row.EntryID] = true
+		out = append(out, row)
+	}
+	return out
+}
+
+// resultsOf names the entries an answer is about, in the order the search ranked them.
+func resultsOf(hits []domain.SearchHit) []chatResult {
+	out := make([]chatResult, 0, len(hits))
+	for _, hit := range hits {
+		row := chatResult{
+			EntryID: hit.Entry.ID, Title: hit.Work.Title, Medium: hit.Work.Medium,
+			Completion: string(hit.Entry.CompletionState()), RatingQ: hit.Entry.Rating,
+			FinishedOn: hit.Entry.FinishedOn,
+		}
+		if hit.Work.CoverPath != "" {
+			cover := "/covers/" + hit.Work.ID
+			row.CoverURL = &cover
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
 // editArgs is what the model may send. A field it leaves out is a field it is not changing.
 type editArgs struct {
 	EntryID    string   `json:"entry_id"`
@@ -252,6 +308,16 @@ func (a *Agent) handleChat(ctx context.Context, in TurnInput) (Outcome, error) {
 	}
 	if state.isStopped() && runErr == nil {
 		if err := a.notice(ctx, in.SessionID, "warn", "step_limit", "I stopped after several steps."); err != nil {
+			return Outcome{}, err
+		}
+	}
+	// The rows go in after the answer, because that is where they are read: the mockup puts the sentence first and the
+	// entries under it. A reload finds them here rather than by asking again.
+	if len(state.ChatResults) > 0 {
+		results := state.ChatResults
+		state.ChatResults = nil
+		if _, err := a.session.Append(ctx, in.SessionID, store.EventChatResults,
+			map[string]any{"results": results}); err != nil {
 			return Outcome{}, err
 		}
 	}

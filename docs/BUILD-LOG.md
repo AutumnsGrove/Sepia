@@ -1895,3 +1895,38 @@ call a typed edit uses, so the version it replaced is kept — only when that in
 **Coverage.** The domain's floor is 95% and `ApplyEdits` took it to 94.6%, which failed the coverage job. The floor was
 not lowered (docs/CI.md 1: that is a last resort): the uncovered branches were the empty edit, the wish's dropped
 how-far line and an unrated entry moved onto the finished shelf, and each now has a test. Domain is at 96.0%.
+
+## 2026-11-26, S16.5, the Ask screen
+
+The chat's screen, from mockup 04 frames 3 and 4: the Ask button in the Library, the start screen with the three example
+questions and her past chats, an answer with the entries it is about drawn under it, and the confirm card for a
+proposed change. S16 is done.
+
+**What is new.** `GET /api/sessions?kind=general` already existed; the screen is `/chat` (the start) and `/chat/[id]`
+(the conversation, which reuses the socket, the reducer and the composer the logging screen uses). A tenth server event,
+`chat_results`, carries the entries an answer is about, so a row is a tap to the entry and a reload finds it again
+rather than asking the model twice. The event is written by the turn after the answer, which is where the mockup puts
+the rows.
+
+**The bug the browser test found.** Asking a question in the full suite, after another test, surfaced "Something went
+wrong" under a perfect answer. The cause was not the chat: a client message retried after a reconnect carries the same
+`client_msg_id`, the socket's own deduplication is per connection, and the second copy reached the hub, whose turn then
+failed with `store: client message already recorded` and published an error. The hub now treats that as what it is —
+the retry working — and says nothing. `TestARetriedMessageIsNotATurnFailure` sends one message twice on two sockets and
+asserts a `duplicate` ack, no error event and one stored message. This was true of the logging flow too; the chat is
+simply the first screen whose socket reconnects often enough to show it.
+
+**The trap, twice.** The gallery baselines came out as screenshots of the whole gallery, and then the activity line kept
+rendering the tool's count instead of the mockup's "Searched your library", because the browser was being served a
+bundle that did not have the change. Two causes, both worth knowing:
+
+- `cmd/sepia-dev` embeds `internal/webui/dist` at Go build time, so a frontend change needs `make web` **and** a new
+  binary. The gallery spec's stack is rebuilt every run, but the logging stack is reused when one is listening, so a
+  leaked `/tmp/sepia-e2e` from an earlier run serves an old bundle and every test passes against the old screen.
+- `--update-snapshots` passing does not mean the file changed on disk. Check the baseline's mtime, or delete it and let
+  the run write it again, before believing what a diff says.
+
+**Left as it is.** The mockup's recent-chat rows carry a second line ("One book", "Rating changed") and the list shows
+the question and the age only. That line needs a summary stored per chat, which is a column and a write for one line of
+copy; the question and the age are what a person picks a chat by. `make check` green, 188 end-to-end tests pass on both
+browsers, and the four new baselines were looked at rather than only diffed.

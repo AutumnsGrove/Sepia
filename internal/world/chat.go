@@ -23,11 +23,12 @@ import (
 type Chat struct {
 	*Service
 
-	mu      sync.Mutex
-	turns   []ChatTurn
-	next    int
-	bodies  [][]byte
-	keepRaw bool
+	mu        sync.Mutex
+	turns     []ChatTurn
+	chatTurns []ChatTurn
+	next      int
+	bodies    [][]byte
+	keepRaw   bool
 }
 
 // ChatToolCall is one tool call in a scripted turn. Arguments is the raw JSON string the model would send, so a
@@ -60,6 +61,15 @@ func (c *Chat) Script(turns ...ChatTurn) {
 	defer c.mu.Unlock()
 	c.turns = append([]ChatTurn(nil), turns...)
 	c.next = 0
+}
+
+// ScriptChat replaces the scripted turns for a library chat, which is a different conversation from a card: its tools
+// are the chat's, and a card script replayed into it would call tools it does not have. An empty chat script leaves the
+// fake's own chat behaviour, which searches for the question and says what it found.
+func (c *Chat) ScriptChat(turns ...ChatTurn) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.chatTurns = append([]ChatTurn(nil), turns...)
 }
 
 // Turns returns how many scripted turns have been served.
@@ -145,7 +155,17 @@ func (c *Chat) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case FaultNone:
 	}
 
-	turn := c.takeAt(turnIndex(body))
+	// A library chat asks for a different set of tools, so the fake answers it as a chat: it searches for the words it
+	// was asked about, then says what it found. That is a believable answer for the seeded dev library, and it keeps
+	// one script from having to be two.
+	var turn ChatTurn
+	if chatRequest(body) {
+		// A chat has its own script, or the fake's own behaviour. A card script is never replayed into it: the tools a
+		// chat is given are not the tools a card is given.
+		turn = c.chatTurnAt(turnIndex(body), lastUserText(body))
+	} else {
+		turn = c.takeAt(turnIndex(body))
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
@@ -210,6 +230,72 @@ func (c *Chat) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	chunk(map[string]any{}, "", &usage)
 	write("data: [DONE]\n\n")
+}
+
+// chatTool is the tool only a library chat is given, so its presence is what makes a request a chat.
+const chatTool = "edit_entry"
+
+// chatRequest reports whether the request was sent to a library chat rather than to a card.
+func chatRequest(body []byte) bool {
+	var request struct {
+		Tools []struct {
+			Function struct {
+				Name string `json:"name"`
+			} `json:"function"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(body, &request); err != nil {
+		return false
+	}
+	for _, tool := range request.Tools {
+		if tool.Function.Name == chatTool {
+			return true
+		}
+	}
+	return false
+}
+
+// lastUserText is the question the chat was asked, which is what it searches for. A request that cannot be read
+// searches for nothing, and the fake's search then finds nothing rather than guessing.
+func lastUserText(body []byte) string {
+	var request struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &request); err != nil {
+		return ""
+	}
+	for i := len(request.Messages) - 1; i >= 0; i-- {
+		if request.Messages[i].Role == "user" && request.Messages[i].Content != "" {
+			text := strings.TrimSpace(request.Messages[i].Content)
+			if len(text) > 200 {
+				text = text[:200]
+			}
+			return text
+		}
+	}
+	return ""
+}
+
+// chatTurnAt is a chat's scripted turn, or the fake's own behaviour: search for what she asked about, then say what
+// came back. There is no second script, because a chat is one question and one answer as far as the app is concerned.
+func (c *Chat) chatTurnAt(index int, question string) ChatTurn {
+	c.mu.Lock()
+	script := append([]ChatTurn(nil), c.chatTurns...)
+	c.mu.Unlock()
+	if len(script) > 0 {
+		if index < 0 || index >= len(script) {
+			return ChatTurn{Text: "Done."}
+		}
+		return script[index]
+	}
+	if index == 0 {
+		query, _ := json.Marshal(map[string]string{"query": question})
+		return ChatTurn{ToolCalls: []ChatToolCall{{ID: "chat-search", Name: "search_library", Arguments: string(query)}}}
+	}
+	return ChatTurn{Text: "Here is what I found."}
 }
 
 // takeAt returns the scripted turn for a conversation that has already had index assistant messages, or a clean

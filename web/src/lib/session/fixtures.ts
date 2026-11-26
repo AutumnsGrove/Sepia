@@ -245,6 +245,10 @@ export const screenNames = [
   'screen-editing',
   'screen-missing-rating',
   'screen-stopped',
+  // Mockup 04, frames 3 and 4: a library chat's answer with the entries under it, and a proposed change waiting on her
+  // confirm. Not a card, so it is drawn with the chat screen rather than the logging one.
+  'screen-chat',
+  'screen-chat-confirm',
   'screen-offline',
   'screen-caught-up',
   'screen-working',
@@ -306,6 +310,67 @@ export function screenFixture(name: string): ScreenFixture {
           activity: [act(2, 'Matched The Lantern Keeper (1999)'), act(3, 'Read the ending')],
           draft: draft(),
           draftVersion: 4,
+        }),
+      };
+    case 'screen-chat':
+      return {
+        ...base,
+        session: session({
+          blocks: [
+            you(1, 'what did i read in march 2024?'),
+            {
+              kind: 'assistant',
+              id: 'm-chat',
+              text: 'One book.',
+              streaming: false,
+              at: '2026-11-09T12:00:02Z',
+              order: 3,
+            },
+          ],
+          activity: [act(2, 'Searching your library', { tool: 'search_library' })],
+          results: [
+            {
+              entryID: 'e_night',
+              title: 'The Night Circus',
+              medium: 'book',
+              completion: 'finished',
+              ratingQ: 16,
+              finishedOn: '2024-03-12',
+              coverUrl: null,
+              order: 4,
+            },
+          ],
+        }),
+      };
+    case 'screen-chat-confirm':
+      return {
+        ...base,
+        session: session({
+          blocks: [
+            you(1, 'make hades 2 a 4.5'),
+            {
+              kind: 'assistant',
+              id: 'm-chat',
+              text: 'Here is the change. Nothing is saved until you confirm.',
+              streaming: false,
+              at: '2026-11-09T12:00:02Z',
+              order: 3,
+            },
+          ],
+          interactions: [
+            {
+              id: 'i-edit',
+              kind: 'edit_entry',
+              order: 4,
+              payload: {
+                entry_id: 'e_hades',
+                title: 'Hades II',
+                base_version: '2026-11-09T11:00:00Z',
+                summary: 'a 4.5 rating',
+                changes: [{ field: 'rating', label: 'Rating', before: '4.25', after: '4.5' }],
+              },
+            },
+          ],
         }),
       };
     case 'screen-stopped':

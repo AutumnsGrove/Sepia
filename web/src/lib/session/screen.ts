@@ -22,6 +22,8 @@ export interface ScreenHandlers {
   onlogAnother?: () => void;
   onmore?: () => void;
   onversions?: () => void;
+  /** A chat answer's row is a way into the entry it names. */
+  onopenEntry?: (entryID: string) => void;
 }
 
 /** A message the outbox is holding: typed offline, or waiting behind the turn in flight. */

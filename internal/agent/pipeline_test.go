@@ -380,11 +380,12 @@ func TestTwoModelRunsReportTheWholeCost(t *testing.T) {
 	}
 	var mu sync.Mutex
 	var live []Event
-	r := newRig(t, rigOptions{script: script, live: func(ev Event) {
+	r := newRig(t, rigOptions{live: func(ev Event) {
 		mu.Lock()
 		defer mu.Unlock()
 		live = append(live, ev)
 	}})
+	r.chat.ScriptChat(script...)
 	ctx := context.Background()
 	sess, err := r.session.CreateGeneral(ctx, "what did I think of the lantern keeper?")
 	if err != nil {

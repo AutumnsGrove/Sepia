@@ -40,7 +40,10 @@ const (
 	EventSaved               = "saved"
 	EventDiscarded           = "discarded"
 	EventNotice              = "notice"
-	EventError               = "error"
+	// EventChatResults carries the entries a chat answer is about, drawn as rows under it. It is its own event rather
+	// than part of the text because a row is a tap to the entry and a reload has to find it again.
+	EventChatResults = "chat_results"
+	EventError       = "error"
 )
 
 // Interaction is one question to open: its kind and the payload the client will draw.

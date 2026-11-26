@@ -28,6 +28,18 @@ export interface ActivityRow {
   order: number;
 }
 
+/** One entry a chat answer is about, drawn as a row under the sentence that names it. */
+export interface ChatResult {
+  entryID: string;
+  title: string;
+  medium: string;
+  completion: string;
+  ratingQ: number;
+  finishedOn: string;
+  coverUrl: string | null;
+  order: number;
+}
+
 export interface OpenInteraction {
   id: string;
   kind: string;
@@ -71,6 +83,8 @@ export interface SessionState {
   nextOrder: number;
   blocks: TranscriptBlock[];
   activity: ActivityRow[];
+  /** The entries a chat answer found. A card session never has any. */
+  results: ChatResult[];
   interactions: OpenInteraction[];
   /**
    * True from the moment she answers a Describe or a question until the card is written again. The agent applies her
@@ -102,6 +116,7 @@ export function emptySession(sessionID = ''): SessionState {
     nextOrder: 1,
     blocks: [],
     activity: [],
+    results: [],
     interactions: [],
     answersPending: false,
     draft: null,
@@ -287,6 +302,30 @@ export function applyEvent(state: SessionState, event: ServerEvent): Applied {
               ? { ...block, streaming: false }
               : block,
           ),
+        },
+      };
+    }
+
+    case 'chat_results': {
+      const data = dataOf<'chat_results'>(event);
+      return {
+        state: {
+          ...state,
+          nextOrder: state.nextOrder + 1,
+          // One order for the whole group: the rows are one answer's reading, not five separate moments.
+          results: [
+            ...state.results,
+            ...data.results.map((row) => ({
+              entryID: row.entry_id,
+              title: row.title,
+              medium: row.medium,
+              completion: row.completion,
+              ratingQ: row.rating_q ?? 0,
+              finishedOn: row.finished_on ?? '',
+              coverUrl: row.cover_url ?? null,
+              order: state.nextOrder,
+            })),
+          ],
         },
       };
     }
