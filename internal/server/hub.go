@@ -332,7 +332,9 @@ func (h *hub) publishQueueState(sessionID string, queued int) {
 	h.publishSession(sessionID, data)
 }
 
-// publishNotice is a quiet line the screen shows and the log keeps: it is not a failure and it is not a question.
+// publishNotice is a quiet line the screen shows: it is not a failure and it is not a question. It is live only, like
+// every other event published here — it goes out to the sockets and is never appended to the session's log, so it is
+// not replayed on a reconnect.
 func (h *hub) publishNotice(sessionID, code, message string) {
 	data, err := encodeEnvelope(nil, "notice", sessionID, h.server.now(), map[string]any{
 		"level": "info", "code": code, "text": message,
