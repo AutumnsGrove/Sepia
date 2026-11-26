@@ -12,14 +12,18 @@
     id: string;
     label: string;
     count?: number;
+    /** What the number counts, for the sentence a screen reader reads: "42 entries", "9 wanted". */
+    countNoun?: string;
   }
   interface Props {
     tabs: Tab[];
     selected: string;
     label: string;
+    /** Show a zero. A shelf says "0" and keeps its tab the same width; a topic with nothing covered says nothing. */
+    showZero?: boolean;
     onselect?: (id: string) => void;
   }
-  let { tabs, selected, label, onselect }: Props = $props();
+  let { tabs, selected, label, showZero = false, onselect }: Props = $props();
 </script>
 
 <div class="tabs" role="tablist" aria-label={label}>
@@ -34,9 +38,9 @@
       onclick={() => onselect?.(tab.id)}
     >
       {tab.label}
-      {#if tab.count !== undefined && tab.count > 0}
+      {#if tab.count !== undefined && (tab.count > 0 || showZero)}
         <span class="tc" aria-hidden="true">{tab.count}</span>
-        <span class="sr">{tab.count} covered</span>
+        <span class="sr">{tab.count}{tab.countNoun ? ` ${tab.countNoun}` : ''}</span>
       {/if}
     </button>
   {/each}

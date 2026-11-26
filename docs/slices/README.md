@@ -35,7 +35,7 @@ S09 + S12 ─► S13 deploy and update ─► S14 backups ─► [Phase 1 gate G
 Phase 2:  S15 web fallback ─┐
           S16 search and chat ├─► S17 more media (repeatable)
           S21 wishlist and didn't finish (needs only S04, S09, S12, all built)
-          S22 the Library's three shelves (needs S21; the design for #31 is in the mockups)
+          S22 the Library's three shelves (done; the design for #31 is in the mockups)
 Phase 3:  S18 screenshot import
 Phase 4:  S19 export, import, verify
 Later:    S20 parked
@@ -79,8 +79,8 @@ S09 needs S02, S07 and S08. S13 needs a working app (S09 and S12).
 | S19 | [Export, import, verify](S19-export-import-verify.md) | 4 | planned |
 | S20 | [Parked](S20-parked.md) | 5 and 6 | parked |
 | S21 | [Wishlist and didn't finish](S21-wishlist-and-unfinished.md) | 2 | done |
-| #31 | Library design pass | 2 | designed in the mockups (03 frames 4 to 9, 04 frames 1b to 1e); built by S22 |
-| S22 | [The Library's three shelves](S22-library-shelves.md) | 2 | planned |
+| #31 | Library design pass | 2 | closed: designed in the mockups (03 frames 4 to 9, 04 frames 1b to 1e) and built by S22 |
+| S22 | [The Library's three shelves](S22-library-shelves.md) | 2 | done |
 
 **S16's first half is built.** The index, the query parser, `/api/search`, the rating and date filters,
 the totals, the duplicate ask and the Library screen's search box are done and tested; the general chat (an
@@ -88,9 +88,10 @@ the totals, the duplicate ask and the Library screen's search box are done and t
 request, in a pull request of its own. The slice is one entry in the table above because it is one plan, and both
 halves follow the same decisions.
 
-**Designed, not yet built.** [#31](https://github.com/AutumnsGrove/Sepia/issues/31) is answered in the mockups and
-planned as [S22](S22-library-shelves.md): three tabbed shelves, a stated order per shelf, and the wanted shelf ordered by
-when it was added. Read S22 before touching the Library. **S06's cover download** is built, bounded and tested but nothing calls it, so
+**The Library's three shelves are built.** [#31](https://github.com/AutumnsGrove/Sepia/issues/31) is answered in the
+mockups and shipped as [S22](S22-library-shelves.md): Finished, Didn't finish and Wanted are three tabs with a count
+each, each on its own shelf query, with the wanted shelf ordered by when it was added and its own two-key cursor.
+**S06's cover download** is built, bounded and tested but nothing calls it, so
 no cover has ever been stored on the board, so S06's decision that "covers ship in this slice" and its happy route's
 stored cover are both unmet; the phase 1 review records why and what the small fix is.
 

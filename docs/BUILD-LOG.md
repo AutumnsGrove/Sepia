@@ -1813,3 +1813,52 @@ clean; `make check` green.
 **For the next agent.** A `recover` around a third-party parser hides future panics as errors, so the error
 keeps the panic's own words. If a new message appears there, it is a new bug in the library, not a new
 malformed config.
+
+## 2026-11-26, S22, the Library's three shelves
+
+The Library was built around one idea, that every row is something she finished. S21 gave an entry a `completion`,
+and issue #31 asked for the design pass that made the other two shelves feel designed rather than appended. This is
+the build of that design: mockup 03 frames 4 to 9 and mockup 04 frames 1b to 1e.
+
+**What changed.**
+
+- **Three tabs, one query path each.** Finished, Didn't finish and Wanted, with a count on each. The combined list is
+  gone: a stopped work is a review of a different kind and a wish is not a review at all. The medium chips stay, under
+  the tabs, and filter the shelf in view.
+- **`GET /api/entries/counts`.** Three totals in one read, with no filters on purpose, so a chip cannot make a tab
+  disagree with the list under it. It is its own route rather than a field on the list, because it can fail on its own:
+  a screen with no number on a tab still has its list. The Library page loads it once, apart from the list.
+- **The wanted shelf has its own order.** S21 left it sorted by `finished_on`, which every wish lacks, so the whole
+  shelf sat in one undated tie with a random id deciding it. It is now `created_at` then `id`, with a two-key cursor of
+  that order (`ListWantedPage`), and a cursor from one shelf is refused on another.
+- **The row has no slot it cannot fill.** A stopped row shows `Book · stopped 3 Nov`, no stars unless she gave one, and
+  her how-far line in quotes as a second line only when there is one. A wanted row puts the creator where the date
+  would be. Neither carries a shelf badge on its own shelf: the tab above already says which list it is (the badge
+  stays in search results, where it is the only thing that says it).
+- **One word per shelf, everywhere.** Finished, Didn't finish, Wanted: the tabs, the badge, the card's switch and the
+  page stamp. The switch moved out of the work header's text column, where three pills wrapped and left "Wanted" alone,
+  onto its own row under the header.
+- **The card by shelf.** A stopped card's Facts date reads **Stopped**, and the How far line is now a full-width fact
+  in the same grid instead of a section whose label said "How far" a second time. A wanted card draws no Rating, Your
+  words or Facts. The wanted page shows `Added`, one primary **Log a review**, and a sentence saying the row stays one
+  row; the stopped page shows `Stopped <day>`, the how-far line in quotes, and never the word Finished.
+
+**Calls made while building, none of which the plan settled.**
+
+- **The rating control stays on a stopped card.** The mockup's frame 1e does not draw it, but its caption says the
+  rating "stays optional and does not nag", and S21's row rule is that a stopped row shows stars only if she gave some.
+  Hiding the control would make that rule unreachable, so it stays and only the nagging goes. Reopen cheaply if the
+  frame is the answer rather than the caption.
+- **The total line stays under the tabs.** With no chip on it repeats the tab's number; with a chip on it is the only
+  place that says how many the filter found. Dropping it would lose that, so it stays beside the stated order.
+- **Empty copy lives in `reading.ts`.** `shelfEmpty()` is a pure function with its own tests, because two of the six
+  frames (an empty stopped shelf, an empty wanted shelf) cannot be reached on a seeded stack that has one of each.
+
+**Watched failing first.** The store's wanted order and the server's cursor test both failed against the old code; the
+new `reading.ts` tests (`stopped`, `creator where the date would be`, `shelfOrder`, `SHELF_TABS`, `shelfEmpty`) failed
+before the functions existed.
+
+**Checked.** `make check` green; 182 end-to-end tests pass on chromium and webkit at 390 px; the darwin pixel baselines
+were regenerated and **looked at**, and each of the reachable frames was compared with its mockup by eye at phone
+width: 03/4 to 03/9, and 04/1b, 04/1c and 04/1e. Frames 03/7 and 03/8 (the empty shelves) are covered by
+`shelfEmpty`'s tests and by the filtered empty state's screenshot rather than by a real empty shelf.

@@ -196,6 +196,32 @@ func (q *Queries) CountLibrary(ctx context.Context, arg CountLibraryParams) (int
 	return count, err
 }
 
+const countShelves = `-- name: CountShelves :one
+SELECT
+  CAST(coalesce(sum(CASE WHEN entries.completion = 'finished' THEN 1 ELSE 0 END), 0) AS INTEGER) AS finished,
+  CAST(coalesce(sum(CASE WHEN entries.completion = 'abandoned' THEN 1 ELSE 0 END), 0) AS INTEGER) AS abandoned,
+  CAST(coalesce(sum(CASE WHEN entries.completion = 'want_to' THEN 1 ELSE 0 END), 0) AS INTEGER) AS want_to
+FROM entries
+WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
+`
+
+type CountShelvesRow struct {
+	Finished  int64 `json:"finished"`
+	Abandoned int64 `json:"abandoned"`
+	WantTo    int64 `json:"want_to"`
+}
+
+// The three shelf totals at once, which is what the Library's tabs carry. It takes no filters on purpose: a number
+// that changed as she picked a medium would not be the number of finished things, and the three together answer "how
+// many of each" at a glance. It counts what the library holds, so a draft (not a row of the library) and a deleted
+// entry (the Deleted list's own count) are both outside it.
+func (q *Queries) CountShelves(ctx context.Context) (CountShelvesRow, error) {
+	row := q.db.QueryRowContext(ctx, countShelves)
+	var i CountShelvesRow
+	err := row.Scan(&i.Finished, &i.Abandoned, &i.WantTo)
+	return i, err
+}
+
 const createAnswer = `-- name: CreateAnswer :exec
 INSERT INTO answers (id, entry_id, question_id, category, prompt, answer_type, answer_json, skipped, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1874,6 +1900,93 @@ func (q *Queries) ListTurnCalls(ctx context.Context, sessionID *string) ([]TurnC
 			&i.CreatedAt,
 			&i.CostSource,
 			&i.AllowanceUsd,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWantedPage = `-- name: ListWantedPage :many
+SELECT entries.id, entries.work_id, entries.rating_q, entries.rating_scale, entries.favourite, entries.season, entries.verdict, entries.body, entries.body_origin, entries.imported_from, entries.body_spans_json, entries.format, entries.finished_on, entries.status, entries.deleted_at, entries.created_at, entries.updated_at, entries.completion, entries.progress FROM entries JOIN works ON works.id = entries.work_id
+WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
+  AND entries.completion = 'want_to'
+  AND (?1 IS NULL OR works.medium = ?1)
+  AND (?2 IS NULL OR entries.favourite = ?2)
+  AND (?3 IS NULL OR entries.work_id = ?3)
+  AND (?4 IS NULL OR entries.rating_q >= ?4)
+  AND (?5 IS NULL OR entries.rating_q <= ?5)
+  AND (?6 IS NULL OR entries.finished_on >= ?6)
+  AND (?7 IS NULL OR entries.finished_on <= ?7)
+  AND (?8 IS NULL
+       OR (entries.created_at, entries.id) < (?9, ?8))
+ORDER BY entries.created_at DESC, entries.id DESC
+LIMIT ?10
+`
+
+type ListWantedPageParams struct {
+	Medium          interface{}    `json:"medium"`
+	Favourite       interface{}    `json:"favourite"`
+	WorkID          interface{}    `json:"work_id"`
+	RatingMin       interface{}    `json:"rating_min"`
+	RatingMax       interface{}    `json:"rating_max"`
+	FinishedFrom    interface{}    `json:"finished_from"`
+	FinishedTo      interface{}    `json:"finished_to"`
+	BeforeID        interface{}    `json:"before_id"`
+	BeforeCreatedAt sql.NullString `json:"before_created_at"`
+	RowLimit        int64          `json:"row_limit"`
+}
+
+// The wanted list, most recently added first. A wish has no finish date and no rating, so neither of the library's two
+// orders is true of it: created_at is the only date it has, and it is the one that answers "what did I just add". The
+// cursor is (created_at, id), two keys, and it is a query path of its own rather than a branch of ListLibraryPage.
+func (q *Queries) ListWantedPage(ctx context.Context, arg ListWantedPageParams) ([]Entry, error) {
+	rows, err := q.db.QueryContext(ctx, listWantedPage,
+		arg.Medium,
+		arg.Favourite,
+		arg.WorkID,
+		arg.RatingMin,
+		arg.RatingMax,
+		arg.FinishedFrom,
+		arg.FinishedTo,
+		arg.BeforeID,
+		arg.BeforeCreatedAt,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Entry{}
+	for rows.Next() {
+		var i Entry
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkID,
+			&i.RatingQ,
+			&i.RatingScale,
+			&i.Favourite,
+			&i.Season,
+			&i.Verdict,
+			&i.Body,
+			&i.BodyOrigin,
+			&i.ImportedFrom,
+			&i.BodySpansJson,
+			&i.Format,
+			&i.FinishedOn,
+			&i.Status,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Completion,
+			&i.Progress,
 		); err != nil {
 			return nil, err
 		}

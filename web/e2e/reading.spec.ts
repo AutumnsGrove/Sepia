@@ -115,7 +115,9 @@ test('the library groups by month, filters by medium, and sorts', async ({ page 
 
   // Bad input with a way out: a medium with nothing in it says so and offers the way back.
   await page.getByRole('button', { name: 'Podcast', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'No podcast entries yet.' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'No podcast entries you have reviewed yet.' }),
+  ).toBeVisible();
   await shot(page, 'reading-library-empty-filter.png');
   await page.getByRole('button', { name: 'Show everything' }).click();
   await expect(page.getByRole('button', { name: /The Lantern Keeper/ }).first()).toBeVisible();
@@ -159,34 +161,93 @@ test('searching her own words finds the sentence, marks the match, and clears ba
   await expect(page.getByText('October 2026')).toBeVisible();
 });
 
-test('the shelves: a work she stopped is in the library, and wanted is one chip away', async ({
-  page,
-}) => {
+test('three shelves, each a list of its own, with its own order and row', async ({ page }) => {
   await openReading(page, '/library');
 
-  // A dropped work is in the library she scans, with its badge and no stars: there was nothing to rate.
+  // Finished opens first. A dropped work and a wanted work are not in it: they are not reviews.
+  await expect(page.getByRole('tab', { name: /^Finished/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByText('October 2026')).toBeVisible();
+  await expect(page.getByRole('button', { name: /A Cold Inheritance/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /The Quarry Year/ })).toHaveCount(0);
+  // Every tab carries a number, and the number is the shelf's total, not the filter's: the chip row narrows the list
+  // below and leaves the counts alone.
+  const finishedTab = page.getByRole('tab', { name: /^Finished/ });
+  const before = await finishedTab.locator('.tc').textContent();
+  expect(Number(before)).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Film', exact: true }).click();
+  await expect(finishedTab.locator('.tc')).toHaveText(before as string);
+  await page.getByRole('button', { name: 'All', exact: true }).click();
+  await noViolations(page);
+  await shot(page, 'reading-library.png');
+
+  // Didn't finish: grouped by the month she stopped, no stars to give, the order stated rather than offered.
+  await page.getByRole('tab', { name: /^Didn't finish/ }).click();
   const dropped = page.getByRole('button', { name: /A Cold Inheritance/ });
   await expect(dropped).toBeVisible();
-  await expect(dropped).toContainText("didn't finish");
+  await expect(dropped).toContainText('stopped 12 Nov');
+  await expect(dropped).toContainText('two episodes and the first ten minutes of the third');
   await expect(dropped).not.toContainText('★');
+  await expect(page.getByText('November 2026')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Sort:/ })).toHaveCount(0);
+  await expect(page.getByLabel('Order: Newest first')).toBeVisible();
+  await noViolations(page);
+  await shot(page, 'reading-library-stopped.png');
 
-  // A work she only means to read is not in that list at all.
-  await expect(page.getByRole('button', { name: /The Quarry Year/ })).toHaveCount(0);
-
-  // It is one chip away, and flat rather than grouped by a month she has not reached.
-  await page.getByRole('button', { name: 'Wanted', exact: true }).click();
+  // Wanted: one flat list, the creator where the date would be, ordered by when she added it.
+  await page.getByRole('tab', { name: /^Wanted/ }).click();
   const wanted = page.getByRole('button', { name: /The Quarry Year/ });
   await expect(wanted).toBeVisible();
-  await expect(wanted).toContainText('wanted');
+  await expect(wanted).toContainText('Book · S. Adeyemi');
+  await expect(wanted).not.toContainText('★');
+  // No month heading: a wish has no month she finished it.
   await expect(page.getByText('November 2026')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Sort:/ })).toHaveCount(0);
+  await expect(page.getByLabel('Order: Recently added')).toBeVisible();
   await noViolations(page);
+  await shot(page, 'reading-library-wanted.png');
 
-  // The entry it opens says the same thing, and offers no rating for something she has not read.
+  // The entry it opens says the same thing, and offers no rating for something she has not read: the one date is when
+  // she added it, and the one action is to log it (mockup 04, frame 1b).
   await wanted.click();
   await expect(page.getByRole('heading', { level: 2, name: 'The Quarry Year' })).toBeVisible();
-  await expect(page.locator('.shelfbadge')).toHaveText('wanted');
+  await expect(page.locator('.shelfbadge')).toHaveText('Wanted');
+  await expect(page.locator('.ratingrow')).toHaveCount(0);
+  await expect(page.locator('.stamp')).toContainText('Added');
+  await expect(page.getByRole('button', { name: 'Log a review' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+  await noViolations(page);
+  await shot(page, 'reading-entry-wanted.png');
+
+  // A stopped entry says Stopped, never Finished, and her how-far line is in her words, in quotes (frame 1c).
+  await page.goto(stack() + '/library');
+  await page.getByRole('tab', { name: /^Didn't finish/ }).click();
+  await page.getByRole('button', { name: /A Cold Inheritance/ }).click();
+  await expect(page.getByRole('heading', { level: 2, name: 'A Cold Inheritance' })).toBeVisible();
+  await expect(page.locator('.shelfbadge')).toHaveText("Didn't finish");
+  await expect(page.locator('.stamp')).toContainText('Stopped Thu 12 Nov');
+  await expect(page.locator('.progress')).toContainText(
+    '“two episodes and the first ten minutes of the third”',
+  );
   await expect(page.locator('.ratingrow')).toHaveCount(0);
   await noViolations(page);
+  await shot(page, 'reading-entry-stopped.png');
+});
+
+test('each empty shelf says what it is for, and offers the one thing that fills it', async ({
+  page,
+}) => {
+  await openReading(page, '/library?');
+  // A medium with nothing on a shelf: the shelf's own sentence, and the way back to everything.
+  await page.getByRole('tab', { name: /^Wanted/ }).click();
+  await page.getByRole('button', { name: 'Podcast', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'No podcast entries on your wanted list yet.' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Show everything' }).click();
+  await expect(page.getByRole('button', { name: /The Quarry Year/ })).toBeVisible();
 });
 
 test('a saved entry shows her words, the same work and its details', async ({ page }) => {

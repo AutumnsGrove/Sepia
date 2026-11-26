@@ -32,6 +32,11 @@ type Querier interface {
 	// It is the library proper and not the Deleted list, which has its own count: the two lists apply different shelf
 	// rules, and one count cannot describe both.
 	CountLibrary(ctx context.Context, arg CountLibraryParams) (int64, error)
+	// The three shelf totals at once, which is what the Library's tabs carry. It takes no filters on purpose: a number
+	// that changed as she picked a medium would not be the number of finished things, and the three together answer "how
+	// many of each" at a glance. It counts what the library holds, so a draft (not a row of the library) and a deleted
+	// entry (the Deleted list's own count) are both outside it.
+	CountShelves(ctx context.Context) (CountShelvesRow, error)
 	CreateAnswer(ctx context.Context, arg CreateAnswerParams) error
 	CreateDecisionCall(ctx context.Context, arg CreateDecisionCallParams) error
 	CreateEntry(ctx context.Context, arg CreateEntryParams) error
@@ -113,6 +118,10 @@ type Querier interface {
 	// compared as one string because both parts are fixed-width; a row-value comparison would need the pair twice.
 	ListSessions(ctx context.Context, arg ListSessionsParams) ([]Session, error)
 	ListTurnCalls(ctx context.Context, sessionID *string) ([]TurnCall, error)
+	// The wanted list, most recently added first. A wish has no finish date and no rating, so neither of the library's two
+	// orders is true of it: created_at is the only date it has, and it is the one that answers "what did I just add". The
+	// cursor is (created_at, id), two keys, and it is a query path of its own rather than a branch of ListLibraryPage.
+	ListWantedPage(ctx context.Context, arg ListWantedPageParams) ([]Entry, error)
 	ListWorkSources(ctx context.Context, workID string) ([]WorkSource, error)
 	// OR IGNORE is what makes the import idempotent: the host script appends receipts to a file, the app imports them,
 	// and a crash between the two means the same run is imported twice. The id is the run plus the target.

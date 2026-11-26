@@ -206,6 +206,12 @@ func (e *Engine) LibraryCount(ctx context.Context, query domain.LibraryQuery) (i
 	return e.store.LibraryCount(ctx, query)
 }
 
+// ShelfCounts is how many entries each shelf holds, which is the number on each of the Library's three tabs. It takes
+// no filters: the tabs' numbers are the shelves' totals whatever the medium chip says.
+func (e *Engine) ShelfCounts(ctx context.Context) (domain.ShelfCounts, error) {
+	return e.store.ShelfCounts(ctx)
+}
+
 // Search asks the full-text index for her own words, with the count of everything that matched rather than the count
 // of the page.
 func (e *Engine) Search(ctx context.Context, query domain.SearchQuery) ([]domain.SearchHit, int, error) {
