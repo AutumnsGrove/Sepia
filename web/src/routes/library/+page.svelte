@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { ArrowDownWideNarrow, Search, X } from '@lucide/svelte';
+  import { ArrowDownWideNarrow, Clock, Search, X } from '@lucide/svelte';
   import {
     ApiError,
     createClient,
@@ -9,21 +9,33 @@
     type LibraryPage,
     type Medium,
     type SearchResults,
+    type ShelfCounts,
   } from '../../lib/api/client';
   import Button from '../../lib/components/Button.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Errbox from '../../lib/components/Errbox.svelte';
   import ListRow from '../../lib/components/ListRow.svelte';
   import SkeletonRows from '../../lib/components/SkeletonRows.svelte';
+  import Tabs from '../../lib/components/Tabs.svelte';
   import TopBar from '../../lib/components/TopBar.svelte';
   import { appendList, emptyList, replaceList, type ListState } from '../../lib/state/lists';
-  import { completionBadge, entryMeta, sectionsFor } from '../../lib/state/reading';
+  import {
+    completionBadge,
+    entryMeta,
+    sectionsFor,
+    shelfEmpty,
+    shelfOrder,
+    SHELF_TABS,
+    type Shelf,
+  } from '../../lib/state/reading';
   import { mentionLine, splitSnippet } from '../../lib/state/search';
 
   /**
-   * The Library: one list across every medium, grouped by the month she finished each thing. The medium chips filter
-   * it, the tool row says how many there are and which way they are sorted, and a page is fifty entries with a way to
-   * ask for more.
+   * The Library: three shelves, one per tab, because "finished", "didn't finish" and "wanted" are three kinds of thing
+   * rather than three filters over one list (docs/slices/S22-library-shelves.md). Finished groups by the month she
+   * finished each thing; didn't finish groups by the month she stopped; wanted is one flat list ordered by when she
+   * added it, since a wish has no date to group by. The medium chips filter the shelf in view, the tool row says how
+   * many are in it and which order it is in, and a page is fifty entries with a way to ask for more.
    *
    * Search reads her own words: the work's title, the review she wrote and the answers she gave. Typing replaces the
    * grouped list with ranked results and the sentence the match was found in, and clearing the box puts the library
@@ -44,10 +56,13 @@
   ];
 
   let medium = $state<Medium | ''>('');
-  // The shelf. Empty is the library proper: finished and abandoned reviews. Wanted is one chip away, because a work
-  // she has not read has no finish date and is not a review (docs/slices/S21-wishlist-and-unfinished.md).
-  let shelf = $state<'' | 'want_to'>('');
+  // The shelf in view. Finished opens first, which is the library as it was.
+  let shelf = $state<Shelf>('finished');
+  // The order. Only Finished has one to change, so the other shelves keep this at newest and never read it.
   let sort = $state<'newest' | 'rating'>('newest');
+  // The number on each tab, loaded apart from the list so a count that failed leaves the tabs without a number rather
+  // than the screen without a list. Null means "not known", which is not the same as zero.
+  let counts = $state<ShelfCounts | null>(null);
   let list = $state<ListState<Entry>>(emptyList<Entry>());
   let loading = $state(true);
   let loadingMore = $state(false);
@@ -60,8 +75,24 @@
   let searchProblem = $state('');
   let searchCount = $state(0);
 
-  const groups = $derived(sectionsFor(list.items, sort, shelf === 'want_to'));
-  const sortLabel = $derived(sort === 'newest' ? 'Newest first' : 'Highest rated');
+  // A wish has no month she finished it and no rating to rank, so both of those lists are one flat section: the
+  // headings would be dates she never reached, and the rating order would be an order of nothing.
+  const groups = $derived(sectionsFor(list.items, sort, shelf === 'want_to' || sort === 'rating'));
+  const order = $derived(shelfOrder(shelf, sort));
+  const tabs = $derived(
+    SHELF_TABS.map((tab) => ({
+      id: tab.shelf,
+      label: tab.label,
+      count:
+        counts === null
+          ? undefined
+          : tab.shelf === 'finished'
+            ? counts.finished
+            : tab.shelf === 'abandoned'
+              ? counts.abandoned
+              : counts.want_to,
+    })),
+  );
   // The total is the server's count of everything the filters hold, not the rows on the page she is reading. Before
   // the first page arrives it falls back to what is on screen.
   const countLine = $derived(
@@ -77,6 +108,7 @@
     !loading && problem === '' && list.items.length === 0 && (medium !== '' || loaded),
   );
   const chosen = $derived(media.find((option) => option.value === medium)?.label ?? '');
+  const empty = $derived(shelfEmpty(shelf, chosen === '' ? null : { chosen }));
 
   async function load(reset: boolean) {
     if (reset) {
@@ -88,7 +120,8 @@
     try {
       const page: LibraryPage = await client.listEntries({
         medium: medium === '' ? undefined : medium,
-        completion: shelf === '' ? undefined : shelf,
+        // Always a shelf: the API's omitted default is the old combined list, which no tab shows.
+        completion: shelf,
         sort,
         cursor: reset ? undefined : (list.cursor ?? undefined),
         limit: 50,
@@ -102,6 +135,17 @@
       loadingMore = false;
     }
   }
+
+  // The counts are read once, not per page: they are the whole table's totals, so a filter or a second page cannot
+  // change them. A failure here is silent on purpose, and the tabs simply carry no number.
+  async function loadCounts() {
+    try {
+      counts = await client.shelfCounts();
+    } catch {
+      counts = null;
+    }
+  }
+  void loadCounts();
 
   $effect(() => {
     // Any change of filter or shelf or order starts again from the first page: a cursor belongs to the query that
@@ -169,6 +213,13 @@
 
   function chooseMedium(value: Medium | '') {
     medium = value;
+  }
+
+  // Switching shelf reads its own first page, and leaves the order where a shelf can hold it: a rating order on the
+  // other two shelves would be an order of rows that have no rating.
+  function chooseShelf(next: string) {
+    shelf = next as Shelf;
+    if (shelf !== 'finished') sort = 'newest';
   }
 
   function flipSort() {
@@ -251,6 +302,8 @@
         {/if}
       {/if}
     {:else}
+      <Tabs {tabs} selected={shelf} label="Shelf" showZero onselect={chooseShelf} />
+
       <div class="chipsrow" role="group" aria-label="Filter by medium">
         {#each media as option (option.value)}
           <Chip pressed={medium === option.value} onclick={() => chooseMedium(option.value)}>
@@ -259,18 +312,19 @@
         {/each}
       </div>
 
-      <div class="chipsrow" role="group" aria-label="Filter by shelf">
-        <Chip pressed={shelf === ''} onclick={() => (shelf = '')}>Reviewed</Chip>
-        <Chip pressed={shelf === 'want_to'} onclick={() => (shelf = 'want_to')}>Wanted</Chip>
-      </div>
-
       <div class="toolrow">
         <span>{countLine}</span>
-        {#if list.items.length > 0}
-          <button type="button" class="linkbtn" onclick={flipSort} aria-label="Sort: {sortLabel}">
+        {#if order.toggle && list.items.length > 0}
+          <button type="button" class="linkbtn" onclick={flipSort} aria-label="Sort: {order.label}">
             <ArrowDownWideNarrow size={16} aria-hidden="true" />
-            {sortLabel}
+            {order.label}
           </button>
+        {:else if list.items.length > 0}
+          <!-- Nothing to rank on this shelf, so its order is a fact rather than a control. -->
+          <span class="fixed" aria-label="Order: {order.label}">
+            <Clock size={16} aria-hidden="true" />
+            {order.label}
+          </span>
         {/if}
       </div>
 
@@ -280,30 +334,14 @@
         <SkeletonRows label="Reading your library" />
       {:else if emptyFilter}
         <div class="zero">
-          <h2>
-            {shelf === 'want_to'
-              ? 'Nothing on your wanted list yet.'
-              : medium === ''
-                ? 'Nothing here yet.'
-                : `No ${chosen.toLowerCase()} entries yet.`}
-          </h2>
-          <p>
-            {shelf === 'want_to'
-              ? 'Say what you mean to read, watch or play and it lands here, with no rating and nothing to write yet.'
-              : medium === ''
-                ? 'Everything you finish and write about lands here, across films, books, games, albums and more.'
-                : 'Nothing in your library yet, with this filter on.'}
-          </p>
-          {#if shelf === 'want_to'}
-            <Button variant="primary" onclick={() => void goto(resolve('/new'))}>
-              Add something
-            </Button>
-          {:else if medium === ''}
-            <Button variant="primary" onclick={() => void goto(resolve('/new'))}>
-              Log something
-            </Button>
-          {:else}
+          <h2>{empty.heading}</h2>
+          <p>{empty.body}</p>
+          {#if empty.action === 'Show everything'}
             <Button onclick={() => chooseMedium('')}>Show everything</Button>
+          {:else}
+            <Button variant="primary" onclick={() => void goto(resolve('/new'))}>
+              {empty.action}
+            </Button>
           {/if}
         </div>
       {:else}
@@ -311,13 +349,22 @@
           {#if group.label}
             <p class="grp" id="grp-{group.key || 'none'}">{group.label}</p>
           {/if}
-          <ul class="list" aria-labelledby={group.label ? `grp-${group.key || 'none'}` : undefined}>
+          <ul
+            class="list"
+            id="panel-{shelf}"
+            aria-labelledby={group.label ? `grp-${group.key || 'none'}` : `tab-${shelf}`}
+          >
             {#each group.items as entry (entry.id)}
+              <!-- A stopped row has no right-hand slot and no stars unless she gave one, and its how-far line is the
+                   second line in her own words, in quotes. A wanted row has no stars at all. Neither is on its shelf
+                   with a badge: the tab above already says which list this is (mockup 03, frames 5 and 6). -->
               <ListRow
                 title={entry.work.title}
                 meta={entryMeta(entry, thisYear)}
                 quarters={entry.rating_q > 0 ? entry.rating_q : null}
-                badge={completionBadge(entry)}
+                note={entry.completion === 'abandoned' && entry.progress
+                  ? `\u201c${entry.progress}\u201d`
+                  : undefined}
                 medium={entry.work.medium}
                 favourite={entry.favourite}
                 coverUrl={entry.work.cover_url}
@@ -385,7 +432,8 @@
     color: var(--text);
   }
   /* The order in search is always relevance, so it is a label rather than a button: nothing to toggle. */
-  .sortlabel {
+  .sortlabel,
+  .fixed {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;

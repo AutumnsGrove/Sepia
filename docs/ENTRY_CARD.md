@@ -12,8 +12,8 @@ off it. Decisions are from the 2026-10-31 planning session; the rules they serve
 | Work | Cover, title, year, creators, medium | `verified` (an API), `unverified` (web or manual), `accepted` (a web field I tapped) |
 | Rating | Quarter-star rating, with the favourite heart in the label row | `set`, or `empty` (shown as needed) |
 | My words | Verdict (one line) and body | `extracted`, `typed`, `mixed`, `imported`; see section 3 |
-| Facts | Format, and the date: **Finished** for a finished entry, **Stopped** for an abandoned one | `parsed`, `suggested` (from the decisions layer), `empty` |
-| How far | One optional line in my own words, for an abandoned entry only | `extracted`, `typed`, `empty` |
+| Facts | Format, the date (**Finished** for a finished entry, **Stopped** for an abandoned one), and, on an abandoned entry, a full-width **How far** fact in the same grid | `parsed`, `suggested` (from the decisions layer), `empty` |
+| How far | One optional line in my own words, for an abandoned entry only. It is a fact inside Facts rather than a section of its own: the label above it said the same word twice | `extracted`, `typed`, `empty` |
 | Left out | The parts of my messages not kept | collapsed; each segment has a tap to include it |
 | Answers | The descriptor chips I picked, grouped by category, then the single questions I answered | `answered`, `skipped` (greyed) |
 | Tags | Genres from the provider and my own free-text tags (not the descriptor chips, which are answers) | `suggested`, `accepted` |
@@ -37,8 +37,8 @@ as in the button state. Everything not listed is optional: if I skip every quest
 | Completion | Required | Shown as |
 |---|---|---|
 | `finished` | a **rating** (a quarter-star value, 0.25 to 5.0). The body is optional: a rated work with nothing written about it is a real entry (decided 2026-11-22) | no badge |
-| `abandoned` | a **non-empty body**. The rating stays optional, so a dropped book with no stars still saves | `didn't finish` |
-| `want_to` | nothing but the work and my confirm tap | `wanted` |
+| `abandoned` | a **non-empty body**. The rating stays optional, so a dropped book with no stars still saves | `Didn't finish` |
+| `want_to` | nothing but the work and my confirm tap | `Wanted` |
 
 A body, whenever there is one, is made of my own words: the agent never writes one, and if I only said "5/5" and
 nothing else it asks for a few words, and the card can be saved without them. An imported entry arrives that way:

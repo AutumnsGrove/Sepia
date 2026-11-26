@@ -215,11 +215,17 @@
       </section>
 
       <section class="sec">
-        {#if entry.finished_on || entry.format}
+        <!-- The stamp names the date it is showing. A review has a finish date, a stopped work has the day she put it
+             down, and a wish has only the day she added it, so none of the three is left with a label that is untrue. -->
+        {#if entry.completion === 'want_to' || entry.finished_on || entry.format}
           <p class="stamp">
-            {entry.finished_on ? dateText(entry.finished_on) : 'No date'}{entry.format
-              ? ` · ${formatText(entry.format) || entry.format}`
-              : ''}
+            {#if entry.completion === 'want_to'}
+              Added {dateText(entry.created_at.slice(0, 10))}
+            {:else}
+              {entry.completion === 'abandoned' && entry.finished_on
+                ? 'Stopped '
+                : ''}{entry.finished_on ? dateText(entry.finished_on) : 'No date'}
+            {/if}{entry.format ? ` · ${formatText(entry.format) || entry.format}` : ''}
           </p>
         {/if}
         {#if badge}
@@ -237,9 +243,10 @@
           </div>
         {/if}
         {#if entry.progress}
+          <!-- Her own words, in quotes: the how-far line is a line she wrote, not a measurement we made. -->
           <div class="progress">
             <span class="k">How far</span>
-            <span class="v">{entry.progress}</span>
+            <span class="v">“{entry.progress}”</span>
           </div>
         {/if}
         {#if verdict}
@@ -300,6 +307,14 @@
                 {deleting ? 'Deleting' : 'Delete'}
               </Button>
             </div>
+          </div>
+        {:else if !entry.deleted_at && entry.completion === 'want_to'}
+          <!-- A wish has one thing to do with it. Logging it opens this row as a review, not a second row. -->
+          <div class="nowdo">
+            <Button variant="primary" grow onclick={again}>Log a review</Button>
+            <p>
+              Finished it, or stopped partway? Say so and this becomes an entry. It stays one row.
+            </p>
           </div>
         {:else if !entry.deleted_at}
           <div class="btnrow">
@@ -387,6 +402,15 @@
   }
   /* The same shape as the stamp above it: a small label, then her words on their own line. Running them together
      read as one sentence, "How far two episodes...". */
+  .nowdo {
+    margin-top: 1.1rem;
+  }
+  .nowdo p {
+    margin: 0.6rem 0 0;
+    color: var(--text-2);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
   .progress {
     display: grid;
     gap: 0.15rem;
