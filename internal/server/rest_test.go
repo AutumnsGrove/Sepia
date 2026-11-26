@@ -1451,7 +1451,8 @@ func TestShelfCountsDatabaseFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Host = rig.host
-	resp, err := http.DefaultClient.Do(req)
+	// The rig's own listener, not the network: the guard refuses a test that could reach a live provider.
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
 	if err != nil {
 		t.Fatalf("counts: %v", err)
 	}

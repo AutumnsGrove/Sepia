@@ -331,14 +331,14 @@ func TestShelfCounts(t *testing.T) {
 	}
 
 	// A draft and a deleted row are outside every shelf.
-	if err := raw(t, s, `INSERT INTO entries
+	if rowErr := raw(t, s, `INSERT INTO entries
 		(id, work_id, rating_q, rating_scale, body, body_origin, completion, status, created_at, updated_at)
 		VALUES ('e-draft', 'w1', 0, 'quarter_stars_20', 'nothing yet', 'typed', 'want_to', 'draft',
-			'2026-11-21T00:00:00Z', '2026-11-21T00:00:00Z')`); err != nil {
-		t.Fatalf("insert draft: %v", err)
+			'2026-11-21T00:00:00Z', '2026-11-21T00:00:00Z')`); rowErr != nil {
+		t.Fatalf("insert draft: %v", rowErr)
 	}
-	if err := raw(t, s, `UPDATE entries SET deleted_at = '2026-11-22T00:00:00Z' WHERE id = 'e-finished'`); err != nil {
-		t.Fatalf("soft-delete: %v", err)
+	if rowErr := raw(t, s, `UPDATE entries SET deleted_at = '2026-11-22T00:00:00Z' WHERE id = 'e-finished'`); rowErr != nil {
+		t.Fatalf("soft-delete: %v", rowErr)
 	}
 	counts, err = s.ShelfCounts(context.Background())
 	if err != nil {

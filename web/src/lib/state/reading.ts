@@ -79,16 +79,73 @@ export function monthLabel(key: string): string {
   return `${name} ${year}`;
 }
 
-/** "Book · 30 Oct", with the year only when it is not this one: the month heading already says it for this year. */
+/**
+ * "Book · 30 Oct", with the year only when it is not this one: the month heading already says it for this year. A
+ * stopped row's date is the day she stopped, and it says so, because a stopped row has no other word for it. A wanted
+ * row has no date at all, so the creator stands where the date would: it is the second thing that helps her pick it
+ * out of a list of things she has not read. Nothing is drawn empty, and no row carries a placeholder in a slot.
+ */
 export function entryMeta(entry: Entry, thisYear: number): string {
   const medium = mediumText(entry.work.medium);
   if (entry.completion === 'want_to') {
-    // A work she has not read has no date to show, and "Book" alone is the whole true sentence about it.
-    return medium;
+    const creator = creatorText(entry.work.creators);
+    if (!medium) return creator;
+    return creator ? `${medium} · ${creator}` : medium;
   }
   const date = shortDate(entry.finished_on, thisYear);
-  if (!medium) return date;
-  return date ? `${medium} · ${date}` : medium;
+  const when = entry.completion === 'abandoned' && date ? `stopped ${date}` : date;
+  if (!medium) return when;
+  return when ? `${medium} · ${when}` : medium;
+}
+
+/**
+ * What an empty shelf says, and the one thing that fills it (mockup 03, frames 7 and 8). Each shelf says what it is for
+ * in a sentence rather than sharing one "nothing here", because an empty wanted list and an empty stopped list are two
+ * different situations with two different ways out. With a medium chip on, the sentence names the shelf and the chip
+ * both, and the way out is back to everything.
+ */
+export function shelfEmpty(
+  shelf: Shelf,
+  medium: { chosen: string } | null,
+): { heading: string; body: string; action: string } {
+  if (medium && medium.chosen !== '') {
+    const noun = medium.chosen.toLowerCase();
+    const onShelf =
+      shelf === 'want_to'
+        ? 'on your wanted list'
+        : shelf === 'abandoned'
+          ? 'you stopped'
+          : 'you have reviewed';
+    return {
+      heading: `No ${noun} entries ${onShelf} yet.`,
+      body: 'Nothing in your library yet, with this filter on.',
+      action: 'Show everything',
+    };
+  }
+  if (shelf === 'want_to') {
+    return {
+      heading: 'Nothing on your wanted list yet.',
+      body: 'Say what you mean to read, watch or play and it lands here, with no rating and nothing to write yet.',
+      action: 'Add something',
+    };
+  }
+  if (shelf === 'abandoned') {
+    return {
+      heading: 'Nothing left unfinished.',
+      body: 'When you stop partway through something, say so and it lands here, with how far you got.',
+      action: 'Log something',
+    };
+  }
+  return {
+    heading: 'Nothing here yet.',
+    body: 'Everything you finish and write about lands here, across films, books, games, albums and more.',
+    action: 'Log something',
+  };
+}
+
+/** The first creator a work names, whichever role it carries: the line a wanted row has instead of a date. */
+export function creatorText(creators: { role: string; name: string }[] | undefined): string {
+  return creators?.[0]?.name ?? '';
 }
 
 /** The saved entry a revisit card is describing, as the socket sends it. */
@@ -124,13 +181,16 @@ export function revisitMeta(previous: RevisitPrevious): string {
   return parts.join(' · ');
 }
 
-/** The quiet badge a row or a card carries, or empty for an ordinary finished review. */
+/**
+ * The quiet badge a row or a card carries, or empty for an ordinary finished review. The words are the tabs' words:
+ * one word per shelf, everywhere, so a badge and the tab it belongs to cannot disagree.
+ */
 export function completionBadge(entry: Pick<Entry, 'completion'>): string {
   switch (entry.completion) {
     case 'abandoned':
-      return "didn't finish";
+      return "Didn't finish";
     case 'want_to':
-      return 'wanted';
+      return 'Wanted';
     default:
       return '';
   }
@@ -141,11 +201,33 @@ export function dateLabel(entry: Pick<Entry, 'completion'>): string {
   return entry.completion === 'abandoned' ? 'Stopped' : 'Finished';
 }
 
-/** Which shelf chip is on, in the order the chips appear. Empty is the library proper. */
-export const SHELVES = [
-  { value: '', label: 'Reviewed' },
-  { value: 'want_to', label: 'Wanted' },
+/**
+ * The Library's three shelves, in the order the tabs appear. Each is a list of its own: a stopped work is a review of a
+ * different kind and a wanted work is not a review at all, so they are neither filters over one list nor chips that
+ * can be on together. The labels are the words the badge and the card's switch use, so nothing says "Want to" while a
+ * tab says "Wanted".
+ */
+export const SHELF_TABS = [
+  { shelf: 'finished', label: 'Finished' },
+  { shelf: 'abandoned', label: "Didn't finish" },
+  { shelf: 'want_to', label: 'Wanted' },
 ] as const;
+
+export type Shelf = (typeof SHELF_TABS)[number]['shelf'];
+
+/**
+ * The order a shelf is in, and whether she can change it. Only Finished has something to rank: every finished entry has
+ * a rating, so its two orders are both total. A stopped work and a wanted work have no rating, so offering a rating
+ * order would be offering a sort of nothing, and they state their order instead.
+ */
+export function shelfOrder(
+  shelf: Shelf,
+  sort: 'newest' | 'rating',
+): { label: string; toggle: boolean } {
+  if (shelf === 'want_to') return { label: 'Recently added', toggle: false };
+  if (shelf === 'abandoned') return { label: 'Newest first', toggle: false };
+  return { label: sort === 'rating' ? 'Highest rated' : 'Newest first', toggle: true };
+}
 
 /** The day and month a row can show, or the year too when it is not the current one. */
 export function shortDate(iso: string | null | undefined, thisYear: number): string {
