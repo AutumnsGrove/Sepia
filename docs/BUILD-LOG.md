@@ -1776,3 +1776,40 @@ fails the build if the base-commit read is replaced with the checkout's copy, wh
 **Live check left for the operator.** After the merge, `gh workflow enable pi-review` restores the split
 and `git revert` of the arrangement restores the two-reader prompts; the next pull request that does not
 touch the workflow is the first one `claude-review` reads as the sole reader.
+
+## 2026-11-26, fix, a hand-edited YAML file cannot panic the loader
+
+The nightly fuzz job went red on 2026-11-23 and again on 2026-11-26 with the same uncommitted crasher, and
+it was a real one: `FuzzLoadBanks` found `<<:\n? 0:` and the process died with `panic: runtime error: hash
+of unhashable type map[interface {}]interface {}`.
+
+**What it is.** Not our code. `gopkg.in/yaml.v3` v3.0.1 resolves a `<<` merge key by hashing the document's
+own keys to see which ones the merge may not override (`decode.go`, `(*decoder).merge`). A mapping or a
+sequence used as a key is not hashable, so the library panics where every other input is an error. The
+library is at its last release, so there is nothing to wait for.
+
+**Why it mattered.** A bank is hot-reloaded and a registry is read at startup, so one stray `?` in a file
+the operator edits by hand would take the service down, and keep taking it down on every reload. Both
+`internal/banks` and `internal/decisions` decode through the same library and carried the same hole; the
+decisions target had simply not found it yet.
+
+**The fix.** The guard is a `recover` in each loader's own decode, because the dependency rule keeps them
+from sharing one: `BUILD.md` 4 and `internal/archtest` say the adapters import `domain` and nothing else of
+ours, so a new `internal/yamlx` was written, passed its tests, and was withdrawn when the arch test refused
+it. Each package now runs its two decodes through a small `guarded` call. The unhashable-key case gets words
+a person can act on ("a mapping or a sequence cannot be a key; a `<<` merge key reads every key, so use
+plain names") and any other panic keeps the library's own message rather than being swallowed. Strictness,
+the single-document rule and the `unknown key "colour"` wording are unchanged, so every existing loader
+test passes untouched.
+
+**Watched failing first.** `TestMergeKeyIsRefusedNotPanicked` in both packages, three cases each, panicked
+before the fix and passes after. The fuzzer's own 48-byte crasher is committed verbatim as a regression
+seed (`internal/banks/testdata/fuzz/FuzzLoadBanks/366a2f3f43cc36ea`), and the decisions target got one too
+(`internal/decisions/testdata/fuzz/FuzzLoadRegistry/unhashable-key`).
+
+**Checked.** `FuzzLoadBanks` ran 90 s and about 1M executions, `FuzzLoadRegistry` 90 s and about 620k, both
+clean; `make check` green.
+
+**For the next agent.** A `recover` around a third-party parser hides future panics as errors, so the error
+keeps the panic's own words. If a new message appears there, it is a new bug in the library, not a new
+malformed config.
