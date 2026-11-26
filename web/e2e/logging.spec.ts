@@ -1,6 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { shot } from './shot';
 
 /**
  * The logging flow against the real service and the in-process world. The gallery proves what each state looks
@@ -50,34 +49,6 @@ async function finishQuestions(page: import('@playwright/test').Page) {
 async function send(page: import('@playwright/test').Page, text: string) {
   await page.getByLabel('Say what you thought').fill(text);
   await page.getByRole('button', { name: 'Send' }).click();
-}
-
-/**
- * Answer or skip whatever the card is waiting on, until it is ready to save. Every flow on this stack logs the same
- * invented work, so a test that runs after another one can be asked a question the first flow already answered. Each
- * answer is given time to land before the next one: answering a question that has just been answered is refused, and
- * the refusal is drawn in the transcript, which is not a state a screenshot should carry.
- */
-async function settleCard(page: import('@playwright/test').Page) {
-  const save = page.getByRole('button', { name: 'Save entry' });
-  const deadline = Date.now() + 25_000;
-  let answers = 0;
-  while (Date.now() < deadline) {
-    if (await save.isEnabled().catch(() => false)) return;
-    const answer = page.getByRole('button', { name: 'Done', exact: true }).first();
-    const skip = page.getByRole('button', { name: 'Skip' }).last();
-    if (answers < 3 && (await answer.isVisible().catch(() => false))) {
-      await answer.click({ timeout: 3000 }).catch(() => undefined);
-      answers += 1;
-      await page.waitForTimeout(700);
-    } else if (answers < 3 && (await skip.isVisible().catch(() => false))) {
-      await skip.click({ timeout: 3000 }).catch(() => undefined);
-      answers += 1;
-      await page.waitForTimeout(700);
-    } else {
-      await page.waitForTimeout(250);
-    }
-  }
 }
 
 test.describe('logging a review', () => {
@@ -297,63 +268,6 @@ test.describe('logging a review', () => {
     await expect(page.getByRole('button', { name: /The book/ })).toBeVisible({ timeout: 45_000 });
     await expect(page.getByText(SENTENCE)).toHaveCount(1);
     await expect(page.getByText('Will send when you are back online')).toHaveCount(0);
-  });
-
-  // Mockup 04, frame 1e: stopping partway turns the Facts date into Stopped and adds one full-width How far fact. The
-  // label above it used to say "How far" as well, so the section said the same word twice.
-  test('stopping partway dates the card Stopped and asks how far she got', async ({ page }) => {
-    await startEntry(page);
-    await send(page, SENTENCE);
-    await page.getByRole('button', { name: /The book/ }).click();
-    await pickBook(page);
-    // The Describe step is answered first and given time to land: an edit sent while the card is being refreshed is
-    // refused as stale, and the refusal is drawn in the transcript.
-    await settleCard(page);
-    await expect(page.getByRole('button', { name: 'Save entry' })).toBeEnabled({ timeout: 20_000 });
-
-    // A stopped work needs words of her own, where a finished one only needs a rating. A card the model already filled
-    // has some, and only her own typing may carry a how-far line she did not write, so which one it is is remembered.
-    const writeWords = page.getByRole('button', { name: /Tap to write your own/ });
-    const typed = await writeWords.isVisible();
-    if (typed) {
-      await writeWords.click();
-      await page.getByLabel('Your words').fill('could not get into it after two episodes');
-      await page.getByRole('article').getByRole('button', { name: 'Done', exact: true }).click();
-      await expect(page.getByText('could not get into it after two episodes')).toBeVisible();
-    }
-
-    // The switch is on its own row under the work header, and there she stops.
-    await page.getByRole('button', { name: "Didn't finish" }).click();
-    await expect(page.getByRole('button', { name: "Didn't finish" })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-      { timeout: 20_000 },
-    );
-
-    // The date fact is called Stopped, never Finished, and the rating no longer nags.
-    await expect(page.locator('.facts .fact .k', { hasText: 'Stopped' })).toHaveCount(1);
-    await expect(page.locator('.facts .fact .k', { hasText: 'Finished' })).toHaveCount(0);
-    await expect(page.getByText('Needs a rating')).toHaveCount(0);
-    // One How far, and it is a fact in the grid rather than a label above one.
-    await expect(page.locator('.facts .fact.wide .k')).toHaveText('How far');
-    await expect(page.locator('p.lbl', { hasText: 'How far' })).toHaveCount(0);
-
-    // A stopped work needs the day she stopped, because that is the date its month group is built from.
-    await page.locator('.facts .fact', { hasText: 'Stopped' }).click();
-    await page.getByLabel('Stopped on').fill('2026-11-03');
-    await expect(page.locator('.facts .fact', { hasText: 'Stopped' })).toContainText('3 Nov');
-    if (typed) {
-      await page.getByLabel('How far you got').fill('about 100 pages in');
-      await page.getByLabel('How far you got').blur();
-    }
-
-    // That shelf asks its own questions; they are skipped here because this test is about the card's facts.
-    await settleCard(page);
-    await expect(page.getByRole('button', { name: 'Save entry' })).toBeEnabled({ timeout: 20_000 });
-
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations).toEqual([]);
-    await shot(page, 'logging-card-stopped.png');
   });
 
   test('a work she only means to read gets a card with nothing to score', async ({ page }) => {

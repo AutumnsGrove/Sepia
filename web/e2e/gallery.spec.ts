@@ -39,6 +39,7 @@ const states = [
   'screen-fidelity',
   'screen-editing',
   'screen-missing-rating',
+  'screen-stopped',
   'screen-offline',
   'screen-caught-up',
   'screen-working',
