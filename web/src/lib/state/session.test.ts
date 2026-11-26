@@ -37,6 +37,96 @@ describe('every server example', () => {
   });
 });
 
+/**
+ * One server event, in the contract's shape, so a test reads like the socket it stands in for. A null seq is a live
+ * event, which is what an activity row is: it is drawn while the turn runs and never replayed.
+ */
+function chatEvent(
+  type: string,
+  data: Record<string, unknown>,
+  seq: number | null = 1,
+): ServerEvent {
+  const event = { seq, type, session_id: 's_chat', ts: '2026-11-26T12:00:00Z', data };
+  const problem = checkServerEvent(event);
+  if (problem) throw new Error(`${type} is not in the contract: ${problem}`);
+  return event as ServerEvent;
+}
+
+describe('a chat answer', () => {
+  it('puts the entries a search found under the sentence that names them, after it', () => {
+    const state = applyAll(emptySession('s_chat'), [
+      chatEvent('activity', { label: 'Searching your library' }, null),
+      chatEvent('assistant_start', { message_id: 'm1' }, 3),
+      chatEvent('text_delta', { message_id: 'm1', text: 'One book. Piranesi.' }, 4),
+      chatEvent('assistant_end', { message_id: 'm1' }, 5),
+      chatEvent(
+        'chat_results',
+        {
+          results: [
+            {
+              entry_id: 'e1',
+              title: 'Piranesi',
+              medium: 'book',
+              completion: 'finished',
+              rating_q: 19,
+              finished_on: '2026-09-28',
+            },
+          ],
+        },
+        6,
+      ),
+    ]);
+    const rows = timeline(state);
+    const answerAt = rows.findIndex(
+      (row) => row.kind === 'block' && row.block.kind === 'assistant',
+    );
+    const resultsAt = rows.findIndex((row) => row.kind === 'results');
+    expect(answerAt).toBeGreaterThan(-1);
+    expect(resultsAt).toBeGreaterThan(answerAt);
+    const group = rows[resultsAt];
+    if (group.kind !== 'results') throw new Error('not a results row');
+    expect(group.rows).toHaveLength(1);
+    expect(group.rows[0]).toMatchObject({
+      entryID: 'e1',
+      title: 'Piranesi',
+      medium: 'book',
+      ratingQ: 19,
+      finishedOn: '2026-09-28',
+      coverUrl: null,
+    });
+  });
+
+  it("keeps two answers' rows apart, in the order the server ranked them", () => {
+    const state = applyAll(emptySession('s_chat'), [
+      chatEvent(
+        'chat_results',
+        {
+          results: [
+            { entry_id: 'e1', title: 'Piranesi', medium: 'book', completion: 'finished' },
+            { entry_id: 'e2', title: 'The Salt Road', medium: 'book', completion: 'finished' },
+          ],
+        },
+        1,
+      ),
+      chatEvent(
+        'chat_results',
+        {
+          results: [
+            { entry_id: 'e3', title: 'Grey Harbour', medium: 'tv', completion: 'finished' },
+          ],
+        },
+        2,
+      ),
+    ]);
+    const groups = timeline(state).filter((row) => row.kind === 'results');
+    expect(groups).toHaveLength(2);
+    if (groups[0].kind !== 'results' || groups[1].kind !== 'results')
+      throw new Error('not results');
+    expect(groups[0].rows.map((row) => row.entryID)).toEqual(['e1', 'e2']);
+    expect(groups[1].rows.map((row) => row.entryID)).toEqual(['e3']);
+  });
+});
+
 describe('the session reducer', () => {
   it('builds the transcript from a hello and a replay, in order', () => {
     let state = applyHello(emptySession(), fixture('server-hello.json'));

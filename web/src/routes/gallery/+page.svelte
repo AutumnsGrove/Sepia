@@ -13,6 +13,7 @@
   import ListRow from '../../lib/components/ListRow.svelte';
   import Pill from '../../lib/components/Pill.svelte';
   import Rating from '../../lib/components/Rating.svelte';
+  import ChatScreen from '../../lib/components/ChatScreen.svelte';
   import SessionScreen from '../../lib/components/SessionScreen.svelte';
   import Statusbar from '../../lib/components/Statusbar.svelte';
   import Switch from '../../lib/components/Switch.svelte';
@@ -593,7 +594,22 @@
     {#if shown === name}
       <section class="screenstate">
         <h2>{name.replace('screen-', '')}</h2>
-        <SessionScreen {...screenFixture(name)} handlers={fixtureHandlers} />
+        {#if name === 'screen-chat' || name === 'screen-chat-confirm'}
+          <!-- A div, not a main: the gallery page already has the document's one main landmark. -->
+          <div class="screen">
+            <div class="scroll">
+              <ChatScreen
+                session={screenFixture(name).session}
+                connection={screenFixture(name).connection}
+                handlers={fixtureHandlers}
+                pending={screenFixture(name).pending}
+                problem={screenFixture(name).problem}
+              />
+            </div>
+          </div>
+        {:else}
+          <SessionScreen {...screenFixture(name)} handlers={fixtureHandlers} />
+        {/if}
       </section>
     {/if}
   {/each}

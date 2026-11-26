@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { ArrowDownWideNarrow, Clock, Search, X } from '@lucide/svelte';
+  import { ArrowDownWideNarrow, Clock, MessageCircle, Search, X } from '@lucide/svelte';
   import {
     ApiError,
     createClient,
@@ -232,7 +232,14 @@
 </svelte:head>
 
 <main class="screen">
-  <TopBar title="Library" back />
+  <TopBar title="Library" back>
+    {#snippet actions()}
+      <!-- The way into the chat: it is the only door to it, so it lives where the mockup puts it. -->
+      <a class="ask" href={resolve('/chat')} aria-label="Ask your library">
+        <MessageCircle size={20} aria-hidden="true" />
+      </a>
+    {/snippet}
+  </TopBar>
 
   <div class="scroll">
     <label class="search">
@@ -386,6 +393,18 @@
 </main>
 
 <style>
+  .ask {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    color: var(--text-2);
+  }
+  .ask:hover {
+    color: var(--text);
+  }
   .search {
     display: flex;
     align-items: center;

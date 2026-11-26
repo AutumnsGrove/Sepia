@@ -58,6 +58,8 @@ type RunState struct {
 	Tools  *tool.Registry
 	// EditedEntry is the saved entry a chat change wrote, so the turn's finish can say so.
 	EditedEntry string
+	// ChatResults is what the last search in a chat turn found, drawn as rows under the answer once it is written.
+	ChatResults []chatResult
 
 	AskedDescribe bool
 	Answers       []domain.Answer

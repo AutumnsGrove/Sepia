@@ -40,6 +40,8 @@ const states = [
   'screen-editing',
   'screen-missing-rating',
   'screen-stopped',
+  'screen-chat',
+  'screen-chat-confirm',
   'screen-offline',
   'screen-caught-up',
   'screen-working',

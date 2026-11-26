@@ -1,5 +1,6 @@
 import type {
   ActivityRow,
+  ChatResult,
   NoticeRow,
   OpenInteraction,
   SessionState,
@@ -18,6 +19,7 @@ export type TimelineEntry =
   | { order: number; kind: 'block'; block: TranscriptBlock }
   | { order: number; kind: 'activity'; row: ActivityRow }
   | { order: number; kind: 'notice'; row: NoticeRow }
+  | { order: number; kind: 'results'; rows: ChatResult[] }
   | { order: number; kind: 'interaction'; interaction: OpenInteraction };
 
 export function timeline(state: SessionState): TimelineEntry[] {
@@ -25,6 +27,12 @@ export function timeline(state: SessionState): TimelineEntry[] {
     ...state.blocks.map((block) => ({ order: block.order, kind: 'block' as const, block })),
     ...state.activity.map((row) => ({ order: row.order, kind: 'activity' as const, row })),
     ...state.notices.map((row) => ({ order: row.order, kind: 'notice' as const, row })),
+    // One group per answer, keyed by the order the reducer gave the batch.
+    ...resultGroups(state).map((group) => ({
+      order: group[0].order,
+      kind: 'results' as const,
+      rows: group,
+    })),
     ...state.interactions.map((interaction) => ({
       order: interaction.order,
       kind: 'interaction' as const,
@@ -33,6 +41,17 @@ export function timeline(state: SessionState): TimelineEntry[] {
   ];
   // A stable sort by the counter, then by kind, so an equal order (a hello's cards) still renders the same way.
   return rows.sort((a, b) => a.order - b.order || a.kind.localeCompare(b.kind));
+}
+
+/** The result rows, grouped by the answer they belong to, keeping the order the server ranked them in. */
+function resultGroups(state: SessionState): ChatResult[][] {
+  const groups = new Map<number, ChatResult[]>();
+  for (const row of state.results) {
+    const group = groups.get(row.order);
+    if (group) group.push(row);
+    else groups.set(row.order, [row]);
+  }
+  return [...groups.values()];
 }
 
 /**
