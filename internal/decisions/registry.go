@@ -214,17 +214,40 @@ type checkPolicyDoc struct {
 func decode(data []byte, name string, into any) error {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
-	if err := dec.Decode(into); err != nil {
+	if err := guarded(name, func() error { return dec.Decode(into) }); err != nil {
 		if errors.Is(err, io.EOF) {
 			return fmt.Errorf("decisions: %s is empty", name)
 		}
 		return fmt.Errorf("decisions: %s: %w", name, friendlyYAML(err))
 	}
 	var extra yaml.Node
-	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+	if err := guarded(name, func() error { return dec.Decode(&extra) }); !errors.Is(err, io.EOF) {
 		return fmt.Errorf("decisions: %s has more than one YAML document", name)
 	}
 	return nil
+}
+
+// unhashableKey says what is wrong with a key that cannot be read, in the words the config's comments use.
+const unhashableKey = "a mapping or a sequence cannot be a key; a `<<` merge key reads every key, so use plain names"
+
+// guarded runs one decode and turns the panic yaml.v3 can raise into an error that names the file.
+//
+// Resolving a `<<` merge key hashes the document's own keys to see which ones the merge may not override
+// (gopkg.in/yaml.v3 decode.go, (*decoder).merge), and a mapping or a sequence used as a key cannot be hashed,
+// so the library panics where every other input is an error. The library is at its last release. A registry
+// is read at startup, so a panic here would take the app down instead of refusing the file. Any other panic
+// keeps the library's own message: it is a bug to see, not one to swallow.
+func guarded(name string, decode func() error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			msg := fmt.Sprint(r)
+			if strings.Contains(msg, "hash of unhashable type") {
+				msg = unhashableKey
+			}
+			err = fmt.Errorf("%s: yaml: %s", name, msg)
+		}
+	}()
+	return decode()
 }
 
 // unknownFieldRE matches yaml.v3's KnownFields complaint, rewritten into the words the config comments use.

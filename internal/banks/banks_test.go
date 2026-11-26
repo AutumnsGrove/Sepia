@@ -121,6 +121,25 @@ func TestStrictUnknownKeys(t *testing.T) {
 	}
 }
 
+// The nightly fuzzer found this on 2026-11-23 and 2026-11-26: a `<<` merge key makes yaml.v3 hash the
+// document's own keys, and a mapping used as a key cannot be hashed, so it panics instead of returning an
+// error. A hand-edited bank must be refused with words, never take the process down.
+func TestMergeKeyIsRefusedNotPanicked(t *testing.T) {
+	cases := map[string]string{
+		// The crasher the fuzzer wrote, verbatim (testdata/fuzz/FuzzLoadBanks/366a2f3f43cc36ea).
+		"the fuzzer's crasher": "<<:\n? 0:",
+		// The same bug in a shape a person can read.
+		"a mapping as a key":  "<<: {}\n? {a: b}\n: c\n",
+		"a sequence as a key": "<<: {}\n? [a]\n: c\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := LoadFiles(map[string][]byte{"shared.yaml": []byte(body), "books.yaml": []byte("0")})
+			wantError(t, err, "cannot be a key")
+		})
+	}
+}
+
 func TestIncludeResolution(t *testing.T) {
 	shared := `
 categories:

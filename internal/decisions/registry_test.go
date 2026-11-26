@@ -86,6 +86,21 @@ func TestLoadShippedRegistry(t *testing.T) {
 	}
 }
 
+// The same library panic the nightly fuzzer found in the banks: yaml.v3 hashes a document's own keys when
+// it sees a `<<` merge key, and a mapping used as a key cannot be hashed. A hand-edited registry is refused
+// with words, never a panic, whichever of the two documents carries it.
+func TestMergeKeyIsRefusedNotPanicked(t *testing.T) {
+	const crasher = "<<:\n? 0:"
+	t.Run("in the wording", func(t *testing.T) {
+		_, err := LoadFiles([]byte(crasher), []byte(basePolicy))
+		wantError(t, err, "cannot be a key")
+	})
+	t.Run("in the policy", func(t *testing.T) {
+		_, err := LoadFiles([]byte(baseWording), []byte(crasher))
+		wantError(t, err, "cannot be a key")
+	})
+}
+
 func TestRegistryRejectsBadConfig(t *testing.T) {
 	cases := map[string]struct {
 		wording, policy string

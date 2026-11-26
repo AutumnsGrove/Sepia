@@ -85,7 +85,7 @@ seeds.
 | Normaliser and title matcher | Merge and duplicate detection |
 | Merge functions | Never lose a field, never panic on conflicting providers |
 | WebSocket client-message decoder | Hostile frames, truncated JSON, deep nesting, oversized fields |
-| Decisions and question-bank YAML loaders | A bad registry must fail loudly at load, never at use |
+| Decisions and question-bank YAML loaders | A bad registry must fail loudly at load, never at use, and never as a panic: each loader recovers the one panic `yaml.v3` can raise and returns an error naming the file |
 | TMDB and Open Library response decoders | Untrusted JSON from the network |
 | Import and export reader | A corrupt or malicious archive |
 | Host and Origin checks | Odd `Host` and `Origin` headers, null origins, trailing dots, ports, and a rebinding name |
