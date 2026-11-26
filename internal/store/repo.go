@@ -195,6 +195,19 @@ func (s *Store) CreateDraft(ctx context.Context, e domain.Entry) error {
 // so an edit can never exist without the version it replaced (docs/ENTRY_CARD.md 7). A saved entry is rewritten here
 // too, which is what a confirmed revision is, and it is only reachable through the guard the statement carries.
 func (s *Store) SaveEntry(ctx context.Context, e domain.Entry) (int, error) {
+	return s.saveEntryWith(ctx, e, "")
+}
+
+// SaveEntryAt is SaveEntry with an expected version: the row must still be at expectedUpdatedAt when the write happens,
+// or nothing is written and ErrStaleVersion comes back. The comparison reads the row inside the same transaction as
+// the write, so a save from another screen cannot slip between the check and the write. A caller that proposed a change
+// from a snapshot she has seen uses this rather than SaveEntry (docs/slices/S16-search-and-chat.md, S16.4).
+func (s *Store) SaveEntryAt(ctx context.Context, e domain.Entry, expectedUpdatedAt time.Time) (int, error) {
+	return s.saveEntryWith(ctx, e, expectedUpdatedAt.UTC().Format(timeLayout))
+}
+
+// saveEntryWith is the write both of the above use. An empty expected version means "whatever is there".
+func (s *Store) saveEntryWith(ctx context.Context, e domain.Entry, expected string) (int, error) {
 	now := s.Now().UTC()
 	var revision int
 
@@ -202,6 +215,16 @@ func (s *Store) SaveEntry(ctx context.Context, e domain.Entry) (int, error) {
 		previous, err := q.GetEntry(ctx, e.ID)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("store: read entry before saving: %w", err)
+		}
+		// The version she was shown, checked here rather than by the caller: a compare followed by a write is two
+		// transactions, and the row can change between them.
+		if expected != "" {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			if previous.UpdatedAt != expected {
+				return ErrStaleVersion
+			}
 		}
 		if err == nil && domain.Status(previous.Status) == domain.StatusSaved {
 			// The revision is the entry as it was, written before the change, in this same transaction. A draft

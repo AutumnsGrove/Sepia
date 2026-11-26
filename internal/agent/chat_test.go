@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AutumnsGrove/nova/tool"
 
@@ -190,5 +191,39 @@ func TestAChatEditWithNobodyToConfirm(t *testing.T) {
 	}
 	if after.Rating != 19 {
 		t.Fatalf("rating = %d, want 19", after.Rating)
+	}
+}
+
+// Sad: another screen saved the entry while the card was up. The change was proposed from a version she can no longer
+// see, so it is refused rather than written over the top of the other screen's save.
+func TestAChatEditRefusesAVersionSheHasNotSeen(t *testing.T) {
+	r := newRig(t, rigOptions{})
+	saveSearchable(t, r, "e1", "Hades II", "game", "the boss fights are the best kind of unfair", 17, "2026-10-12")
+	sess := aChatSession(t, r, "make hades a 5")
+	r.responder.script("edit_entry", "confirm")
+	r.responder.beforeAnswer = func() {
+		ctx := context.Background()
+		entry, err := r.store.Entry(ctx, "e1")
+		if err != nil {
+			t.Errorf("Entry: %v", err)
+			return
+		}
+		entry.Rating = 12
+		r.clock.Advance(time.Minute)
+		if _, err := r.store.SaveEntry(ctx, entry); err != nil {
+			t.Errorf("the other screen's save: %v", err)
+		}
+	}
+
+	result := callEdit(t, r, chatState(t, r, sess.ID), `{"entry_id":"e1","rating":5}`)
+	if !result.IsError || !strings.Contains(result.Content, "stale_version") {
+		t.Fatalf("result = %+v, want a stale-version refusal", result)
+	}
+	after, err := r.store.Entry(context.Background(), "e1")
+	if err != nil {
+		t.Fatalf("Entry: %v", err)
+	}
+	if after.Rating != 12 {
+		t.Fatalf("rating = %d, want 12: the other screen's save was overwritten", after.Rating)
 	}
 }
