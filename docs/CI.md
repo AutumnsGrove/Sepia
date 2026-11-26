@@ -64,10 +64,11 @@ lift it is either done or written down as a slice. No floor was lowered when the
 
 `claude-review` (`.github/workflows/claude-code-review.yml`) also runs on every pull request. Since
 2026-11-26 it has a shell, and while `pi-review` is disabled it is the only reader: it reads the diff and
-runs the commands a review needs, with the guidance in `.github/REVIEW.md`. It cannot push or merge. GitHub
-refuses to run the action on a pull request that edits its own workflow file (it validates the workflow
-against the default branch), and that run is **green because it skipped**, so a workflow change is still
-`pi-review`'s to read.
+runs the commands a review needs, with the guidance in `.github/REVIEW.md`. It cannot push or merge. Passing
+`github_token` skips the action's app-token exchange and, with it, the default-branch validation, so a pull
+request that edits its own workflow file **does** run its own version of it (the stock app-token workflow
+skipped instead). A workflow change is therefore a change to the reviewer, and a person or `pi-review` has
+to read it rather than the check.
 
 ## 2. On merge to main (`docker-publish.yml`)
 

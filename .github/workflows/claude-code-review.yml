@@ -25,10 +25,15 @@ name: Claude Code Review
 # the day. Revoking the credential is deleting the secret and disabling this
 # workflow.
 #
-# GitHub refuses to run the action on a pull request that edits this file: it
-# validates the workflow against the default branch and skips otherwise. The
-# check is green because it skipped, not because it found nothing. A workflow
-# change is therefore still `pi-review`'s to read.
+# Passing `github_token` deliberately skips the action's app-token exchange, and
+# with it the validation that refuses to run on a pull request editing this
+# file. That is why this review runs on #57 at all; the stock app-token version
+# of this workflow before it skipped with a green check. The cost is that a
+# branch in this repository runs its own version of this workflow with
+# `CLAUDE_CODE_OAUTH_TOKEN` in the environment, so a diff to this file is a
+# change to the reviewer and has to be read by a person, not taken from the
+# check. Forks are skipped, and only an author with write access can push such a
+# branch.
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
@@ -269,14 +274,15 @@ jobs:
             rather than passed as an environment variable. A test, fixture or
             log that could carry a real review.
 
-            **5. The workflow YAML, which this reader owns.** This reader cannot
-            review a pull request that edits its own workflow file: GitHub
-            validates it against the default branch and the run goes green
-            having skipped. So read the changed YAML yourself: `permissions`,
+            **5. The workflow YAML, which this reader owns.** A pull request
+            that edits this workflow file runs its own version of it: passing
+            `github_token` skips the action's default-branch validation. So you
+            cannot treat the job's own configuration as trustworthy just
+            because it ran. Read the changed YAML yourself: `permissions`,
             pinned SHAs, the timeout against the work under it, the concurrency
             group, the secret's placement, and whether the reviewer's guidance
-            is still taken from the base commit. A green check on a run that
-            skipped is not evidence.
+            is still taken from the base commit. A green check is not evidence
+            that the reviewer is unchanged.
 
             **6. The paperwork the change owes, in the same commit.** A line in
             `docs/BUILD-LOG.md`, the slice status in `docs/slices/README.md`,
