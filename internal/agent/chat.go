@@ -11,6 +11,7 @@ import (
 
 	"github.com/AutumnsGrove/sepia/internal/domain"
 	"github.com/AutumnsGrove/sepia/internal/session"
+	"github.com/AutumnsGrove/sepia/internal/store"
 )
 
 // The library chat. A general session is a conversation about the library rather than a card, so it gets its own
@@ -127,15 +128,12 @@ func editEntry(ctx context.Context, raw json.RawMessage, tctx *tool.Context) (to
 	}
 
 	// The entry may have moved between the proposal and the tap, on this screen or another one. The stored version is
-	// the one the diff was drawn from, so a mismatch refuses rather than overwriting a change she has not seen.
-	current, err := state.Agent.store.Entry(ctx, entry.ID)
-	if err != nil {
-		return tool.Errorf("the entry could not be read again: %v", err), nil
-	}
-	if current.UpdatedAt != baseVersion {
+	// the one the diff was drawn from, and it is checked inside the write's own transaction: a compare here followed
+	// by a write would leave a window in which another screen's save is overwritten unseen.
+	revision, err := state.Agent.store.SaveEntryAt(ctx, proposed, baseVersion)
+	if errors.Is(err, store.ErrStaleVersion) {
 		return tool.Errorf("%s", session.CodeStaleVersion), nil
 	}
-	revision, err := state.Agent.store.SaveEntry(ctx, proposed)
 	if err != nil {
 		return tool.Errorf("the change could not be saved: %v", err), nil
 	}

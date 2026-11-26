@@ -209,6 +209,9 @@ type scriptedResponder struct {
 	// delay is how long she takes to answer, so a test can make her slower than the turn's deadline.
 	delay time.Duration
 
+	// beforeAnswer runs as an answer is given, so a test can make something happen between the proposal and her tap.
+	beforeAnswer func()
+
 	mu       sync.Mutex
 	answers  []scriptedAnswer
 	fillGaps map[string]string
@@ -247,6 +250,9 @@ func (r *scriptedResponder) Wait(ctx context.Context, sessionID, interactionID s
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.beforeAnswer != nil {
+		r.beforeAnswer()
+	}
 	question, err := r.store.Interaction(ctx, interactionID)
 	if err != nil {
 		return nil, err

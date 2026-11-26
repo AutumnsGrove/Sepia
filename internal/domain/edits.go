@@ -120,6 +120,9 @@ func ChangesOf(before, after Entry) []EditChange {
 	}
 	add("rating", "Rating", FormatRating(before.Rating), FormatRating(after.Rating))
 	add("completion", "Shelf", string(before.CompletionState()), string(after.CompletionState()))
+	// An abandoned entry's how-far line is hers, and moving to the wanted shelf drops it. The card has to show that
+	// rather than ask her to confirm a change it did not name.
+	add("progress", "How far", before.Progress, after.Progress)
 	add("favourite", "Favourite", boolString(before.Favourite), boolString(after.Favourite))
 	add("format", "Format", before.Format, after.Format)
 	add("finished_on", "Date", before.FinishedOn, after.FinishedOn)
