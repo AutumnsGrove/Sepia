@@ -170,6 +170,8 @@ type socketRig struct {
 	dataDir string
 	// tmdb is the metadata fake, so a test can make a cover download fail and count what it asked for.
 	tmdb *world.Server
+	// chat is the model fake, so a test can script a turn after it has built the rows that turn refers to.
+	chat *world.Chat
 }
 
 func newSocketRig(t *testing.T) *socketRig {
