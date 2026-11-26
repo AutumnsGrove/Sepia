@@ -72,6 +72,8 @@ func ApplyEdits(e Entry, edits Edits) (Entry, error) {
 		if out.Body == "" {
 			return Entry{}, &GuardError{Code: CodeBodyRequired, Message: "Add a few words of your own before saving."}
 		}
+	case CompletionWantTo:
+		// Handled below with the rest of the wish rules, so the switch stays exhaustive.
 	}
 	// A wish keeps no opinion of its own: a rating or a finish date on a work she has not read would be a score it
 	// never had, and the card and the row would both draw it.
@@ -97,7 +99,7 @@ func KnownFormat(format string) bool {
 	return false
 }
 
-// Change is one field an edit would change, as the confirm card shows it: the label she reads, and the two values.
+// EditChange is one field an edit would change, as the confirm card shows it: the label she reads, and the two values.
 // It is the same shape Diff uses for a revision, so an edit read in the chat and the version list describe the same
 // change the same way.
 type EditChange struct {

@@ -123,7 +123,10 @@ func newFlowRigDecided(t *testing.T, wrap func(http.Handler) http.Handler, scrip
 		Config:   &http.Server{Handler: inner.routes()},
 	}
 	srv.Start()
-	return &socketRig{t: t, server: srv, inner: inner, db: db, engine: engine, host: host, dataDir: dataDir, tmdb: tmdb}
+	return &socketRig{
+		t: t, server: srv, inner: inner, db: db, engine: engine, host: host, dataDir: dataDir,
+		tmdb: tmdb, chat: chat,
+	}
 }
 
 func TestScriptedSessionFromMessageToSaved(t *testing.T) {
