@@ -132,9 +132,9 @@ func TestTheLibraryChatAnswersWithoutTouchingAnEntry(t *testing.T) {
 	}
 }
 
-// Sad/happy boundary: a message the client retries after a reconnect carries the same client_msg_id, and the second
-// copy must not be reported as a failed turn. The first turn stored it; the retry changes nothing and says nothing, so
-// a phone that reconnected does not show an error for a review that saved perfectly well (docs/PROTOCOL.md 6).
+// A message the client retries after a reconnect carries the same client_msg_id. By the time the retry arrives the
+// ledger holds it, so the socket answers `duplicate` and starts no turn at all — this test covers that path, which is
+// the ordinary one. The hub's own guard for the racing case is TestADuplicateThatReachesTheHubSaysNothing.
 func TestARetriedMessageIsNotATurnFailure(t *testing.T) {
 	rig := newFlowRigDecided(t, nil, world.ScriptSampleDecisions)
 	defer rig.close()
@@ -178,5 +178,55 @@ func TestARetriedMessageIsNotATurnFailure(t *testing.T) {
 	}
 	if len(messages) != 1 {
 		t.Fatalf("messages = %d, want the retry to have stored nothing twice", len(messages))
+	}
+}
+
+// The case the socket cannot catch: two copies of one client message reach the hub before either turn has recorded it,
+// so the second turn runs and finds the ledger already holding the id. That must be silent — a duplicate is the retry
+// working, not a failed review. The refusal is a live event rather than a stored one, so it is read off the socket, and
+// this test is the guard: remove the hub's duplicate case and an `error` frame arrives here.
+func TestADuplicateThatReachesTheHubSaysNothing(t *testing.T) {
+	rig := newFlowRigDecided(t, nil, world.ScriptSampleDecisions)
+	defer rig.close()
+	ctx := context.Background()
+	rig.chat.ScriptChat(world.ChatTurn{Text: "One book. Hades II."})
+
+	sess, err := rig.engine.CreateGeneral(ctx, "what did i read")
+	if err != nil {
+		t.Fatalf("CreateGeneral: %v", err)
+	}
+	// A phone watching, so what the hub says is what a person would see.
+	c := rig.dial(sess.ID, 0, "http://"+rig.host)
+	c.expect("hello")
+
+	// The first copy, as the socket leaves it: stored by the turn.
+	if _, appendErr := rig.engine.AppendUserMessage(ctx, sess.ID, "what did i read", "m-racing"); appendErr != nil {
+		t.Fatalf("AppendUserMessage: %v", appendErr)
+	}
+	// The second copy reaches the hub, which is what a retry on a second socket does before the first turn has
+	// finished. It is sent with the same id.
+	if startErr := rig.inner.hub.startTurn(ctx, sess.ID, queuedMessage{
+		text: "what did i read", clientMsgID: "m-racing", clientDate: "2026-11-26", tz: "UTC",
+	}); startErr != nil {
+		t.Fatalf("startTurn: %v", startErr)
+	}
+
+	// Read until the hub is quiet, and refuse anything error-shaped on the way.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && rig.inner.hub.busy() {
+		ev, ok := c.nextWithin(300 * time.Millisecond)
+		if !ok {
+			continue
+		}
+		if ev.Type == "error" {
+			t.Fatalf("the duplicate produced an error event: %s", ev.Data)
+		}
+	}
+	messages, err := rig.engine.UserMessages(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("UserMessages: %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("messages = %d, want the duplicate to have stored nothing", len(messages))
 	}
 }

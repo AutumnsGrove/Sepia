@@ -67,6 +67,32 @@ type chatResult struct {
 	CoverURL   *string `json:"cover_url,omitempty"`
 }
 
+// maxChatResults bounds the rows one answer can draw. Two searches of five would ask for ten rows under one sentence,
+// and a reader wants the entries the answer is about, not everything it looked at.
+const maxChatResults = 10
+
+// mergeResults adds what a search found to the rows the turn already has, keeping the first sighting of an entry and
+// the order the searches ran in. A later search that finds nothing adds nothing: the rows from before are still what
+// the answer is about, and dropping them would leave an answer with a list missing from under it.
+func mergeResults(have, found []chatResult, limit int) []chatResult {
+	out := have
+	seen := make(map[string]bool, len(have)+len(found))
+	for _, row := range have {
+		seen[row.EntryID] = true
+	}
+	for _, row := range found {
+		if seen[row.EntryID] {
+			continue
+		}
+		if len(out) >= limit {
+			break
+		}
+		seen[row.EntryID] = true
+		out = append(out, row)
+	}
+	return out
+}
+
 // resultsOf names the entries an answer is about, in the order the search ranked them.
 func resultsOf(hits []domain.SearchHit) []chatResult {
 	out := make([]chatResult, 0, len(hits))
