@@ -324,6 +324,25 @@ WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
 ORDER BY (entries.completion = 'finished') DESC, entries.rating_q DESC, entries.created_at DESC, entries.id DESC
 LIMIT sqlc.arg(row_limit);
 
+-- name: ListWantedPage :many
+-- The wanted list, most recently added first. A wish has no finish date and no rating, so neither of the library's two
+-- orders is true of it: created_at is the only date it has, and it is the one that answers "what did I just add". The
+-- cursor is (created_at, id), two keys, and it is a query path of its own rather than a branch of ListLibraryPage.
+SELECT entries.* FROM entries JOIN works ON works.id = entries.work_id
+WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
+  AND entries.completion = 'want_to'
+  AND (sqlc.narg(medium) IS NULL OR works.medium = sqlc.narg(medium))
+  AND (sqlc.narg(favourite) IS NULL OR entries.favourite = sqlc.narg(favourite))
+  AND (sqlc.narg(work_id) IS NULL OR entries.work_id = sqlc.narg(work_id))
+  AND (sqlc.narg(rating_min) IS NULL OR entries.rating_q >= sqlc.narg(rating_min))
+  AND (sqlc.narg(rating_max) IS NULL OR entries.rating_q <= sqlc.narg(rating_max))
+  AND (sqlc.narg(finished_from) IS NULL OR entries.finished_on >= sqlc.narg(finished_from))
+  AND (sqlc.narg(finished_to) IS NULL OR entries.finished_on <= sqlc.narg(finished_to))
+  AND (sqlc.narg(before_id) IS NULL
+       OR (entries.created_at, entries.id) < (sqlc.narg(before_created_at), sqlc.narg(before_id)))
+ORDER BY entries.created_at DESC, entries.id DESC
+LIMIT sqlc.arg(row_limit);
+
 -- name: CountLibrary :one
 -- How many entries the same filters would list, which is what the tool row says ("42 entries") and what tells her that
 -- a filtered list has more beyond the page she is reading. It is deliberately independent of the sort and the cursor:
@@ -346,6 +365,18 @@ WHERE entries.status = 'saved' AND entries.deleted_at IS NULL
   AND (sqlc.narg(rating_max) IS NULL OR entries.rating_q <= sqlc.narg(rating_max))
   AND (sqlc.narg(finished_from) IS NULL OR entries.finished_on >= sqlc.narg(finished_from))
   AND (sqlc.narg(finished_to) IS NULL OR entries.finished_on <= sqlc.narg(finished_to));
+
+-- name: CountShelves :one
+-- The three shelf totals at once, which is what the Library's tabs carry. It takes no filters on purpose: a number
+-- that changed as she picked a medium would not be the number of finished things, and the three together answer "how
+-- many of each" at a glance. It counts what the library holds, so a draft (not a row of the library) and a deleted
+-- entry (the Deleted list's own count) are both outside it.
+SELECT
+  CAST(coalesce(sum(CASE WHEN entries.completion = 'finished' THEN 1 ELSE 0 END), 0) AS INTEGER) AS finished,
+  CAST(coalesce(sum(CASE WHEN entries.completion = 'abandoned' THEN 1 ELSE 0 END), 0) AS INTEGER) AS abandoned,
+  CAST(coalesce(sum(CASE WHEN entries.completion = 'want_to' THEN 1 ELSE 0 END), 0) AS INTEGER) AS want_to
+FROM entries
+WHERE entries.status = 'saved' AND entries.deleted_at IS NULL;
 
 -- name: CountDeleted :one
 -- How many entries the Deleted list holds under the same filters, so the line above the list is the list's own count.

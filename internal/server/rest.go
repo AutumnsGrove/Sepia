@@ -312,6 +312,21 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 
 // --- entries --------------------------------------------------------------------------------------------
 
+// shelfCounts is the number on each of the Library's three tabs. It is its own route rather than a field on the list
+// because it can fail on its own: a screen whose tabs have no number still has its list, and a list that failed to
+// load leaves numbers counting nothing.
+func (s *Server) shelfCounts(w http.ResponseWriter, r *http.Request) {
+	if !s.needEngine(w) {
+		return
+	}
+	counts, err := s.engine.ShelfCounts(r.Context())
+	if err != nil {
+		s.restError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, counts)
+}
+
 func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 	if !s.needEngine(w) {
 		return
@@ -418,6 +433,9 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			cursor = domain.Cursor{Rating: rating, CreatedAt: parts[2], ID: parts[3], CompletionRank: rank}
+		case shelf == domain.CompletionWantTo:
+			// A wish has no finish date, so its page is resumed from when it was added (S22.2).
+			cursor = domain.Cursor{CreatedAt: parts[0], ID: parts[1]}
 		default:
 			cursor = domain.Cursor{FinishedOn: parts[0], ID: parts[1]}
 		}
@@ -456,6 +474,8 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
 		case sort == domain.SortRating:
 			encoded = encodeCursor(signature, strconv.Itoa(next.CompletionRank), strconv.Itoa(next.Rating),
 				next.CreatedAt, next.ID)
+		case shelf == domain.CompletionWantTo:
+			encoded = encodeCursor(signature, next.CreatedAt, next.ID)
 		default:
 			encoded = encodeCursor(signature, next.FinishedOn, next.ID)
 		}
