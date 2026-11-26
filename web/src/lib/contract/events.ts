@@ -324,7 +324,8 @@ export type InteractionKind =
   | 'revisit_choice'
   | 'same_work_choice'
   | 'fill_gap'
-  | 'lookup_failed';
+  | 'lookup_failed'
+  | 'edit_entry';
 /**
  * Any client message. Every one carries a client_msg_id so a retry cannot be applied twice.
  */

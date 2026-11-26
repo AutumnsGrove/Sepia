@@ -21,12 +21,14 @@ const (
 	CodeDateInvalid          ErrorCode = "date_invalid"
 	CodeDuplicateMessage     ErrorCode = "duplicate_message"
 	CodeExportInProgress     ErrorCode = "export_in_progress"
+	CodeFormatInvalid        ErrorCode = "format_invalid"
 	CodeImagesTooMany        ErrorCode = "images_too_many"
 	CodeInteractionClosed    ErrorCode = "interaction_closed"
 	CodeInternal             ErrorCode = "internal"
 	CodeInvalidValue         ErrorCode = "invalid_value"
 	CodeMessageTooLong       ErrorCode = "message_too_long"
 	CodeMethodNotAllowed     ErrorCode = "method_not_allowed"
+	CodeNoChange             ErrorCode = "no_change"
 	CodeNotADraft            ErrorCode = "not_a_draft"
 	CodeNotExtracted         ErrorCode = "not_extracted"
 	CodeNotFound             ErrorCode = "not_found"
@@ -36,6 +38,7 @@ const (
 	CodeProgressTooLong      ErrorCode = "progress_too_long"
 	CodeQueueFull            ErrorCode = "queue_full"
 	CodeRateLimited          ErrorCode = "rate_limited"
+	CodeRatingInvalid        ErrorCode = "rating_invalid"
 	CodeRatingRequired       ErrorCode = "rating_required"
 	CodeReplyInProgress      ErrorCode = "reply_in_progress"
 	CodeSessionClosed        ErrorCode = "session_closed"
@@ -67,12 +70,14 @@ var errorInfo = map[ErrorCode]struct {
 	CodeDateInvalid:          {Status: 422, Copy: "That is not a date."},
 	CodeDuplicateMessage:     {Status: 200, Copy: "That message already went through."},
 	CodeExportInProgress:     {Status: 409, Copy: "An export is already being written."},
+	CodeFormatInvalid:        {Status: 422, Copy: "That is not a format Sepia knows."},
 	CodeImagesTooMany:        {Status: 413, Copy: "That is more images than one message can carry."},
 	CodeInteractionClosed:    {Status: 409, Copy: "That question was already answered."},
 	CodeInternal:             {Status: 500, Copy: "Something went wrong. Try again."},
 	CodeInvalidValue:         {Status: 400, Copy: "That is not a value Sepia can use."},
 	CodeMessageTooLong:       {Status: 413, Copy: "That message is too long. Split it into two."},
 	CodeMethodNotAllowed:     {Status: 405, Copy: "That is not something this page can do."},
+	CodeNoChange:             {Status: 422, Copy: "That change asks for nothing."},
 	CodeNotADraft:            {Status: 409, Copy: "There is no card to change yet."},
 	CodeNotExtracted:         {Status: 409, Copy: "That body was typed, so there is nothing left out of it."},
 	CodeNotFound:             {Status: 404, Copy: "There is nothing here."},
@@ -82,6 +87,7 @@ var errorInfo = map[ErrorCode]struct {
 	CodeProgressTooLong:      {Status: 422, Copy: "That is longer than a line about how far you got."},
 	CodeQueueFull:            {Status: 429, Copy: "One message at a time. This one will wait until the reply is done."},
 	CodeRateLimited:          {Status: 429, Copy: "Slow down a moment."},
+	CodeRatingInvalid:        {Status: 422, Copy: "That is not a rating Sepia can store."},
 	CodeRatingRequired:       {Status: 422, Copy: "Add a rating before saving."},
 	CodeReplyInProgress:      {Status: 409, Copy: "Finish the reply first."},
 	CodeSessionClosed:        {Status: 409, Copy: "This conversation is finished. Start a new one."},

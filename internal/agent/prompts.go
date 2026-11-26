@@ -11,8 +11,11 @@ import (
 //go:embed prompts/*.txt
 var promptFS embed.FS
 
-// SystemPrompt is the one system message the model receives.
+// SystemPrompt is the one system message the model receives for an entry.
 func SystemPrompt() string { return promptText("system") }
+
+// ChatSystemPrompt is the system message for a library chat: it can read and propose, never write, never delete.
+func ChatSystemPrompt() string { return promptText("system_chat") }
 
 // HintText is the template for the automatic note that precedes her latest message.
 func HintText() string { return promptText("hint") }

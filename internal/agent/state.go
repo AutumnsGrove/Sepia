@@ -13,6 +13,7 @@ import (
 	novaagent "github.com/AutumnsGrove/nova/agent"
 	"github.com/AutumnsGrove/nova/message"
 	"github.com/AutumnsGrove/nova/provider"
+	"github.com/AutumnsGrove/nova/tool"
 
 	"github.com/AutumnsGrove/sepia/internal/banks"
 	"github.com/AutumnsGrove/sepia/internal/decisions"
@@ -48,6 +49,15 @@ type RunState struct {
 	Candidates map[string]providers.Candidate
 	Chosen     *providers.Candidate
 	Revises    string
+	// Chat marks a turn in a general session: it answers from the library and can propose a change, and it has no
+	// card, so the card's hints and parse notes are not written for it.
+	Chat bool
+	// System and Tools override the entry prompt and the entry registry for one turn. The chat sets both; an entry
+	// turn leaves them empty and gets the card's own.
+	System string
+	Tools  *tool.Registry
+	// EditedEntry is the saved entry a chat change wrote, so the turn's finish can say so.
+	EditedEntry string
 
 	AskedDescribe bool
 	Answers       []domain.Answer
@@ -105,6 +115,11 @@ func (s *RunState) isStopped() bool {
 
 // hint is the automatic note that precedes her message. It is data, framed as data, and never an instruction.
 func (s *RunState) hint() string {
+	if s.Chat {
+		// A chat's prompt is her message alone. The card's note describes a parse, a shelf and a rating, none of which
+		// a question about the library has.
+		return ""
+	}
 	rating := "none"
 	if s.Parsed.RatingQuarters() != 0 {
 		rating = domain.FormatRating(s.Parsed.RatingQuarters())
