@@ -108,6 +108,9 @@ type Agent struct {
 	provider  provider.Provider
 	model     string
 	tools     *tool.Registry
+	// chatTools is the general chat's whole vocabulary: a read and a proposal, and nothing that writes an entry or
+	// deletes one directly (docs/PROTOCOL.md 4a).
+	chatTools *tool.Registry
 	responder Responder
 	live      func(Event)
 	log       *slog.Logger
@@ -163,6 +166,7 @@ func New(cfg Config) (*Agent, error) {
 		a.provider = openrouter.New(openrouter.Config{APIKey: cfg.APIKey, BaseURL: cfg.BaseURL})
 	}
 	a.tools = a.newTools()
+	a.chatTools = a.newChatTools()
 	return a, nil
 }
 
@@ -192,6 +196,8 @@ type Outcome struct {
 	CompletionTokens int
 	// Revises is the saved entry a revision draft is editing, for the confirm.
 	Revises string
+	// EditedEntry is the saved entry a chat change wrote, so the turn can say what it did.
+	EditedEntry string
 }
 
 // HandleMessage stores her message, runs the pre-read and the deterministic parse, then drives nova until the
@@ -212,6 +218,14 @@ func (a *Agent) HandleMessage(ctx context.Context, in TurnInput) (Outcome, error
 		if _, err := a.session.AppendUserMessage(ctx, in.SessionID, in.Text, in.ClientMsgID); err != nil {
 			return Outcome{}, err
 		}
+	}
+
+	sess, err := a.session.Session(ctx, in.SessionID)
+	if err != nil {
+		return Outcome{}, err
+	}
+	if sess.Kind == domain.SessionGeneral {
+		return a.handleChat(ctx, in)
 	}
 
 	messages, err := a.session.UserMessages(ctx, in.SessionID)
@@ -327,11 +341,18 @@ func (a *Agent) runModel(ctx context.Context, state *RunState, nudge string) err
 	state.turnIndex = len(turns) + 1
 
 	tr := &translator{ctx: ctx, agent: a, state: state, live: a.live}
+	system, tools := SystemPrompt(), a.tools
+	if state.System != "" {
+		system = state.System
+	}
+	if state.Tools != nil {
+		tools = state.Tools
+	}
 	cfg := novaagent.Config{
 		Provider:       a.provider,
 		Model:          a.model,
-		System:         SystemPrompt(),
-		Tools:          a.tools,
+		System:         system,
+		Tools:          tools,
 		ToolData:       state,
 		Emit:           tr.Emit,
 		OnMessage:      state.onMessage,
