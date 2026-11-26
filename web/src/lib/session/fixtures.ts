@@ -244,6 +244,7 @@ export const screenNames = [
   'screen-fidelity',
   'screen-editing',
   'screen-missing-rating',
+  'screen-stopped',
   'screen-offline',
   'screen-caught-up',
   'screen-working',
@@ -305,6 +306,26 @@ export function screenFixture(name: string): ScreenFixture {
           activity: [act(2, 'Matched The Lantern Keeper (1999)'), act(3, 'Read the ending')],
           draft: draft(),
           draftVersion: 4,
+        }),
+      };
+    case 'screen-stopped':
+      // Mockup 04, frame 1e: the date fact reads Stopped, the How far line is a full-width fact in the same grid, and
+      // the rating does not nag. Its own state rather than a flow, because a card's state is what the gallery is for
+      // and a flow would have to depend on a model turn to reach it.
+      return {
+        ...base,
+        session: session({
+          blocks: [you(1)],
+          activity: [act(2, 'Matched The Lantern Keeper (1999)'), act(3, 'Read the ending')],
+          draft: draft({
+            completion: 'abandoned',
+            progress: 'about 100 pages in',
+            finished_on: '2026-11-03',
+            rating: { quarters: 0, scale: 'quarter_stars_20', favourite: false },
+            can_confirm: true,
+            missing: [],
+          }),
+          draftVersion: 7,
         }),
       };
     case 'screen-repeat-pre-read':
