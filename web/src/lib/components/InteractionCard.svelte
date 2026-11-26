@@ -326,8 +326,10 @@
           variant="primary"
           grow
           {disabled}
-          onclick={() => onanswer({ value: answers.value ?? '' })}>Set it</Button
+          onclick={() => onanswer({ value: answers.value ?? '' })}
         >
+          Set it
+        </Button>
       </div>
     {/if}
   {:else if kind === 'lookup_failed'}

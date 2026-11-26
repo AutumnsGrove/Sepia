@@ -128,8 +128,10 @@
       class="step-btn"
       aria-label="A quarter star less"
       disabled={quarters === 0}
-      onclick={() => set(quarters - 1)}><Minus size={20} aria-hidden="true" /></button
+      onclick={() => set(quarters - 1)}
     >
+      <Minus size={20} aria-hidden="true" />
+    </button>
   {/if}
   <span class="num" aria-hidden="true">{quarters / 4}</span>
   {#if !readonly}
@@ -138,8 +140,10 @@
       class="step-btn"
       aria-label="A quarter star more"
       disabled={quarters === 20}
-      onclick={() => set(quarters + 1)}><Plus size={20} aria-hidden="true" /></button
+      onclick={() => set(quarters + 1)}
     >
+      <Plus size={20} aria-hidden="true" />
+    </button>
   {/if}
 
   {#if showFavourite}
