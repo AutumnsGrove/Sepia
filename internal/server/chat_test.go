@@ -133,8 +133,9 @@ func TestTheLibraryChatAnswersWithoutTouchingAnEntry(t *testing.T) {
 }
 
 // A message the client retries after a reconnect carries the same client_msg_id. By the time the retry arrives the
-// ledger holds it, so the socket answers `duplicate` and starts no turn at all — this test covers that path, which is
-// the ordinary one. The hub's own guard for the racing case is TestADuplicateThatReachesTheHubSaysNothing.
+// ledger holds it, so the socket answers `duplicate` and starts no turn at all: this test covers that path, the ordinary
+// one, and nothing here reaches the hub. The guard for the racing case — where the retry arrives before the first turn
+// has recorded it — is TestADuplicateThatReachesTheHubIsANoticeNotAnError.
 func TestARetriedMessageIsNotATurnFailure(t *testing.T) {
 	rig := newFlowRigDecided(t, nil, world.ScriptSampleDecisions)
 	defer rig.close()
