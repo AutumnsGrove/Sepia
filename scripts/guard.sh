@@ -4,6 +4,8 @@
 #   scripts/guard.sh embed   only the placeholder may be committed under the embed directory
 #   scripts/guard.sh seeds   every fuzz target has a seed corpus
 #   scripts/guard.sh live    no test can reach a live provider
+#   scripts/guard.sh actions every action is pinned by full commit SHA
+#   scripts/guard.sh reviewer the reviewer's guidance is read from the base commit
 #   scripts/guard.sh all     all of the above
 #
 # The secret scan is not here: CI runs the gitleaks action on the pushed range and `make gitleaks` runs it
@@ -79,15 +81,55 @@ check_live() {
   echo "guard: no live provider in tests"
 }
 
+check_actions() {
+  # `CI.md` 4.3: a third-party action is pinned by full commit SHA with its version beside it, because a
+  # moved tag hands whatever it points at a job's token. The one exception is `pi-review`'s reusable
+  # workflow, which is first-party and deliberately runs from `@main` so a fix reaches this repository
+  # without a commit here (`pi-review.yml` says so in its header).
+  local bad
+  bad="$(grep -rnE '^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]' --include='*.yml' --include='*.yaml' .github/workflows/ \
+    | grep -v 'AutumnsGrove/pi-extensions/.github/workflows/pi-review-reusable.yml@main' \
+    | grep -vE '@[0-9a-f]{40}[[:space:]]+#[[:space:]]*v?[0-9]' || true)"
+  if [ -n "$bad" ]; then
+    printf 'actions that are not pinned by full commit SHA with a version comment:\n%s\n' "$bad" >&2
+    fail "actions pinned by SHA"
+  fi
+  echo "guard: every action is pinned by SHA"
+}
+
+check_reviewer() {
+  # `claude-review` reads its own instructions, so a pull request that could rewrite them would be
+  # reviewing itself. The guidance is lifted out of the base commit, the one version a pull request
+  # cannot edit, and that step is the guard. Reading the checkout's copy instead leaves a case that
+  # passes while the protection is gone, so the fetch is what is asserted, not the file's contents.
+  local workflow=".github/workflows/claude-code-review.yml"
+  [ -f "$workflow" ] || fail "reviewer guidance: $workflow is missing"
+  if ! grep -qF -- 'BASE_SHA:' "$workflow" ||
+     ! grep -qF -- 'github.event.pull_request.base.sha' "$workflow"; then
+    fail "reviewer guidance: the base SHA is not the pull request's base"
+  fi
+  grep -qF -- 'for file in .github/REVIEW.md CLAUDE.md' "$workflow" \
+    || fail "reviewer guidance: REVIEW.md and CLAUDE.md are not both read from the base commit"
+  grep -qF -- 'git show "FETCH_HEAD:' "$workflow" \
+    || fail "reviewer guidance: the guidance is not read from the fetched base commit"
+  grep -qF 'runner.temp }}/review/' "$workflow" \
+    || fail "reviewer guidance: the prompt does not point at the base-commit copy"
+  echo "guard: reviewer guidance comes from the base commit"
+}
+
 case "${1:-all}" in
-  embed) check_embed ;;
-  seeds) check_seeds ;;
-  live)  check_live ;;
+  embed)    check_embed ;;
+  seeds)    check_seeds ;;
+  live)     check_live ;;
+  actions)  check_actions ;;
+  reviewer) check_reviewer ;;
   all)
     check_embed
     check_seeds
     check_live
+    check_actions
+    check_reviewer
     echo "guard: all green"
     ;;
-  *) echo "usage: $0 [embed|seeds|live|all]" >&2; exit 2 ;;
+  *) echo "usage: $0 [embed|seeds|live|actions|reviewer|all]" >&2; exit 2 ;;
 esac
