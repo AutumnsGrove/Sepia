@@ -283,3 +283,73 @@ func TestAChatAnswerCarriesTheEntriesItFound(t *testing.T) {
 		t.Fatalf("row = %+v", row)
 	}
 }
+
+// Bad: a turn that searches twice keeps both sets of rows, in the order the searches ran, with an entry that both found
+// drawn once. A search that finds nothing adds nothing, so an answer about the earlier hits keeps its rows.
+func TestTwoSearchesInOneTurnKeepBothSetsOfRows(t *testing.T) {
+	r := newRig(t, rigOptions{})
+	saveSearchable(t, r, "e1", "Piranesi", "book", "started slow but then it grabbed me", 19, "2026-09-28")
+	saveSearchable(t, r, "e2", "Grey Harbour", "tv", "a slow burn that earns its ending", 18, "2026-09-14")
+	ctx := context.Background()
+	state := &RunState{Agent: r.agent, SessionID: "s_chat", Chat: true}
+	toolCtx := &tool.Context{Data: state}
+
+	if _, err := searchLibrary(ctx, json.RawMessage(`{"query":"slow"}`), toolCtx); err != nil {
+		t.Fatalf("first search: %v", err)
+	}
+	first := len(state.ChatResults)
+	if first != 2 {
+		t.Fatalf("rows after one search = %d, want 2", first)
+	}
+	// The same words again: the same two entries, drawn once.
+	if _, err := searchLibrary(ctx, json.RawMessage(`{"query":"slow"}`), toolCtx); err != nil {
+		t.Fatalf("second search: %v", err)
+	}
+	if got := len(state.ChatResults); got != first {
+		t.Fatalf("rows after a repeated search = %d, want %d", got, first)
+	}
+	// A search that finds nothing adds nothing and removes nothing.
+	if _, err := searchLibrary(ctx, json.RawMessage(`{"query":"zzzznothing"}`), toolCtx); err != nil {
+		t.Fatalf("empty search: %v", err)
+	}
+	if got := len(state.ChatResults); got != first {
+		t.Fatalf("rows after a search with no hits = %d, want the %d from before", got, first)
+	}
+	// A different search adds its own, after the ones already found.
+	if _, err := searchLibrary(ctx, json.RawMessage(`{"query":"Piranesi"}`), toolCtx); err != nil {
+		t.Fatalf("third search: %v", err)
+	}
+	if got := len(state.ChatResults); got != 2 {
+		t.Fatalf("rows after a narrower search = %d, want 2", got)
+	}
+	if state.ChatResults[0].EntryID != "e1" && state.ChatResults[1].EntryID != "e1" {
+		t.Fatalf("rows = %+v, want Piranesi among them", state.ChatResults)
+	}
+}
+
+// Sad: a turn whose only search found nothing draws no rows at all, rather than an empty list under the answer.
+func TestAChatAnswerWithNoMatchesHasNoRows(t *testing.T) {
+	r := newRig(t, rigOptions{})
+	saveSearchable(t, r, "e1", "Piranesi", "book", "started slow", 19, "2026-09-28")
+	sess := aChatSession(t, r, "what did i read about hares")
+	r.chat.ScriptChat(
+		world.ChatTurn{ToolCalls: []world.ChatToolCall{{
+			ID: "c1", Name: "search_library", Arguments: `{"query":"zzzznothing"}`,
+		}}},
+		world.ChatTurn{Text: "Nothing I can find."},
+	)
+	if _, err := r.agent.HandleMessage(context.Background(), TurnInput{
+		SessionID: sess.ID, Text: "what did i read about hares",
+	}); err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	events, err := r.store.EventsSince(context.Background(), sess.ID, 0)
+	if err != nil {
+		t.Fatalf("EventsSince: %v", err)
+	}
+	for _, event := range events {
+		if event.Kind == store.EventChatResults {
+			t.Fatalf("a search with no hits produced rows: %s", event.Payload)
+		}
+	}
+}

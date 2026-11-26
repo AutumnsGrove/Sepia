@@ -179,3 +179,66 @@ func TestChatServesTheScriptPerConversation(t *testing.T) {
 		t.Errorf("a second conversation = %q, want the script from its start", got)
 	}
 }
+
+// A library chat gets a different tool set, and the fake answers it as a chat rather than replaying a card's script into
+// tools the chat does not have: it searches for what it was asked about, then says what it found. That is the behaviour
+// the browser and the dev stack rely on, so it is tested through the same wire a real provider would see.
+func TestTheChatFakeAnswersALibraryChatAsAChat(t *testing.T) {
+	chat := StartChat("test-chat", nil)
+	defer chat.Close()
+	// A card script is installed and must be ignored for a chat: the two conversations have different tools.
+	chat.Script(ChatTurn{Text: "A card turn."})
+
+	client := openrouter.New(openrouter.Config{APIKey: "test-key", BaseURL: chat.URL()})
+	request := provider.Request{
+		Model:    "vendor/model",
+		Messages: []message.Message{message.User("what did i read that was slow")},
+		Tools:    []provider.ToolDef{{Type: "function", Function: provider.ToolFunction{Name: "search_library"}}, {Type: "function", Function: provider.ToolFunction{Name: "edit_entry"}}},
+	}
+	resp, err := client.Stream(context.Background(), request, nil)
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	if len(resp.Message.ToolCalls) != 1 {
+		t.Fatalf("tool calls = %+v, want one search", resp.Message.ToolCalls)
+	}
+	call := resp.Message.ToolCalls[0].Function
+	if call.Name != "search_library" {
+		t.Fatalf("tool = %q, want search_library", call.Name)
+	}
+	// The query is her question, which is what makes the fake's answer about what she asked.
+	if !strings.Contains(call.Arguments, "what did i read that was slow") {
+		t.Fatalf("arguments = %q, want the question in them", call.Arguments)
+	}
+
+	// The second turn is the answer, and it is prose rather than another search.
+	request.Messages = append(request.Messages, message.Assistant(""), message.User("and?"))
+	second, err := client.Stream(context.Background(), provider.Request{
+		Model: request.Model, Messages: request.Messages, Tools: request.Tools,
+	}, nil)
+	if err != nil {
+		t.Fatalf("second Stream: %v", err)
+	}
+	if second.Message.Content == "" || len(second.Message.ToolCalls) != 0 {
+		t.Fatalf("second reply = %+v, want a sentence", second.Message)
+	}
+}
+
+// A request without the chat's tool is a card, and it still gets its script.
+func TestTheChatFakeKeepsTheCardScript(t *testing.T) {
+	chat := StartChat("test-chat", nil)
+	defer chat.Close()
+	chat.Script(ChatTurn{Text: "A card turn."})
+	client := openrouter.New(openrouter.Config{APIKey: "test-key", BaseURL: chat.URL()})
+	resp, err := client.Stream(context.Background(), provider.Request{
+		Model:    "vendor/model",
+		Messages: []message.Message{message.User("I finished Dune.")},
+		Tools:    []provider.ToolDef{{Type: "function", Function: provider.ToolFunction{Name: "media_lookup"}}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	if resp.Message.Content != "A card turn." {
+		t.Fatalf("content = %q, want the card script", resp.Message.Content)
+	}
+}

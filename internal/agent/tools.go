@@ -1302,9 +1302,10 @@ func searchLibrary(ctx context.Context, raw json.RawMessage, tctx *tool.Context)
 		}
 		lines = append(lines, line)
 	}
-	// A chat draws what it found under its answer; a card turn has nowhere to put rows and ignores this.
+	// A chat draws what it found under its answer; a card turn has nowhere to put rows and ignores this. A turn may
+	// search twice, so the rows are merged rather than replaced.
 	if state.Chat {
-		state.ChatResults = resultsOf(hits)
+		state.ChatResults = mergeResults(state.ChatResults, resultsOf(hits), maxChatResults)
 	}
 	summary := plural(len(hits), "match", "matches")
 	if total > len(hits) {
